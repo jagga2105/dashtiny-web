@@ -212,7 +212,9 @@ def generate_algorithmic_plan(
     start_date: date,
     weather_info: Dict[str, Any],
     hotels_info: List[Dict[str, Any]],
-    coords: Dict[str, Any]
+    coords: Dict[str, Any],
+    travellers: int = 2,
+    vibe: Optional[str] = None
 ) -> List[DayPlan]:
     """
     Deterministic synthesis coordinating verified tool outputs (Weather, Hotels, Geocoding)
@@ -224,6 +226,7 @@ def generate_algorithmic_plan(
     dest_lower = destination.lower().strip()
     category = get_theme_category(destination)
     daily_budget = total_budget / max(1, days_count)
+    party_label = f"party of {travellers}" if travellers > 1 else "solo explorer"
 
     # Generic narrative templates if destination is not in curated pool
     generic_narratives = [
@@ -257,7 +260,7 @@ def generate_algorithmic_plan(
             curated_day = matched_curated[(day_idx - 1) % len(matched_curated)]
             day_title = f"{clean_dest}: {curated_day['lunch_name'].split(' ')[0]} & Scenic Highlights"
 
-            lunch_desc = f"Authentic regional gastronomy: {curated_day['lunch_name']}"
+            lunch_desc = f"Authentic regional gastronomy for {party_label}: {curated_day['lunch_name']}"
             lunch_loc = curated_day["lunch_loc"]
             evening_desc = f"Golden hour experience: {curated_day['evening_name']}"
             evening_loc = curated_day["evening_loc"]
@@ -265,7 +268,7 @@ def generate_algorithmic_plan(
             theme_tup = generic_narratives[(day_idx - 1) % len(generic_narratives)]
             day_title = f"{clean_dest}: {theme_tup[0]}"
 
-            lunch_desc = f"Authentic {clean_dest} regional lunch tasting at {theme_tup[1]}"
+            lunch_desc = f"Authentic {clean_dest} regional lunch tasting for {party_label} at {theme_tup[1]}"
             lunch_loc = f"{theme_tup[1]}, {clean_dest}"
             evening_desc = f"Golden hour sunset stroll & photography at {theme_tup[2]}"
             evening_loc = f"{clean_dest} Lookout Point"
@@ -281,10 +284,11 @@ def generate_algorithmic_plan(
         evening_lng = evening_geo["lng"] if evening_geo.get("found") else None
         evening_prov = evening_geo.get("provenance", "AI GENERATED") if evening_geo.get("found") else "AI GENERATED"
 
+        checkin_desc = f"Morning orientation & check-in at {hotel_name} ({party_label})"
         activities: List[ActivityItem] = [
             ActivityItem(
                 time_slot="09:30 AM",
-                description=f"Morning orientation & check-in at {hotel_name}",
+                description=checkin_desc,
                 location=hotel.get("address", f"Central District, {clean_dest}") if hotel else f"Central District, {clean_dest}",
                 place_type="H",
                 estimated_transit="⏱️ 25m from arrival terminal",
@@ -354,26 +358,27 @@ def build_itinerary_with_planner_agent(
 ) -> Dict[str, Any]:
     """
     Primary Entry Point for AI Planner Architect.
-    1. Coordinates Tools: Weather, Hotels, Geocoding
+    1. Coordinates Tools: Weather, Hotels (scaled to travellers), Geocoding
     2. Builds Structured Day Plans (with honest provenance)
     3. Persists directly to PostgreSQL attached strictly to authenticated user
-    4. Fixes Activity ID consistency: returns persisted IDs identical to database
+    4. Fixes Activity ID consistency: returns persisted it_act.id after db.flush()
     5. Records honest AI Observability telemetry (deterministic-planner-v1, 0 tokens)
     6. Creates squad room code
     7. Returns typed canonical structured object
     """
     start_time = time.time()
     clean_dest = destination.strip().title()
+    clean_travellers = max(1, travellers or 2)
     clean_days = max(1, min(14, days_count))
-    clean_budget = budget if budget > 0 else 12000.0 * clean_days
+    clean_budget = budget if budget > 0 else (6000.0 * clean_days * clean_travellers)
     effective_prompt = raw_prompt or prompt
 
-    # 1. Execute AI Tools
+    # 1. Execute AI Tools with explicit party size
     weather_info = get_destination_weather(clean_dest)
-    hotels_info = search_hotels(clean_dest, guests=travellers or 2)
+    hotels_info = search_hotels(clean_dest, guests=clean_travellers)
     coords = get_coordinates(clean_dest)
 
-    # 2. Date calculation from canonical input
+    # 2. Date calculation & strict validation from canonical input
     if start_date_str:
         try:
             start_d = datetime.strptime(start_date_str.split("T")[0], "%Y-%m-%d").date()
@@ -386,10 +391,11 @@ def build_itinerary_with_planner_agent(
         try:
             end_d = datetime.strptime(end_date_str.split("T")[0], "%Y-%m-%d").date()
             if end_d < start_d:
+                # Inconsistent dates: end_date cannot be earlier than start_date
                 end_d = start_d + timedelta(days=max(0, clean_days - 1))
             else:
                 # Recalculate clean_days if both dates explicitly provided
-                clean_days = (end_d - start_d).days + 1
+                clean_days = min(14, max(1, (end_d - start_d).days + 1))
         except Exception:
             end_d = start_d + timedelta(days=max(0, clean_days - 1))
     else:
@@ -404,7 +410,9 @@ def build_itinerary_with_planner_agent(
         start_date=start_d,
         weather_info=weather_info,
         hotels_info=hotels_info,
-        coords=coords
+        coords=coords,
+        travellers=clean_travellers,
+        vibe=vibe
     )
 
     # 4. Persist to PostgreSQL (Strict User Ownership with canonical fields)
@@ -418,7 +426,7 @@ def build_itinerary_with_planner_agent(
         total_budget=clean_budget,
         currency=currency or "INR",
         persona=persona,
-        travellers=travellers or 2,
+        travellers=clean_travellers,
         vibe=vibe,
         raw_prompt=effective_prompt,
         status="active"
@@ -443,9 +451,7 @@ def build_itinerary_with_planner_agent(
 
         day_acts = []
         for a_idx, act in enumerate(dp.activities):
-            act_id = str(uuid.uuid4())
             it_act = ItineraryActivity(
-                id=act_id,
                 day_id=it_day.id,
                 time_slot=act.time_slot,
                 description=act.description,
@@ -460,8 +466,9 @@ def build_itinerary_with_planner_agent(
                 provenance=act.provenance
             )
             db.add(it_act)
+            db.flush()  # Populates it_act.id from database default
             day_acts.append({
-                "id": act_id,
+                "id": it_act.id,  # Pure database ID
                 "time": act.time_slot,
                 "description": act.description,
                 "location": act.location,

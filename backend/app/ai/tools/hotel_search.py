@@ -156,31 +156,57 @@ CURATED_HOTELS: Dict[str, List[Dict[str, Any]]] = {
 
 def search_hotels(destination: str, budget_tier: str = "luxury", guests: int = 2) -> List[Dict[str, Any]]:
     """
-    Search curated hotel offers.
+    Search curated hotel offers scaled appropriately to party size (guests/travellers).
     Provenances: CURATED for editorial selections; DEMO for demonstration prototypes.
     """
+    clean_guests = max(1, guests or 2)
     dest_lower = destination.lower() if destination else ""
+    matched_stays = None
+
     for key, stays in CURATED_HOTELS.items():
         if key in dest_lower:
-            return stays
+            matched_stays = stays
+            break
 
-    clean_dest = destination.title() if destination else "Getaway Destination"
-    return [
-        {
-            "id": f"ht_demo_{clean_dest[:3].lower()}_01",
-            "name": f"Boutique Sanctuary & Hillside Villa {clean_dest}",
-            "star_rating": 4.85,
-            "address": f"Central Sanctuary District, {clean_dest}",
-            "room_type": "Premier Scenic Vista Suite",
-            "price_per_night": 8500,
-            "currency": "INR",
-            "amenities": ["Panoramic Balcony", "Complimentary Breakfast", "High-Speed WiFi"],
-            "cancellation": "Free cancellation up to 48 hours prior",
-            "provenance": "DEMO",
-            "source": "DashTiny Showcase Catalog",
-            "lat": None,
-            "lng": None,
-            "deep_link": "https://www.booking.com",
-            "why_recommended": f"Prime recommended location for central exploration in {clean_dest}"
-        }
-    ]
+    if not matched_stays:
+        clean_dest = destination.title() if destination else "Getaway Destination"
+        room_title = "Scenic Vista Suite" if clean_guests <= 2 else ("Family Connecting Suite" if clean_guests <= 4 else "Private Multi-Bedroom Villa")
+        base_price = 8500
+        matched_stays = [
+            {
+                "id": f"ht_demo_{clean_dest[:3].lower()}_01",
+                "name": f"Boutique Sanctuary & Hillside Villa {clean_dest}",
+                "star_rating": 4.85,
+                "address": f"Central Sanctuary District, {clean_dest}",
+                "room_type": room_title,
+                "price_per_night": base_price,
+                "currency": "INR",
+                "amenities": ["Panoramic Balcony", "Complimentary Breakfast", "High-Speed WiFi"],
+                "cancellation": "Free cancellation up to 48 hours prior",
+                "provenance": "DEMO",
+                "source": "DashTiny Showcase Catalog",
+                "lat": None,
+                "lng": None,
+                "deep_link": "https://www.booking.com",
+                "why_recommended": f"Prime recommended stay in {clean_dest}"
+            }
+        ]
+
+    # Dynamically tailor stays to guests capacity and squad/family sizing
+    scaled_results = []
+    for stay in matched_stays:
+        item = dict(stay)
+        item["guests_capacity"] = clean_guests
+        if clean_guests > 4:
+            item["room_type"] = f"Private {clean_guests}-Guest Estate Villa / Chalet"
+            item["price_per_night"] = int(round(item["price_per_night"] * 2.2))
+            item["why_recommended"] = f"{item.get('why_recommended', '')} — Scaled for private {clean_guests}-member squad/family gathering."
+        elif clean_guests > 2:
+            item["room_type"] = f"Connecting Suite / Family Wing ({clean_guests} Guests)"
+            item["price_per_night"] = int(round(item["price_per_night"] * 1.5))
+            item["why_recommended"] = f"{item.get('why_recommended', '')} — Tailored to accommodate {clean_guests} guests comfortably."
+        else:
+            item["why_recommended"] = f"{item.get('why_recommended', '')} — Ideal bespoke setup for {clean_guests} traveler{'s' if clean_guests > 1 else ''}."
+        scaled_results.append(item)
+
+    return scaled_results
