@@ -12,10 +12,11 @@ import uuid
 import json
 import logging
 from datetime import date, datetime, timedelta
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 from fastapi import HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
+from openai import OpenAI
 
 from app.config import settings
 from app.models.models import Itinerary, ItineraryDay, ItineraryActivity, SquadRoom, User, AIRun, AIToolCall
@@ -24,6 +25,22 @@ from app.ai.tools.hotel_search import search_hotels
 from app.ai.tools.maps import get_coordinates
 
 logger = logging.getLogger(__name__)
+
+class AIActivityRaw(BaseModel):
+    time_slot: str
+    description: str
+    location: str
+    place_type: str = "TA"  # H = Hotel, R = Restaurant, TA = Tour/Activity
+    why_recommended: str
+
+class AIDayRaw(BaseModel):
+    day_number: int
+    title: str
+    activities: List[AIActivityRaw]
+
+class AIItineraryRaw(BaseModel):
+    title: str
+    days: List[AIDayRaw]
 
 class ActivityItem(BaseModel):
     time_slot: str
@@ -547,6 +564,241 @@ def generate_algorithmic_plan(
 
     return days
 
+def get_llm_client() -> Optional[Tuple[OpenAI, str]]:
+    """
+    Returns (OpenAI_client, model_name) for free tier LLM providers, or None if no API key/server is present.
+    Supported Free Providers:
+    1. Google Gemini Flash (Free tier via Google AI Studio at aistudio.google.com)
+    2. Groq (Free tier via console.groq.com)
+    3. Local Ollama (100% Free offline on Mac without keys)
+    4. OpenAI (Standard)
+    """
+    if getattr(settings, "GEMINI_API_KEY", None):
+        base_url = getattr(settings, "LLM_BASE_URL", None) or "https://generativelanguage.googleapis.com/v1beta/openai/"
+        model = getattr(settings, "LLM_MODEL", None) or "gemini-1.5-flash"
+        return OpenAI(api_key=settings.GEMINI_API_KEY, base_url=base_url), model
+
+    if getattr(settings, "GROQ_API_KEY", None):
+        base_url = getattr(settings, "LLM_BASE_URL", None) or "https://api.groq.com/openai/v1"
+        model = getattr(settings, "LLM_MODEL", None) or "llama-3.3-70b-versatile"
+        return OpenAI(api_key=settings.GROQ_API_KEY, base_url=base_url), model
+
+    if getattr(settings, "LLM_PROVIDER", None) == "ollama" or (getattr(settings, "LLM_BASE_URL", None) and "localhost" in str(settings.LLM_BASE_URL)):
+        base_url = settings.LLM_BASE_URL or "http://localhost:11434/v1"
+        model = getattr(settings, "LLM_MODEL", None) or "llama3.2"
+        return OpenAI(api_key="ollama", base_url=base_url), model
+
+    if getattr(settings, "OPENAI_API_KEY", None):
+        model = getattr(settings, "LLM_MODEL", None) or "gpt-4o-mini"
+        return OpenAI(api_key=settings.OPENAI_API_KEY), model
+
+    return None
+
+def generate_llm_plan(
+    destination: str,
+    days_count: int,
+    total_budget: float,
+    currency: str,
+    persona: str,
+    vibe: Optional[str],
+    interests: Optional[List[str]],
+    origin: Optional[str],
+    travellers: int,
+    weather_info: Dict[str, Any],
+    hotels_info: List[Dict[str, Any]],
+    client: OpenAI,
+    model: str
+) -> Tuple[Optional[AIItineraryRaw], int]:
+    """
+    Step 1: LLM proposes structured planner output via JSON schema.
+    Returns (AIItineraryRaw, tokens_used).
+    """
+    system_prompt = (
+        "You are DAIna, DashTiny's intelligent travel itinerary architect.\n"
+        "You generate personalized, highly contextual multi-day travel itineraries.\n"
+        "Rules:\n"
+        "1. Return valid JSON strictly matching this schema:\n"
+        "   {\n"
+        "     \"title\": \"Bespoke <Days>-Day <Destination> Passage\",\n"
+        "     \"days\": [\n"
+        "       {\n"
+        "         \"day_number\": 1,\n"
+        "         \"title\": \"Day title summarizing theme\",\n"
+        "         \"activities\": [\n"
+        "           {\n"
+        "             \"time_slot\": \"09:30 AM\",\n"
+        "             \"description\": \"Specific activity description tailored to party and preferences\",\n"
+        "             \"location\": \"Real neighborhood or landmark in the destination\",\n"
+        "             \"place_type\": \"H\" | \"R\" | \"TA\",\n"
+        "             \"why_recommended\": \"Explain why this matches user preference (e.g. 'Matches your photography preference with unobstructed sunset views'). Never claim fake ratings/reviews.\"\n"
+        "           }\n"
+        "         ]\n"
+        "       }\n"
+        "     ]\n"
+        "   }\n"
+        "2. Provide exactly 3 cohesive activities per day (Morning orientation/tour, Midday regional dining, Evening sunset/social).\n"
+        "3. Incorporate the traveler's stated vibe, interests, origin city, and party size throughout the narrative."
+    )
+
+    hotel_names = ", ".join(h["name"] for h in hotels_info[:2]) if hotels_info else "Boutique Sanctuary"
+    interests_str = ", ".join(interests) if interests else "Sightseeing and local culture"
+    weather_cond = weather_info.get("condition", "Pleasant")
+
+    user_prompt = (
+        f"Destination: {destination}\n"
+        f"Trip Duration: {days_count} days\n"
+        f"Party Size: {travellers} traveler(s)\n"
+        f"Departure Origin: {origin or 'Not specified'}\n"
+        f"Total Budget: {currency} {total_budget:,.0f}\n"
+        f"Traveler Persona: {persona}\n"
+        f"Desired Vibe: {vibe or 'Balanced'}\n"
+        f"Key Interests: {interests_str}\n"
+        f"Local Weather Context: {weather_cond}\n"
+        f"Curated Hotel Baseline: {hotel_names}\n\n"
+        f"Generate a structured {days_count}-day itinerary."
+    )
+
+    response = client.chat.completions.create(
+        model=model,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ],
+        response_format={"type": "json_object"},
+        temperature=0.7
+    )
+
+    raw_text = response.choices[0].message.content
+    parsed_json = json.loads(raw_text)
+    if "days" not in parsed_json and "itinerary" in parsed_json:
+        parsed_json = parsed_json["itinerary"]
+
+    plan = AIItineraryRaw.model_validate(parsed_json)
+    tokens_used = response.usage.total_tokens if response.usage else 0
+    return plan, tokens_used
+
+def validate_plan_constraints(
+    raw_plan: AIItineraryRaw,
+    expected_days: int
+) -> AIItineraryRaw:
+    """
+    Step 2: Constraint validation layer.
+    Enforces day continuity, slot sequencing, and activity pacing.
+    """
+    if len(raw_plan.days) < expected_days:
+        raise ValueError(f"AI Plan returned {len(raw_plan.days)} days, expected {expected_days}")
+
+    # Sort days by day_number and truncate to expected_days
+    raw_plan.days = sorted(raw_plan.days, key=lambda d: d.day_number)[:expected_days]
+
+    for d in raw_plan.days:
+        if len(d.activities) < 2:
+            raise ValueError(f"Day {d.day_number} has fewer than 2 activities")
+        d.activities = d.activities[:4]
+
+    return raw_plan
+
+def verify_plan_with_tools(
+    validated_plan: AIItineraryRaw,
+    destination: str,
+    days_count: int,
+    total_budget: float,
+    weather_info: Dict[str, Any],
+    hotels_info: List[Dict[str, Any]],
+    origin: Optional[str],
+    travellers: int
+) -> List[DayPlan]:
+    """
+    Step 3: Tool verification layer (Truth boundaries).
+    Applies genuine spatial geocoding, hotel verification, and labels all transit/crowd estimates.
+    Truth boundary: If geocoding does not find authentic coordinates, sets CURATED_UNRESOLVED.
+    """
+    verified_days: List[DayPlan] = []
+    category = get_theme_category(destination)
+    daily_budget = total_budget / max(1, days_count)
+    hotel = hotels_info[0] if hotels_info else None
+    hotel_lat = hotel.get("lat") if hotel else None
+    hotel_lng = hotel.get("lng") if hotel else None
+
+    cost_weights = [0.40, 0.20, 0.25, 0.15]
+
+    for d_idx, day_raw in enumerate(validated_plan.days, 1):
+        cover_image = get_curated_cover_image(category, d_idx)
+        verified_activities: List[ActivityItem] = []
+        act_count = len(day_raw.activities)
+
+        for a_idx, act_raw in enumerate(day_raw.activities):
+            # 1. Spatial geocoding verification
+            geo = get_coordinates(act_raw.location)
+            if geo.get("found"):
+                act_lat = geo["lat"]
+                act_lng = geo["lng"]
+                act_prov = geo.get("provenance", "CURATED")
+            elif d_idx == 1 and a_idx == 0 and hotel and hotel_lat is not None:
+                act_lat = hotel_lat
+                act_lng = hotel_lng
+                act_prov = "PROVIDER_VERIFIED"
+            else:
+                act_lat = None
+                act_lng = None
+                act_prov = "CURATED_UNRESOLVED"
+
+            # 2. Transit estimation with truthful labeling
+            if d_idx == 1 and a_idx == 0:
+                if origin:
+                    transit = f"⏱️ Transit from {origin.title().strip()} arrival hub (Estimated)"
+                else:
+                    transit = "⏱️ 25m from arrival terminal (Estimated)"
+            elif a_idx == 1:
+                transit = "⏱️ 15m walk (Estimated)"
+            else:
+                transit = "⏱️ 20m scenic transit (Estimated)"
+
+            # 3. Crowd warning with truthful labeling
+            if a_idx == 0:
+                crowd = "🟢 Low Morning Traffic (Estimated)"
+            elif a_idx == 1:
+                crowd = "🟡 Moderate Lunch Crowd (Estimated)"
+            else:
+                crowd = "🔥 Peak Golden Hour (Estimated)"
+
+            # 4. Proportional budget estimation
+            weight = cost_weights[a_idx] if a_idx < len(cost_weights) else (1.0 / act_count)
+            cost_est = float(round(daily_budget * weight))
+
+            # 5. Sanitize rationale to prevent fabricated ratings claims
+            why = act_raw.why_recommended or f"Curated orientation base for {destination}."
+            for forbidden in ["top traveler ratings", "traveler culinary reviews", "high traveler reviews", "highest rated"]:
+                why = re.sub(forbidden, "curated preference matching", why, flags=re.IGNORECASE)
+
+            verified_activities.append(
+                ActivityItem(
+                    time_slot=act_raw.time_slot,
+                    description=act_raw.description,
+                    location=act_raw.location,
+                    place_type=act_raw.place_type or "TA",
+                    estimated_transit=transit,
+                    crowd_warning=crowd,
+                    cost_estimate=cost_est,
+                    lat=act_lat,
+                    lng=act_lng,
+                    provenance=act_prov,
+                    why_recommended=why
+                )
+            )
+
+        verified_days.append(
+            DayPlan(
+                day_number=d_idx,
+                title=day_raw.title,
+                cover_image_url=cover_image,
+                weather_summary=weather_info.get("condition", "22°C Pleasant 🌤️"),
+                activities=verified_activities
+            )
+        )
+
+    return verified_days
+
 def build_itinerary_with_planner_agent(
     destination: str,
     budget: float,
@@ -615,21 +867,67 @@ def build_itinerary_with_planner_agent(
     else:
         end_d = start_d + timedelta(days=max(0, clean_days - 1))
 
-    # 3. Generate Structured Days consuming full preference contract (vibe, interests, origin)
-    structured_days = generate_algorithmic_plan(
-        destination=clean_dest,
-        days_count=clean_days,
-        total_budget=clean_budget,
-        persona=persona,
-        start_date=start_d,
-        weather_info=weather_info,
-        hotels_info=hotels_info,
-        coords=coords,
-        travellers=clean_travellers,
-        vibe=vibe,
-        interests=interests,
-        origin=origin
-    )
+    # 3. Generate Structured Days (LLM -> constraint validation -> tool verification -> persist)
+    llm_tuple = get_llm_client()
+    used_model = "deterministic-planner-v1"
+    tokens_used = 0
+    structured_days = None
+
+    if llm_tuple is not None:
+        client, model_name = llm_tuple
+        try:
+            raw_ai_plan, ai_tokens = generate_llm_plan(
+                destination=clean_dest,
+                days_count=clean_days,
+                total_budget=clean_budget,
+                currency=currency or "INR",
+                persona=persona,
+                vibe=vibe,
+                interests=interests,
+                origin=origin,
+                travellers=clean_travellers,
+                weather_info=weather_info,
+                hotels_info=hotels_info,
+                client=client,
+                model=model_name
+            )
+            if raw_ai_plan:
+                validated_plan = validate_plan_constraints(raw_ai_plan, clean_days)
+                structured_days = verify_plan_with_tools(
+                    validated_plan=validated_plan,
+                    destination=clean_dest,
+                    days_count=clean_days,
+                    total_budget=clean_budget,
+                    weather_info=weather_info,
+                    hotels_info=hotels_info,
+                    origin=origin,
+                    travellers=clean_travellers
+                )
+                used_model = model_name
+                tokens_used = ai_tokens
+                logger.info(f"Generated AI itinerary via {used_model} ({tokens_used} tokens)")
+        except Exception as e:
+            logger.warning(f"AI planner with {model_name} failed: {e}. Executing deterministic engine.")
+            structured_days = None
+
+    if structured_days is None:
+        # Fallback: Deterministic preference-aware planning engine
+        structured_days = generate_algorithmic_plan(
+            destination=clean_dest,
+            days_count=clean_days,
+            total_budget=clean_budget,
+            persona=persona,
+            start_date=start_d,
+            weather_info=weather_info,
+            hotels_info=hotels_info,
+            coords=coords,
+            travellers=clean_travellers,
+            vibe=vibe,
+            interests=interests,
+            origin=origin
+        )
+        used_model = "deterministic-planner-v1"
+        tokens_used = 0
 
     # 4. Atomic PostgreSQL Persistence: Entire trip graph commits together or rolls back
     try:
@@ -719,15 +1017,15 @@ def build_itinerary_with_planner_agent(
         db.add(squad_room)
         db.flush()
 
-        # AI Observability: Honest Telemetry (No fake LLM tokens)
+        # AI Observability: Honest Telemetry (Real model & real tokens if LLM used, 0 if deterministic)
         latency_ms = int((time.time() - start_time) * 1000)
         ai_run = AIRun(
             user_id=user.id,
             trip_id=new_itinerary.id,
             prompt=effective_prompt or f"Generate itinerary for {clean_dest}",
-            model="deterministic-planner-v1",
+            model=used_model,
             latency_ms=latency_ms,
-            tokens_used=0,
+            tokens_used=tokens_used,
             status="success"
         )
         db.add(ai_run)

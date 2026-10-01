@@ -1,4 +1,5 @@
 import pytest
+from unittest.mock import MagicMock
 from fastapi.testclient import TestClient
 from app.models.models import ItineraryActivity, AIRun, Itinerary
 from app.main import app
@@ -243,3 +244,158 @@ def test_planner_trust_boundaries_provenance_and_factual_rationales(client):
     first_act = first_trip["days"][0]["activities"][0]
     assert "whyRecommended" in first_act
     assert first_act["provenance"] != "AI GENERATED"
+
+def test_daina_ai_planning_pipeline_and_observability(client, db_session, monkeypatch):
+    """
+    Test Real DAIna flow:
+    LLM -> structured planner output -> constraint validation -> tool verification -> persist
+    1. Verifies structured AI generation correctly parses into DayPlan & ActivityItems
+    2. Verifies tool verification layer applies spatial geocoding and '(Estimated)' transit/crowds
+    3. Verifies honest AI Observability records real model name and token usage
+    """
+    from unittest.mock import MagicMock
+    import app.ai.agents.planner_agent as pa
+
+    mock_json_content = """{
+      "title": "Bespoke 2-Day Kyoto Sanctuary Passage",
+      "days": [
+        {
+          "day_number": 1,
+          "title": "Arrival & Historic Temple Discovery",
+          "activities": [
+            {
+              "time_slot": "09:30 AM",
+              "description": "Orientation and check-in at Kyoto Sanctuary",
+              "location": "Kyoto",
+              "place_type": "H",
+              "why_recommended": "Matches your preference for peaceful cultural surroundings."
+            },
+            {
+              "time_slot": "01:00 PM",
+              "description": "Traditional Kaiseki multi-course lunch",
+              "location": "Gion Historic Quarter",
+              "place_type": "R",
+              "why_recommended": "Matches your cultural gastronomy interest."
+            },
+            {
+              "time_slot": "05:30 PM",
+              "description": "Golden hour twilight photography at Fushimi Inari",
+              "location": "Kyoto",
+              "place_type": "TA",
+              "why_recommended": "Matches your photography preference with unobstructed dusk light."
+            }
+          ]
+        },
+        {
+          "day_number": 2,
+          "title": "Bamboo Groves & Artisan Heritage",
+          "activities": [
+            {
+              "time_slot": "09:00 AM",
+              "description": "Arashiyama bamboo grove morning walk",
+              "location": "Kyoto",
+              "place_type": "TA",
+              "why_recommended": "Matches your serene nature preference."
+            },
+            {
+              "time_slot": "01:00 PM",
+              "description": "Zen garden matcha and soba lunch",
+              "location": "Arashiyama Strip",
+              "place_type": "R",
+              "why_recommended": "Matches your authentic culinary interest."
+            },
+            {
+              "time_slot": "06:00 PM",
+              "description": "Twilight tea house reflection",
+              "location": "Pontocho Alley",
+              "place_type": "TA",
+              "why_recommended": "Matches your cultural ambiance interest."
+            }
+          ]
+        }
+      ]
+    }"""
+
+    mock_choice = MagicMock()
+    mock_choice.message.content = mock_json_content
+    mock_response = MagicMock()
+    mock_response.choices = [mock_choice]
+    mock_response.usage.total_tokens = 485
+
+    mock_client = MagicMock()
+    mock_client.chat.completions.create.return_value = mock_response
+
+    # Monkeypatch get_llm_client to simulate Gemini Flash free tier
+    monkeypatch.setattr(pa, "get_llm_client", lambda: (mock_client, "gemini-1.5-flash"))
+
+    payload = {
+        "destination": "Kyoto",
+        "days_count": 2,
+        "travellers": 2,
+        "budget": 85000.0,
+        "currency": "INR",
+        "start_date": "2026-11-10",
+        "end_date": "2026-11-11",
+        "persona": "culture_seeker",
+        "vibe": "cultural & peaceful",
+        "interests": ["photography", "heritage cuisine"]
+    }
+
+    res = client.post("/api/v1/planner/generate", json=payload)
+    assert res.status_code == 200
+    data = res.json()
+
+    # 1. Structured output populated from LLM
+    assert len(data["days"]) == 2
+    assert data["days"][0]["title"] == "Arrival & Historic Temple Discovery"
+    assert data["days"][1]["title"] == "Bamboo Groves & Artisan Heritage"
+
+    # 2. Tool verification layer verified spatial geocoding & labeled estimates
+    d1_act0 = data["days"][0]["activities"][0]
+    assert d1_act0["lat"] is not None  # Kyoto coordinates resolved
+    assert d1_act0["provenance"] in ["CURATED", "PROVIDER_VERIFIED"]
+    assert "(Estimated)" in d1_act0["estimatedTransit"]
+    assert "(Estimated)" in d1_act0["crowdWarning"]
+
+    # 3. Honest AI Observability recorded real model and tokens
+    trip_id = data["id"]
+    ai_run = db_session.query(AIRun).filter(AIRun.trip_id == trip_id).first()
+    assert ai_run is not None
+    assert ai_run.model == "gemini-1.5-flash"
+    assert ai_run.tokens_used == 485
+    assert ai_run.status == "success"
+
+def test_daina_ai_planning_graceful_fallback_on_error(client, db_session, monkeypatch):
+    """
+    Test that if the LLM provider fails (quota, network error),
+    DAIna gracefully falls back to the deterministic engine without breaking the user experience.
+    """
+    import app.ai.agents.planner_agent as pa
+
+    def mock_failing_llm(*args, **kwargs):
+        raise RuntimeError("Google Gemini API quota exceeded (free tier 15 RPM)")
+
+    mock_client = MagicMock()
+    monkeypatch.setattr(pa, "get_llm_client", lambda: (mock_client, "gemini-1.5-flash"))
+    monkeypatch.setattr(pa, "generate_llm_plan", mock_failing_llm)
+
+    payload = {
+        "destination": "Goa",
+        "days_count": 2,
+        "travellers": 2,
+        "vibe": "romantic",
+        "start_date": "2026-11-01",
+        "end_date": "2026-11-02"
+    }
+
+    res = client.post("/api/v1/planner/generate", json=payload)
+    assert res.status_code == 200
+    data = res.json()
+    assert len(data["days"]) == 2
+
+    # Verify fallback was used and honest observability was logged
+    trip_id = data["id"]
+    ai_run = db_session.query(AIRun).filter(AIRun.trip_id == trip_id).first()
+    assert ai_run is not None
+    assert ai_run.model == "deterministic-planner-v1"
+    assert ai_run.tokens_used == 0

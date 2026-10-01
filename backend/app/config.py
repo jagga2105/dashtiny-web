@@ -31,6 +31,14 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
 
+    # AI Planner / LLM Configuration (Free Tier: Gemini 1.5 Flash, Groq, or local Ollama)
+    GEMINI_API_KEY: Optional[str] = None
+    GROQ_API_KEY: Optional[str] = None
+    OPENAI_API_KEY: Optional[str] = None
+    LLM_PROVIDER: str = "gemini"  # gemini, groq, ollama, openai
+    LLM_MODEL: str = "gemini-1.5-flash"
+    LLM_BASE_URL: Optional[str] = None
+
 settings = Settings()
 if not settings.DATABASE_URL:
     settings.DATABASE_URL = f"postgresql://{settings.POSTGRES_USER}:{settings.POSTGRES_PASSWORD}@{settings.POSTGRES_SERVER}:{settings.POSTGRES_PORT}/{settings.POSTGRES_DB}"
