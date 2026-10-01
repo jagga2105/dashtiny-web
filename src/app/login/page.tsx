@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { useAuthStore } from '@/store/useAuthStore';
-import { requestOTP, verifyOTP } from '@/lib/api';
+import { requestOTP, verifyOTP } from '@/services/api';
 
 type AccountType = 'personal_traveler' | 'corporate_manager' | 'travel_agent' | 'enterprise_admin';
 
@@ -104,7 +104,7 @@ export default function LoginPage() {
     setErrorMsg('');
     try {
       const data = await verifyOTP(phone, otpCode);
-      login(data.user, data.access_token || data.token);
+      login(data.user, data.access_token);
       router.push('/dashboard');
     } catch (err: any) {
       setErrorMsg(err.message || 'Invalid OTP code');

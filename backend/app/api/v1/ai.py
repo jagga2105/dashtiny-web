@@ -12,35 +12,15 @@ from jose import jwt
 
 from app.config import settings
 from app.db.database import get_db
-from app.models.models import Itinerary, ItineraryDay, ItineraryActivity, User, AIRun, AIToolCall
+from app.models.models import Itinerary, ItineraryDay, ItineraryActivity, User, AIRun, AIToolCall, SquadRoom
 from app.ai.tools.itinerary import apply_itinerary_action
 from app.ai.tools.weather import get_destination_weather
 from app.ai.tools.hotel_search import search_hotels
 from app.ai.tools.flight_search import search_flights
 from app.ai.tools.maps import get_coordinates
+from app.api.deps import get_current_user
 
 router = APIRouter(prefix="/ai", tags=["DashTiny AI Action & Diff Engine"])
-security = HTTPBearer(auto_error=False)
-
-def get_current_user_or_default(
-    auth: Optional[HTTPAuthorizationCredentials] = Depends(security),
-    db: Session = Depends(get_db)
-) -> User:
-    if auth:
-        try:
-            payload = jwt.decode(auth.credentials, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-            user_id = payload.get("sub")
-            user = db.query(User).filter(User.id == user_id).first()
-            if user:
-                return user
-        except Exception:
-            pass
-    default_user = db.query(User).first()
-    if not default_user:
-        default_user = User(email="traveler@dashtiny.ai", full_name="Explorer")
-        db.add(default_user)
-        db.commit()
-    return default_user
 
 class AIQueryRequest(BaseModel):
     trip_id: str
@@ -49,23 +29,41 @@ class AIQueryRequest(BaseModel):
 @router.post("/query")
 def ai_query(
     request: AIQueryRequest,
-    user: User = Depends(get_current_user_or_default),
+    user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
     Experience-First Conversational / Action Endpoint.
     Modifies specific trip items, recalculates pacing/budget, logs AI tool runs,
     persists updates to PostgreSQL, and returns what changed ({ "changes": [...] }).
+    Enforces strict user ownership: only the owner or squad member can modify the trip.
     """
     start_time = time.time()
     
     trip = db.query(Itinerary).filter(Itinerary.id == request.trip_id).first()
     if not trip:
-        # If no specific trip found, grab the user's latest trip
-        trip = db.query(Itinerary).filter(Itinerary.owner_id == user.id).order_by(Itinerary.created_at.desc()).first()
+        if request.trip_id in ["latest", "", None]:
+            trip = db.query(Itinerary).filter(Itinerary.owner_id == user.id).order_by(Itinerary.created_at.desc()).first()
+        else:
+            raise HTTPException(status_code=404, detail="Trip not found")
     
     if not trip:
         raise HTTPException(status_code=404, detail="No active trip found to modify")
+
+    # Enforce data ownership
+    is_owner = (trip.owner_id == user.id)
+    squad = db.query(SquadRoom).filter(SquadRoom.itinerary_id == trip.id).first()
+    is_member = False
+    if squad and squad.members:
+        is_member = any(
+            (isinstance(m, dict) and (m.get("email") == user.email or m.get("user_id") == user.id))
+            for m in squad.members
+        )
+    if not is_owner and not is_member:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied. You do not have permission to modify this trip."
+        )
 
     # Serialize current days & activities
     current_days = []

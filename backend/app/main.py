@@ -1,6 +1,10 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Response, status
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
+import redis
+
 from app.config import settings
+from app.db.database import SessionLocal
 from app.api.v1 import auth, planner, squad, explore, community, rewards, trips, bookings, chat, ai
 
 app = FastAPI(
@@ -40,5 +44,37 @@ def root():
     }
 
 @app.get("/health")
-def healthcheck():
-    return {"status": "healthy", "database": "connected", "redis": "connected"}
+def healthcheck(response: Response):
+    """
+    Authentic health check verifying PostgreSQL database and Redis cache connectivity.
+    """
+    db_status = "disconnected"
+    try:
+        with SessionLocal() as db_session:
+            db_session.execute(text("SELECT 1"))
+        db_status = "connected"
+    except Exception as e:
+        db_status = f"error: {str(e)[:50]}"
+
+    redis_status = "disconnected"
+    try:
+        r = redis.Redis(host=settings.REDIS_HOST, port=settings.REDIS_PORT, socket_connect_timeout=0.5)
+        if r.ping():
+            redis_status = "connected"
+    except Exception:
+        redis_status = "disconnected"
+
+    # Degraded if database is down
+    if db_status != "connected":
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+        overall_status = "unhealthy"
+    else:
+        overall_status = "healthy"
+
+    return {
+        "status": overall_status,
+        "api": "healthy",
+        "database": db_status,
+        "redis": redis_status,
+        "version": settings.VERSION
+    }

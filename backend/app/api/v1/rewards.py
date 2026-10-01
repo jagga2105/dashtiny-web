@@ -8,29 +8,9 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.db.database import get_db
 from app.models.models import RewardVoucher, User, UserProfile
+from app.api.deps import get_current_user
 
 router = APIRouter(prefix="/rewards", tags=["Rewards & Gold Coin Vault"])
-security = HTTPBearer(auto_error=False)
-
-def get_current_user_or_default(
-    auth: Optional[HTTPAuthorizationCredentials] = Depends(security),
-    db: Session = Depends(get_db)
-) -> User:
-    if auth:
-        try:
-            payload = jwt.decode(auth.credentials, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-            user_id = payload.get("sub")
-            user = db.query(User).filter(User.id == user_id).first()
-            if user:
-                return user
-        except Exception:
-            pass
-    default_user = db.query(User).first()
-    if not default_user:
-        default_user = User(email="traveler@dashtiny.ai", full_name="Explorer")
-        db.add(default_user)
-        db.commit()
-    return default_user
 
 class RedeemVoucherRequest(BaseModel):
     voucher_id: str
@@ -71,7 +51,7 @@ def ensure_vouchers(db: Session):
 
 @router.get("/vault")
 def get_reward_vault(
-    user: User = Depends(get_current_user_or_default),
+    user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
@@ -107,7 +87,7 @@ def get_reward_vault(
 @router.post("/redeem")
 def redeem_reward_voucher(
     request: RedeemVoucherRequest,
-    user: User = Depends(get_current_user_or_default),
+    user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """

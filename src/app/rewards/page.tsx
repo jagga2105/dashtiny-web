@@ -25,6 +25,7 @@ export default function RewardsPage() {
   const [redeemed, setRedeemed] = useState<string | null>(null);
   const [unlockedCode, setUnlockedCode] = useState<string | null>(null);
   const [isRedeeming, setIsRedeeming] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [vouchersList, setVouchersList] = useState<VoucherItem[]>([
     {
       id: 'vch_01',
@@ -54,26 +55,35 @@ export default function RewardsPage() {
 
   useEffect(() => {
     async function loadVault() {
-      const data = await apiService.getRewardVault();
-      if (data && data.vouchers && data.vouchers.length > 0) {
-        setVouchersList(
-          data.vouchers.map((v: any) => ({
-            id: v.id,
-            brand: v.brand,
-            title: v.discount || v.title,
-            cost: v.coin_cost || 100,
-            description: `Exclusive partner discount voucher with ${v.brand || 'DashTiny Concierge'}.`,
-            code: v.code,
-            badge: v.category?.toUpperCase() || 'EXCLUSIVE',
-          }))
-        );
+      try {
+        const data = await apiService.getRewardVault();
+        if (data && data.vouchers && data.vouchers.length > 0) {
+          setVouchersList(
+            data.vouchers.map((v: any) => ({
+              id: v.id,
+              brand: v.brand,
+              title: v.discount || v.title,
+              cost: v.coin_cost || 100,
+              description: `Exclusive partner discount voucher with ${v.brand || 'DashTiny Concierge'}.`,
+              code: v.code,
+              badge: v.category?.toUpperCase() || 'EXCLUSIVE',
+            }))
+          );
+        }
+      } catch (err) {
+        console.error('Failed to load rewards vault:', err);
       }
     }
     loadVault();
   }, []);
 
   const handleRedeem = async (vouchId: string, cost: number) => {
-    if ((user?.coins || 0) < cost || isRedeeming) return;
+    setErrorMsg(null);
+    if ((user?.coins || 0) < cost) {
+      setErrorMsg(`Insufficient Gold Coins. You have ${user?.coins || 0} coins, but need ${cost} coins.`);
+      return;
+    }
+    if (isRedeeming) return;
 
     setIsRedeeming(true);
     try {
@@ -83,13 +93,12 @@ export default function RewardsPage() {
         setRedeemed(vouchId);
         setUnlockedCode(res.voucher_code || 'UNLOCKED');
       } else {
-        // Fallback for local simulation if server had error
-        updateCoins(-cost);
-        setRedeemed(vouchId);
+        setErrorMsg("Unable to connect to DashTiny services. Failed to redeem voucher. Try again.");
       }
-    } catch {
-      updateCoins(-cost);
-      setRedeemed(vouchId);
+    } catch (err: any) {
+      console.error('Redemption error:', err);
+      const detail = err?.data?.detail || "Unable to connect to DashTiny services. Failed to redeem voucher. Try again.";
+      setErrorMsg(detail);
     } finally {
       setIsRedeeming(false);
     }
@@ -126,6 +135,22 @@ export default function RewardsPage() {
             </div>
           </div>
         </section>
+
+        {/* Error Alert Banner */}
+        {errorMsg && (
+          <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-950 flex items-center justify-between animate-in fade-in">
+            <span className="text-xs font-bold flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-amber-500" />
+              {errorMsg}
+            </span>
+            <button
+              onClick={() => setErrorMsg(null)}
+              className="text-xs text-amber-700 hover:text-amber-950 font-bold cursor-pointer"
+            >
+              ✕
+            </button>
+          </div>
+        )}
 
         {/* Redeemable Vouchers Store */}
         <section className="space-y-6">

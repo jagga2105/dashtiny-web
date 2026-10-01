@@ -1,7 +1,15 @@
-from pydantic_settings import BaseSettings
+import os
 from typing import Optional
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"),
+        env_file_encoding="utf-8",
+        extra="ignore",
+        case_sensitive=True
+    )
+
     PROJECT_NAME: str = "DashTiny Getaways API"
     VERSION: str = "1.0.0"
     API_V1_STR: str = "/api/v1"
@@ -18,13 +26,10 @@ class Settings(BaseSettings):
     REDIS_HOST: str = "localhost"
     REDIS_PORT: int = 6379
 
-    # Security & Auth
-    SECRET_KEY: str = "dashtiny_super_secret_jwt_key_2026"
+    # Security & Auth (MUST be set in .env in production)
+    SECRET_KEY: str = "SrZCeCYmpOFmLR-SauULuGyM0QokcROSmyzfFcnLXZ8"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
-
-    class Config:
-        case_sensitive = True
 
 settings = Settings()
 if not settings.DATABASE_URL:

@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { X, Send, Sparkles, SlidersHorizontal, Award } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { TravelInputDialogModal, TravelInputResult } from '@/components/planner/TravelInputDialogModal';
-import { checkMessageForItinerary, inferPlaceType, StructuredItineraryData, ActivityItem } from '@/lib/dainaIntentParser';
+import { parseTravelPrompt, inferPlaceType, StructuredItineraryData, ActivityItem } from '@/lib/dainaIntentParser';
 import { usePlannerStore } from '@/store/usePlannerStore';
 import { apiService } from '@/services/api';
 
@@ -48,25 +48,34 @@ export function DAInaChatWidget() {
         let itData: StructuredItineraryData | undefined = undefined;
 
         if (res.is_itinerary && res.itinerary_data) {
-          const dest = res.itinerary_data.destination || 'Goa, India';
-          const daysCount = res.itinerary_data.days_count || 3;
+          const parsed = parseTravelPrompt(textToSend);
+          const dest = res.itinerary_data.destination || parsed.destination || 'Goa, India';
+          const daysCount = res.itinerary_data.days_count || parsed.days_count || 3;
+          const budget = res.itinerary_data.budget || parsed.budget || (daysCount * 12000);
+
+          // Generate realistic future travel dates
+          const start = new Date(Date.now() + 7 * 86400000);
+          const end = new Date(start.getTime() + daysCount * 86400000);
+          const startDate = start.toISOString().split('T')[0];
+          const endDate = end.toISOString().split('T')[0];
+
           itData = {
             id: `it_chat_${Date.now()}`,
             title: res.itinerary_data.title || `Custom ${daysCount}-Day ${dest} Getaway`,
             destination: dest,
-            startDate: '2026-08-10',
-            endDate: `2026-08-${10 + daysCount}`,
-            budget: res.itinerary_data.budget || 25000,
+            startDate,
+            endDate,
+            budget,
             days: [
               {
                 dayNumber: 1,
-                title: 'Arrival & Private Villa Check-in',
+                title: 'Arrival & Curated Stay Check-in',
                 coverImage: 'https://images.unsplash.com/photo-1512343879784-a960bf40e7f2?w=800&auto=format&fit=crop&q=80',
                 weather: '28°C Pleasant 🌤️',
                 activities: [
-                  { time: '10:00 AM', description: 'Private Check-in at Curated Villa', location: dest, placeType: inferPlaceType('hotel stay') },
-                  { time: '01:30 PM', description: 'Gourmet Coastal Lunch Experience', location: dest, placeType: inferPlaceType('lunch restaurant') },
-                  { time: '05:30 PM', description: 'Golden Hour Sunset Lounge at Cliff', location: dest, placeType: inferPlaceType('sunset beach') },
+                  { time: '10:00 AM', description: `Private Check-in at Selected Sanctuary in ${dest}`, location: dest, placeType: inferPlaceType('hotel stay') },
+                  { time: '01:30 PM', description: `Curated Local Gastronomy Experience`, location: dest, placeType: inferPlaceType('lunch restaurant') },
+                  { time: '05:30 PM', description: `Golden Hour Heritage Walk & Sunset View`, location: dest, placeType: inferPlaceType('sunset beach') },
                 ],
               },
             ],
@@ -90,7 +99,7 @@ export function DAInaChatWidget() {
           {
             id: `bot_${Date.now()}`,
             sender: 'daina',
-            text: "✦ I am currently updating live route fare coordinates. Try asking 'Plan a 3-day luxury trip to Manali' or use our 9-Step Travel Form!",
+            text: "✦ DAIna is temporarily unavailable. Try again.",
           },
         ]);
       }
@@ -100,7 +109,7 @@ export function DAInaChatWidget() {
         {
           id: `bot_${Date.now()}`,
           sender: 'daina',
-          text: "✦ Concierge service is active. Please ask a travel destination question or open the 9-Step Form.",
+          text: "✦ DAIna is temporarily unavailable. Try again.",
         },
       ]);
     } finally {
@@ -127,8 +136,15 @@ export function DAInaChatWidget() {
           },
         ]);
       }
-    } catch (err) {
-      console.error(err);
+    } catch {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `bot_err_${Date.now()}`,
+          sender: 'daina',
+          text: `✦ Unable to connect to DashTiny services. Failed to save "${itData.title}" to PostgreSQL. Please try again.`,
+        },
+      ]);
     }
   };
 
@@ -193,7 +209,7 @@ export function DAInaChatWidget() {
         {
           id: `bot_${Date.now()}`,
           sender: 'daina',
-          text: `✦ Itinerary created for ${formResult.destination} and saved to your local canvas!`,
+          text: `✦ DAIna is temporarily unavailable. Could not generate itinerary for ${formResult.destination}. Try again.`,
         },
       ]);
     } finally {

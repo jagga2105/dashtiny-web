@@ -13,6 +13,7 @@ export interface User {
   trust_score?: string;
   vibe_tags?: string[];
   provider?: 'google' | 'email' | 'phone';
+  is_demo?: boolean;
 }
 
 interface AuthState {
@@ -113,9 +114,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   loginWithGoogle: async (googleProfile) => {
-    const googleId = `google_sub_${Date.now()}`;
-    const email = googleProfile?.email || 'kumkum.pandey@gmail.com';
-    const fullName = googleProfile?.full_name || 'Kumkum Pandey';
+    const isExplicitDemo = !googleProfile?.email;
+    const googleId = `google_demo_${Date.now()}`;
+    const email = googleProfile?.email || 'demo.traveler@dashtiny.ai';
+    const fullName = googleProfile?.full_name || 'Demo Explorer [Sandbox]';
     const avatarUrl = googleProfile?.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80';
 
     const apiRes = await apiService.loginWithGoogle({
@@ -125,7 +127,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       avatar_url: avatarUrl,
     });
 
-    get().login(apiRes.user, apiRes.access_token);
+    const userWithFlag: User = {
+      ...apiRes.user,
+      is_demo: isExplicitDemo,
+      provider: 'google',
+    };
+
+    get().login(userWithFlag, apiRes.access_token);
   },
 
   logout: () => {

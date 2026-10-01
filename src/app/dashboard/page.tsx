@@ -82,20 +82,26 @@ export default function DashboardPage() {
 
   useEffect(() => {
     async function loadBackendData() {
-      const [sancData, drvData, tripsData] = await Promise.all([
-        apiService.getSanctuaries(activeVibe),
-        apiService.getDriveEscapes('Bengaluru'),
-        apiService.getMyTrips(),
-      ]);
+      try {
+        const [sancData, drvData, tripsData] = await Promise.all([
+          apiService.getSanctuaries(activeVibe),
+          apiService.getDriveEscapes('Bengaluru'),
+          apiService.getMyTrips(),
+        ]);
 
-      if (sancData && sancData.length > 0) {
-        setDynamicSanctuaries(sancData);
-      }
-      if (drvData && drvData.length > 0) {
-        setDynamicDrives(drvData);
-      }
-      if (tripsData && tripsData.length > 0) {
-        setRealActiveTrip(tripsData[0]);
+        if (sancData && sancData.length > 0) {
+          setDynamicSanctuaries(sancData);
+        }
+        if (drvData && drvData.length > 0) {
+          setDynamicDrives(drvData);
+        }
+        if (tripsData && tripsData.length > 0) {
+          setRealActiveTrip(tripsData[0]);
+        } else {
+          setRealActiveTrip(null);
+        }
+      } catch (err) {
+        console.error('Failed to load dashboard data from backend:', err);
       }
     }
     loadBackendData();
@@ -408,39 +414,65 @@ export default function DashboardPage() {
         </section>
 
         {/* Active & Upcoming Getaway Banner (Central Trip Workspace Cockpit) */}
-        <section className="p-6 sm:p-8 rounded-3xl bg-white border border-slate-200/90 shadow-md space-y-4 relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-64 h-64 bg-orange-400/5 rounded-full blur-2xl pointer-events-none" />
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative z-10">
-            <div className="space-y-1.5">
-              <div className="flex items-center gap-2">
-                <span className="px-3 py-0.5 rounded-full bg-emerald-50 text-emerald-800 text-[10px] font-extrabold uppercase border border-emerald-300 flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" /> Central Trip Workspace
-                </span>
-                <span className="text-xs text-orange-600 font-mono font-bold">
-                  {realActiveTrip?.startDate ? `Starts ${realActiveTrip.startDate}` : 'Active Passage'}
-                </span>
+        {realActiveTrip ? (
+          <section className="p-6 sm:p-8 rounded-3xl bg-white border border-slate-200/90 shadow-md space-y-4 relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-64 h-64 bg-orange-400/5 rounded-full blur-2xl pointer-events-none" />
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative z-10">
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2">
+                  <span className="px-3 py-0.5 rounded-full bg-emerald-50 text-emerald-800 text-[10px] font-extrabold uppercase border border-emerald-300 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" /> Central Trip Workspace
+                  </span>
+                  <span className="text-xs text-orange-600 font-mono font-bold">
+                    {realActiveTrip.startDate ? `Starts ${realActiveTrip.startDate}` : 'Active Passage'}
+                  </span>
+                </div>
+                <h3 className="text-2xl sm:text-3xl font-serif-editorial font-bold text-slate-900">
+                  {realActiveTrip.title}
+                </h3>
+                <p className="text-xs text-slate-500 font-medium">
+                  {realActiveTrip.destination} • {realActiveTrip.daysCount || realActiveTrip.days?.length || 3} Days • Budget: ₹{realActiveTrip.budget?.toLocaleString('en-IN')}
+                </p>
               </div>
-              <h3 className="text-2xl sm:text-3xl font-serif-editorial font-bold text-slate-900">
-                {realActiveTrip?.title || 'Bespoke Goa & Heritage Coast Passage'}
-              </h3>
-              <p className="text-xs text-slate-500 font-medium">
-                {realActiveTrip
-                  ? `${realActiveTrip.destination} • ${realActiveTrip.daysCount || 3} Days • Budget: ₹${realActiveTrip.budget?.toLocaleString('en-IN')}`
-                  : 'Aug 10 - Aug 14, 2026 • 4 Nights • Taj Exotica Villa & Private Yacht Passage'}
-              </p>
-            </div>
 
-            <Button
-              variant="primary"
-              size="md"
-              className="bg-gradient-to-r from-orange-500 to-amber-500 text-white font-extrabold shrink-0 shadow-md shadow-orange-500/20 px-6 hover:scale-105 transition-all text-xs"
-              onClick={() => router.push('/trips')}
-            >
-              <Luggage className="w-4 h-4 mr-1.5" />
-              Open Trip Workspace →
-            </Button>
-          </div>
-        </section>
+              <Button
+                variant="primary"
+                size="md"
+                className="bg-gradient-to-r from-orange-500 to-amber-500 text-white font-extrabold shrink-0 shadow-md shadow-orange-500/20 px-6 hover:scale-105 transition-all text-xs cursor-pointer"
+                onClick={() => router.push('/trips')}
+              >
+                <Luggage className="w-4 h-4 mr-1.5" />
+                Open Trip Workspace →
+              </Button>
+            </div>
+          </section>
+        ) : (
+          <section className="p-6 sm:p-8 rounded-3xl bg-gradient-to-r from-orange-50 via-white to-amber-50 border border-orange-200/90 shadow-sm space-y-4 relative overflow-hidden">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative z-10">
+              <div className="space-y-1.5">
+                <span className="px-3 py-0.5 rounded-full bg-orange-100 text-orange-800 text-[10px] font-extrabold uppercase border border-orange-200">
+                  Central Trip Workspace
+                </span>
+                <h3 className="text-2xl sm:text-3xl font-serif-editorial font-bold text-slate-900">
+                  No Active Trip Planned Yet
+                </h3>
+                <p className="text-xs text-slate-500 font-medium max-w-xl">
+                  Build and manage your complete vacation in one place. Let DAIna AI architect your multi-day itinerary with hotels, dining, and route pacing.
+                </p>
+              </div>
+
+              <Button
+                variant="primary"
+                size="md"
+                className="bg-gradient-to-r from-orange-500 to-amber-500 text-white font-extrabold shrink-0 shadow-md shadow-orange-500/20 px-6 hover:scale-105 transition-all text-xs cursor-pointer"
+                onClick={() => router.push('/planner')}
+              >
+                <Sparkles className="w-4 h-4 mr-1.5" />
+                Plan a Trip with AI →
+              </Button>
+            </div>
+          </section>
+        )}
 
         {/* Curated Sanctuaries Section */}
         <section className="space-y-6">

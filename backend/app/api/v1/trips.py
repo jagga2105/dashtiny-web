@@ -1,47 +1,20 @@
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from jose import jwt
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.db.database import get_db
 from app.models.models import Itinerary, ItineraryDay, ItineraryActivity, SquadRoom, Booking, User
+from app.api.deps import get_current_user
 
 router = APIRouter(prefix="/trips", tags=["My Trips & Active Passages"])
-security = HTTPBearer(auto_error=False)
-
-def get_current_user_or_default(
-    auth: Optional[HTTPAuthorizationCredentials] = Depends(security),
-    db: Session = Depends(get_db)
-) -> User:
-    if auth:
-        try:
-            payload = jwt.decode(auth.credentials, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-            user_id = payload.get("sub")
-            user = db.query(User).filter(User.id == user_id).first()
-            if user:
-                return user
-        except Exception:
-            pass
-    # Return first user in DB if no auth token provided
-    default_user = db.query(User).first()
-    if not default_user:
-        default_user = User(email="traveler@dashtiny.ai", full_name="Explorer")
-        db.add(default_user)
-        db.commit()
-    return default_user
 
 @router.get("/my-trips")
-def get_my_trips(user: User = Depends(get_current_user_or_default), db: Session = Depends(get_db)):
+def get_my_trips(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """
-    Get all active and past itineraries for the user from PostgreSQL.
+    Get all active and past itineraries strictly owned by the authenticated user.
     """
     itineraries = db.query(Itinerary).filter(Itinerary.owner_id == user.id).order_by(Itinerary.created_at.desc()).all()
-    
-    # If this specific user has no itineraries yet, check if there are any itineraries in DB or generate one
-    if not itineraries:
-        itineraries = db.query(Itinerary).order_by(Itinerary.created_at.desc()).limit(3).all()
 
     results = []
     for it in itineraries:
@@ -113,16 +86,35 @@ def get_my_trips(user: User = Depends(get_current_user_or_default), db: Session 
     return results
 
 @router.get("/{trip_id}")
-def get_trip_details(trip_id: str, db: Session = Depends(get_db)):
+def get_trip_details(
+    trip_id: str,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     """
     Get full details, days, activities, and linked bookings for a specific trip.
+    Enforces data ownership: user must be the trip owner or a member of the trip squad.
     """
     it = db.query(Itinerary).filter(Itinerary.id == trip_id).first()
     if not it:
         raise HTTPException(status_code=404, detail="Trip not found")
 
-    days = db.query(ItineraryDay).filter(ItineraryDay.itinerary_id == it.id).order_by(ItineraryDay.day_number.asc()).all()
+    # Enforce data ownership
+    is_owner = (it.owner_id == user.id)
     squad = db.query(SquadRoom).filter(SquadRoom.itinerary_id == it.id).first()
+    is_member = False
+    if squad and squad.members:
+        is_member = any(
+            (isinstance(m, dict) and (m.get("email") == user.email or m.get("user_id") == user.id))
+            for m in squad.members
+        )
+    if not is_owner and not is_member:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied. You do not own this itinerary."
+        )
+
+    days = db.query(ItineraryDay).filter(ItineraryDay.itinerary_id == it.id).order_by(ItineraryDay.day_number.asc()).all()
     trip_bookings = db.query(Booking).filter(Booking.trip_id == it.id).all()
 
     return {

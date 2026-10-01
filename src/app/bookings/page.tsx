@@ -39,6 +39,7 @@ export default function BookingsPage() {
   const { updateCoins } = useAuthStore();
   const [activeCategory, setActiveCategory] = useState<BookingCategory>('flights');
   const [bookingConfirmed, setBookingConfirmed] = useState<{ title: string; pnr: string; tripId?: string } | null>(null);
+  const [bookingError, setBookingError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [userBookings, setUserBookings] = useState<any[]>([]);
   const [activeTrips, setActiveTrips] = useState<any[]>([]);
@@ -49,27 +50,33 @@ export default function BookingsPage() {
   const [flightDest, setFlightDest] = useState('GOI');
   const [flightsList, setFlightsList] = useState<any[]>([]);
   const [isSearchingFlights, setIsSearchingFlights] = useState(false);
+  const [flightError, setFlightError] = useState<string | null>(null);
 
   // Hotel search states
   const [hotelDest, setHotelDest] = useState('Goa');
   const [hotelGuests, setHotelGuests] = useState(2);
   const [hotelsList, setHotelsList] = useState<any[]>([]);
   const [isSearchingHotels, setIsSearchingHotels] = useState(false);
+  const [hotelError, setHotelError] = useState<string | null>(null);
 
   // Load initial trips and user reservations
   useEffect(() => {
     async function initData() {
-      const [tripsData, bookingsData] = await Promise.all([
-        apiService.getMyTrips(),
-        apiService.getMyBookings(),
-      ]);
+      try {
+        const [tripsData, bookingsData] = await Promise.all([
+          apiService.getMyTrips(),
+          apiService.getMyBookings(),
+        ]);
 
-      if (tripsData && tripsData.length > 0) {
-        setActiveTrips(tripsData);
-        setSelectedTripId(tripsData[0].id);
-      }
-      if (bookingsData && bookingsData.length > 0) {
-        setUserBookings(bookingsData);
+        if (tripsData && tripsData.length > 0) {
+          setActiveTrips(tripsData);
+          setSelectedTripId(tripsData[0].id);
+        }
+        if (bookingsData && bookingsData.length > 0) {
+          setUserBookings(bookingsData);
+        }
+      } catch (err) {
+        console.error('Failed to load initial booking context:', err);
       }
     }
     initData();
@@ -78,60 +85,33 @@ export default function BookingsPage() {
   // Load Flights from Backend Aggregator
   const loadFlights = async (orig = flightOrigin, dest = flightDest) => {
     setIsSearchingFlights(true);
-    const results = await apiService.searchFlights(orig, dest);
-    if (results && results.length > 0) {
-      setFlightsList(results);
-    } else {
-      // Fallback
-      setFlightsList([
-        {
-          id: 'fl_BLR_GOI_01',
-          provider: 'IndiGo Premier',
-          flight_number: '6E-534',
-          origin: orig,
-          destination: dest,
-          departure_time: '06:15 AM',
-          arrival_time: '07:30 AM',
-          duration: '1h 15m (Non-stop)',
-          price: 3450,
-          currency: 'INR',
-          baggage: '15kg Checked • 7kg Cabin',
-          cancellation: 'Free cancellation within 24 hours',
-          provenance: 'VERIFIED',
-          why_recommended: 'Fastest morning direct flight with high on-time reliability',
-          deep_link: 'https://www.goindigo.in',
-        },
-      ]);
+    setFlightError(null);
+    try {
+      const results = await apiService.searchFlights(orig, dest);
+      setFlightsList(results || []);
+    } catch (err) {
+      console.error('Failed to search flights:', err);
+      setFlightError('Unable to connect to DashTiny services. Retry');
+      setFlightsList([]);
+    } finally {
+      setIsSearchingFlights(false);
     }
-    setIsSearchingFlights(false);
   };
 
   // Load Hotels from Backend Aggregator
   const loadHotels = async (dest = hotelDest, guests = hotelGuests) => {
     setIsSearchingHotels(true);
-    const results = await apiService.searchHotels(dest, guests);
-    if (results && results.length > 0) {
-      setHotelsList(results);
-    } else {
-      setHotelsList([
-        {
-          id: 'ht_goa_01',
-          name: 'Taj Exotica Resort & Spa',
-          star_rating: 4.98,
-          address: 'Calwaddo, Benaulim, South Goa',
-          room_type: 'Private Ocean View Villa',
-          price_per_night: 18500,
-          currency: 'INR',
-          amenities: ['Private Plunge Pool', 'Ayurvedic Sanctuary', 'Direct Beach Access'],
-          cancellation: 'Free cancellation until 48 hours before check-in',
-          provenance: 'VERIFIED',
-          source: 'Taj Hotels Direct',
-          why_recommended: 'Top-rated private luxury coastal sanctuary with dedicated butler service',
-          deep_link: 'https://www.tajhotels.com',
-        },
-      ]);
+    setHotelError(null);
+    try {
+      const results = await apiService.searchHotels(dest, guests);
+      setHotelsList(results || []);
+    } catch (err) {
+      console.error('Failed to search hotels:', err);
+      setHotelError('Unable to connect to DashTiny services. Retry');
+      setHotelsList([]);
+    } finally {
+      setIsSearchingHotels(false);
     }
-    setIsSearchingHotels(false);
   };
 
   useEffect(() => {
@@ -145,10 +125,10 @@ export default function BookingsPage() {
     { id: 'trains' as BookingCategory, label: 'Royal Express Trains', icon: Train },
     { id: 'buses' as BookingCategory, label: 'Executive Coaches', icon: Bus },
     { id: 'cabs' as BookingCategory, label: 'Private Chauffeurs', icon: Car },
-    { id: 'my_bookings' as BookingCategory, label: `My Reservations (${userBookings.length})`, icon: Ticket },
+    { id: 'my_bookings' as BookingCategory, label: `Saved Bookings (${userBookings.length})`, icon: Ticket },
   ];
 
-  const handleInstantBook = async (
+  const handleSaveBookingReference = async (
     category: 'flight' | 'hotel',
     provider: string,
     title: string,
@@ -156,8 +136,10 @@ export default function BookingsPage() {
     details?: any
   ) => {
     setLoading(true);
+    setBookingError(null);
+    setBookingConfirmed(null);
     try {
-      const res = await apiService.createBooking({
+      const res = await apiService.saveBookingReference({
         category,
         provider,
         title,
@@ -170,18 +152,11 @@ export default function BookingsPage() {
         setBookingConfirmed({ title: res.title, pnr: res.pnr_ref, tripId: selectedTripId });
         updateCoins(50);
       } else {
-        setBookingConfirmed({
-          title,
-          pnr: `DASH-${category.slice(0, 2).toUpperCase()}-${Math.floor(Math.random() * 89999 + 10000)}`,
-          tripId: selectedTripId,
-        });
+        setBookingError("Booking reference could not be saved.");
       }
-    } catch (e) {
-      setBookingConfirmed({
-        title,
-        pnr: `DASH-${category.slice(0, 2).toUpperCase()}-${Math.floor(Math.random() * 89999 + 10000)}`,
-        tripId: selectedTripId,
-      });
+    } catch (e: any) {
+      console.error('Save booking reference failed:', e);
+      setBookingError(e?.detail || e?.message || "Booking reference could not be saved. Please check if your trip is selected.");
     } finally {
       setLoading(false);
     }
@@ -229,7 +204,7 @@ export default function BookingsPage() {
           )}
         </div>
 
-        {/* Confirmation Toast with real PNR & Direct Link to Trip Workspace */}
+        {/* Confirmation Toast with real reference & Direct Link to Trip Workspace */}
         {bookingConfirmed && (
           <div className="p-6 rounded-3xl bg-gradient-to-r from-emerald-500 to-teal-600 text-white text-xs font-bold flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xl animate-in fade-in slide-in-from-top-4">
             <div className="flex items-center gap-3">
@@ -238,10 +213,10 @@ export default function BookingsPage() {
               </div>
               <div>
                 <span className="text-sm font-serif-editorial font-bold block">
-                  Reservation Confirmed for {bookingConfirmed.title}!
+                  Booking Reference Saved for {bookingConfirmed.title}!
                 </span>
                 <p className="text-emerald-100 font-mono text-xs mt-0.5">
-                  Official Confirmation PNR: <span className="bg-white/20 px-2 py-0.5 rounded text-white font-extrabold">{bookingConfirmed.pnr}</span> • Attached to Trip
+                  Reference Code: <span className="bg-white/20 px-2 py-0.5 rounded text-white font-extrabold">{bookingConfirmed.pnr}</span> • Saved to Trip Workspace
                 </p>
               </div>
             </div>
@@ -262,6 +237,31 @@ export default function BookingsPage() {
                 Dismiss
               </button>
             </div>
+          </div>
+        )}
+
+        {/* Booking Failure Alert */}
+        {bookingError && (
+          <div className="p-6 rounded-3xl bg-amber-50 border border-amber-200 text-amber-950 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-md animate-in fade-in">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-amber-100 flex items-center justify-center shrink-0 text-amber-800 font-bold text-lg">
+                ⚠️
+              </div>
+              <div>
+                <span className="text-sm font-serif-editorial font-bold block text-amber-900">
+                  {bookingError}
+                </span>
+                <p className="text-xs text-amber-800 font-medium mt-0.5">
+                  Unable to connect to DashTiny booking services. No charges were made.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setBookingError(null)}
+              className="text-amber-800 hover:text-amber-950 text-xs font-bold px-3 py-1.5 rounded-xl border border-amber-300 hover:bg-amber-100 cursor-pointer"
+            >
+              Dismiss
+            </button>
           </div>
         )}
 
@@ -346,6 +346,21 @@ export default function BookingsPage() {
             </Card>
 
             {/* Flight Offers List */}
+            {flightError && (
+              <div className="p-8 rounded-3xl bg-amber-50/90 border border-amber-200 text-center space-y-3">
+                <p className="text-xs text-amber-800 font-semibold">{flightError}</p>
+                <Button variant="outline" size="sm" onClick={() => loadFlights()} className="border-amber-300 text-amber-900 font-bold text-xs cursor-pointer">
+                  Retry Search
+                </Button>
+              </div>
+            )}
+
+            {!isSearchingFlights && !flightError && flightsList.length === 0 && (
+              <div className="p-8 rounded-3xl bg-white border border-slate-200 text-center space-y-2">
+                <p className="text-xs text-slate-500 font-medium">No verified flight offers available for {flightOrigin} → {flightDest}.</p>
+              </div>
+            )}
+
             <div className="space-y-4">
               {flightsList.map((fl) => (
                 <Card
@@ -399,7 +414,7 @@ export default function BookingsPage() {
                         isLoading={loading}
                         className="bg-gradient-to-r from-orange-500 to-amber-500 text-white font-extrabold shadow-md shadow-orange-500/20 hover:scale-105 transition-all text-xs"
                         onClick={() =>
-                          handleInstantBook(
+                          handleSaveBookingReference(
                             'flight',
                             fl.provider,
                             `${fl.provider} (${fl.flight_number}) ${fl.origin} → ${fl.destination}`,
@@ -408,7 +423,7 @@ export default function BookingsPage() {
                           )
                         }
                       >
-                        Reserve & Attach ➔
+                        Save Reference & Attach ➔
                       </Button>
 
                       {fl.deep_link && (
@@ -487,6 +502,21 @@ export default function BookingsPage() {
             </Card>
 
             {/* Hotel Cards Grid */}
+            {hotelError && (
+              <div className="p-8 rounded-3xl bg-amber-50/90 border border-amber-200 text-center space-y-3">
+                <p className="text-xs text-amber-800 font-semibold">{hotelError}</p>
+                <Button variant="outline" size="sm" onClick={() => loadHotels()} className="border-amber-300 text-amber-900 font-bold text-xs cursor-pointer">
+                  Retry Stays
+                </Button>
+              </div>
+            )}
+
+            {!isSearchingHotels && !hotelError && hotelsList.length === 0 && (
+              <div className="p-8 rounded-3xl bg-white border border-slate-200 text-center space-y-2">
+                <p className="text-xs text-slate-500 font-medium">No verified stays available for {hotelDest} with {hotelGuests} guests.</p>
+              </div>
+            )}
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {hotelsList.map((ht) => (
                 <Card
@@ -576,7 +606,7 @@ export default function BookingsPage() {
                         isLoading={loading}
                         className="bg-gradient-to-r from-orange-500 to-amber-500 text-white font-extrabold shadow-md shadow-orange-500/20 hover:scale-105 transition-all text-xs"
                         onClick={() =>
-                          handleInstantBook(
+                          handleSaveBookingReference(
                             'hotel',
                             ht.source || 'Luxury Stay',
                             `${ht.name} (${ht.room_type})`,
@@ -585,7 +615,7 @@ export default function BookingsPage() {
                           )
                         }
                       >
-                        Reserve Sanctuary ➔
+                        Save Reference & Attach ➔
                       </Button>
                     </div>
                   </div>
@@ -598,13 +628,13 @@ export default function BookingsPage() {
         {/* MY RESERVATIONS TAB */}
         {activeCategory === 'my_bookings' && (
           <section className="space-y-4">
-            <h3 className="text-xl font-serif-editorial font-bold text-slate-900">Your Active Travel Reservations</h3>
+            <h3 className="text-xl font-serif-editorial font-bold text-slate-900">Your Saved Booking References</h3>
             {userBookings.length === 0 ? (
               <Card className="p-8 text-center space-y-3 rounded-3xl bg-white border border-slate-200 shadow-sm">
                 <Ticket className="w-10 h-10 text-orange-400 mx-auto" />
-                <h4 className="text-base font-bold text-slate-800">No Reservations Yet</h4>
+                <h4 className="text-base font-bold text-slate-800">No Saved Bookings Yet</h4>
                 <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                  Instant book any flight, stay, or experience to generate a verified PNR code and earn reward coins.
+                  Search live flight and hotel offers across partner providers, then save your reservation reference codes directly into your trip workspace.
                 </p>
                 <Button
                   variant="primary"
@@ -625,14 +655,14 @@ export default function BookingsPage() {
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
                         <span className="px-2.5 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10px] font-extrabold uppercase border border-emerald-200">
-                          {b.status}
+                          {b.status === 'saved_reference' ? 'SAVED REFERENCE' : b.status}
                         </span>
                         <span className="font-mono text-xs font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded border border-orange-200">
-                          PNR: {b.pnr_ref}
+                          REF: {b.pnr_ref}
                         </span>
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[10px] font-bold">
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[10px] font-bold">
                           <ShieldCheck className="w-3 h-3 text-emerald-600" />
-                          VERIFIED PROVIDER
+                          PROVIDER INVENTORY
                         </span>
                       </div>
                       <h4 className="text-lg font-bold font-serif-editorial text-slate-900">{b.title}</h4>
@@ -646,7 +676,7 @@ export default function BookingsPage() {
                         <span className="text-2xl font-serif-editorial font-extrabold text-orange-600">
                           ₹{b.amount?.toLocaleString('en-IN')}
                         </span>
-                        <span className="text-[10px] text-emerald-600 block font-bold">Guaranteed Booking</span>
+                        <span className="text-[10px] text-emerald-600 block font-bold">Captured Reference</span>
                       </div>
                       <Button
                         variant="outline"

@@ -60,6 +60,7 @@ export default function ActiveTripsPage() {
   const [activeTripIndex, setActiveTripIndex] = useState(0);
   const [realBookings, setRealBookings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   // Interactive Map State
   const [selectedMapDay, setSelectedMapDay] = useState<number | 'all'>('all');
@@ -68,6 +69,7 @@ export default function ActiveTripsPage() {
   // DashTiny Embedded Copilot State
   const [copilotInput, setCopilotInput] = useState('');
   const [isExecutingCopilot, setIsExecutingCopilot] = useState(false);
+  const [copilotError, setCopilotError] = useState<string | null>(null);
   const [lastDiffResult, setLastDiffResult] = useState<{ summary: string; changes: AIDiffChange[] } | null>(null);
 
   const [checklist, setChecklist] = useState([
@@ -81,18 +83,23 @@ export default function ActiveTripsPage() {
 
   const loadData = async () => {
     setLoading(true);
-    const [tripsData, bookingsData] = await Promise.all([
-      apiService.getMyTrips(),
-      apiService.getMyBookings(),
-    ]);
+    setError(null);
+    try {
+      const [tripsData, bookingsData] = await Promise.all([
+        apiService.getMyTrips(),
+        apiService.getMyBookings(),
+      ]);
 
-    if (tripsData && tripsData.length > 0) {
-      setTrips(tripsData);
+      setTrips(tripsData || []);
+      if (bookingsData && bookingsData.length > 0) {
+        setRealBookings(bookingsData);
+      }
+    } catch (err) {
+      console.error('Failed to load trips from PostgreSQL:', err);
+      setError('Unable to connect to DashTiny services. Retry');
+    } finally {
+      setLoading(false);
     }
-    if (bookingsData && bookingsData.length > 0) {
-      setRealBookings(bookingsData);
-    }
-    setLoading(false);
   };
 
   useEffect(() => {
@@ -104,11 +111,13 @@ export default function ActiveTripsPage() {
     if (!instruction || isExecutingCopilot) return;
 
     setIsExecutingCopilot(true);
+    setCopilotError(null);
     setCopilotInput('');
 
     try {
       const activeTrip = trips[activeTripIndex];
-      const tripId = activeTrip?.id || 'latest';
+      if (!activeTrip) return;
+      const tripId = activeTrip.id || 'latest';
       const res = await apiService.executeAIAction(tripId, instruction);
 
       if (res && res.status === 'success') {
@@ -125,9 +134,12 @@ export default function ActiveTripsPage() {
         } else {
           await loadData();
         }
+      } else {
+        setCopilotError('DAIna is temporarily unavailable. Try again.');
       }
     } catch (err) {
       console.error('Failed to execute AI Copilot diff:', err);
+      setCopilotError('DAIna is temporarily unavailable. Try again.');
     } finally {
       setIsExecutingCopilot(false);
     }
@@ -139,88 +151,135 @@ export default function ActiveTripsPage() {
     );
   };
 
-  const currentTrip = trips[activeTripIndex] || {
-    id: 'trip_default',
-    title: 'Bespoke Goa & Heritage Coast Sanctuary Passage',
-    destination: 'Goa & Heritage Coast, India',
-    startDate: '2026-10-16',
-    endDate: '2026-10-19',
-    budget: 45000,
-    status: 'Active Passage',
-    squad_room_code: 'GOA-2026-X1BC1',
-    days: [
-      {
-        dayNumber: 1,
-        title: 'Day 1: Coastal Arrival & Chapora Sunset Deck',
-        weather: '28°C Sunny ☀️',
-        activities: [
-          { time: '10:30 AM', description: 'Check-in at Ocean Cliff Boutique Villa', location: 'Vagator Beach', placeType: 'H', estimatedTransit: '⏱️ 40m drive' },
-          { time: '01:30 PM', description: 'Authentic Goan Thali & Fresh Catch Tasting', location: 'Anjuna Coastal Cafe', placeType: 'R', estimatedTransit: '⏱️ 15m drive' },
-          { time: '05:30 PM', description: 'Golden Hour Sunset Stroll at Chapora Fort', location: 'Chapora Ridge', placeType: 'TA', estimatedTransit: '⏱️ 10m drive' },
-        ],
-      },
-    ],
-  };
+  const currentTrip = trips[activeTripIndex] || trips[0];
 
   return (
     <div className="min-h-screen pb-24 md:pb-12 flex flex-col bg-[#FAFAF9] text-slate-900 font-sans selection:bg-orange-500 selection:text-white">
       <TopNavbar />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 md:px-8 py-8 space-y-8">
-        {/* Trips Switcher Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/90 pb-6">
-          <div className="space-y-1">
-            <span className="px-3 py-1 rounded-full bg-orange-100 text-orange-800 text-xs font-extrabold uppercase border border-orange-200 tracking-wider">
-              {trips.length > 0 ? `${trips.length} Real Saved Trips` : 'Active Passages'}
-            </span>
-            <h1 className="text-3xl sm:text-4xl font-serif-editorial font-bold text-slate-900">
-              {currentTrip.title}
-            </h1>
-            <p className="text-xs text-slate-500 font-medium">
-              Destination: {currentTrip.destination} • {currentTrip.startDate} to {currentTrip.endDate}
-            </p>
+        {/* State 1: Shimmer Loading Skeleton */}
+        {loading && (
+          <div className="space-y-6 animate-pulse py-8">
+            <div className="h-10 bg-slate-200 rounded-2xl w-1/3" />
+            <div className="h-64 bg-slate-200 rounded-3xl" />
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="h-28 bg-slate-200 rounded-2xl" />
+              <div className="h-28 bg-slate-200 rounded-2xl" />
+              <div className="h-28 bg-slate-200 rounded-2xl" />
+            </div>
           </div>
+        )}
 
-          <div className="flex items-center gap-2.5">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setIsGroupModalOpen(true)}
-              className="bg-white border-slate-200 text-slate-800 font-bold"
-            >
-              <Users className="w-4 h-4 mr-1.5 text-orange-500" />
-              <span>Squad Room ({currentTrip.squad_room_code || 'ROOM'})</span>
-            </Button>
+        {/* State 2: Honest Connection Failure */}
+        {error && (
+          <div className="p-8 rounded-3xl bg-amber-50/90 border border-amber-200 text-center space-y-4 max-w-md mx-auto my-12">
+            <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-800 mx-auto flex items-center justify-center font-bold text-xl">
+              ⚠️
+            </div>
+            <div className="space-y-1">
+              <h3 className="text-base font-bold font-serif-editorial text-amber-950">Connection Error</h3>
+              <p className="text-xs text-amber-800 font-medium">{error}</p>
+            </div>
             <Button
               variant="primary"
               size="sm"
-              onClick={() => router.push('/planner')}
-              className="bg-gradient-to-r from-orange-500 to-amber-500 text-white font-extrabold"
+              onClick={loadData}
+              className="bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-xs px-5 py-2 cursor-pointer"
             >
-              <Sparkles className="w-4 h-4 mr-1.5" />
-              <span>New AI Itinerary</span>
+              Retry Connection
             </Button>
           </div>
-        </div>
+        )}
 
-        {/* Multiple Saved Trips Carousel Tabs if > 1 trip */}
-        {trips.length > 1 && (
-          <div className="flex items-center gap-2 overflow-x-auto pb-2 no-scrollbar">
-            {trips.map((t, idx) => (
-              <button
-                key={t.id}
-                onClick={() => setActiveTripIndex(idx)}
-                className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all shrink-0 ${
-                  activeTripIndex === idx
-                    ? 'bg-orange-50 border-orange-300 text-orange-950 font-extrabold shadow-sm'
-                    : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-                }`}
+        {/* State 3: Authentic Empty State when User has no trips */}
+        {!loading && !error && trips.length === 0 && (
+          <div className="p-12 rounded-3xl bg-white border border-slate-200 shadow-sm text-center space-y-5 max-w-lg mx-auto my-12">
+            <div className="w-16 h-16 rounded-3xl bg-orange-50 border border-orange-200 text-orange-600 mx-auto flex items-center justify-center">
+              <Luggage className="w-8 h-8 text-orange-500" />
+            </div>
+            <div className="space-y-2">
+              <span className="px-3 py-1 rounded-full bg-orange-100 text-orange-800 text-[10px] font-extrabold uppercase tracking-wider">
+                PostgreSQL Trips Vault
+              </span>
+              <h2 className="text-2xl font-serif-editorial font-bold text-slate-900">
+                No Trips in Your Vault Yet
+              </h2>
+              <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
+                You haven&apos;t generated or saved any getaway itineraries yet. Let DAIna AI synthesize a bespoke multi-day passage tailored to your style and budget.
+              </p>
+            </div>
+            <div className="pt-2">
+              <Button
+                variant="primary"
+                size="md"
+                onClick={() => router.push('/planner')}
+                className="bg-gradient-to-r from-orange-500 to-amber-500 text-white font-extrabold text-xs px-6 py-2.5 shadow-md shadow-orange-500/20 cursor-pointer"
               >
-                {t.destination} ({t.daysCount || t.days?.length || 3} Days)
-              </button>
-            ))}
+                <Sparkles className="w-4 h-4 mr-1.5" />
+                Create Your First Trip with AI →
+              </Button>
+            </div>
           </div>
         )}
+
+        {/* State 4: Active Trip Workspace (Loaded from PostgreSQL) */}
+        {!loading && !error && trips.length > 0 && currentTrip && (
+          <>
+            {/* Trips Switcher Header */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/90 pb-6">
+              <div className="space-y-1">
+                <span className="px-3 py-1 rounded-full bg-orange-100 text-orange-800 text-xs font-extrabold uppercase border border-orange-200 tracking-wider">
+                  {trips.length} Real Saved {trips.length === 1 ? 'Trip' : 'Trips'}
+                </span>
+                <h1 className="text-3xl sm:text-4xl font-serif-editorial font-bold text-slate-900">
+                  {currentTrip.title}
+                </h1>
+                <p className="text-xs text-slate-500 font-medium">
+                  Destination: {currentTrip.destination} • {currentTrip.startDate} to {currentTrip.endDate}
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2.5">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsGroupModalOpen(true)}
+                  className="bg-white border-slate-200 text-slate-800 font-bold"
+                >
+                  <Users className="w-4 h-4 mr-1.5 text-orange-500" />
+                  <span>Squad Room ({currentTrip.squad_room_code || 'ROOM'})</span>
+                </Button>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => router.push('/planner')}
+                  className="bg-gradient-to-r from-orange-500 to-amber-500 text-white font-extrabold"
+                >
+                  <Sparkles className="w-4 h-4 mr-1.5" />
+                  <span>New AI Itinerary</span>
+                </Button>
+              </div>
+            </div>
+
+            {/* Multiple Saved Trips Carousel Tabs if > 1 trip */}
+            {trips.length > 1 && (
+              <div className="flex items-center gap-2 overflow-x-auto pb-2 no-scrollbar">
+                {trips.map((t, idx) => (
+                  <button
+                    key={t.id}
+                    onClick={() => setActiveTripIndex(idx)}
+                    className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all shrink-0 cursor-pointer ${
+                      activeTripIndex === idx
+                        ? 'bg-orange-50 border-orange-300 text-orange-950 font-extrabold shadow-sm'
+                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    {t.destination} ({t.daysCount || t.days?.length || 3} Days)
+                  </button>
+                ))}
+              </div>
+            )}
 
         {/* DashTiny AI Copilot Action Cockpit */}
         <Card className="p-4 sm:p-5 rounded-3xl bg-gradient-to-r from-orange-50 via-white to-amber-50 border border-orange-200/90 shadow-sm space-y-3">
@@ -285,6 +344,17 @@ export default function ActiveTripsPage() {
               )}
             </Button>
           </div>
+
+          {/* Copilot Error Banner */}
+          {copilotError && (
+            <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-xs font-semibold flex items-center justify-between animate-in fade-in">
+              <span className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-amber-600 shrink-0" />
+                {copilotError}
+              </span>
+              <button onClick={() => setCopilotError(null)} className="text-amber-700 hover:text-amber-950 font-bold cursor-pointer">✕</button>
+            </div>
+          )}
 
           {/* Real-time Diff Banner */}
           {lastDiffResult && (
@@ -353,7 +423,7 @@ export default function ActiveTripsPage() {
               {/* Trip Highlight Banner */}
               <div className="relative h-64 rounded-3xl overflow-hidden shadow-md border border-slate-200">
                 <Image
-                  src="https://images.unsplash.com/photo-1512343879784-a960bf40e7f2?w=1200&auto=format&fit=crop&q=80"
+                  src={currentTrip.cover_image || currentTrip.days?.[0]?.coverImage || "https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=1200&auto=format&fit=crop&q=80"}
                   alt={currentTrip.destination}
                   fill
                   className="object-cover"
@@ -557,7 +627,7 @@ export default function ActiveTripsPage() {
               ))}
             </div>
             <SquadRoomHub
-              squadId={currentTrip.squad_room_code || 'GOA-2026-X1BC1'}
+              squadId={currentTrip.squad_room_code || currentTrip.id || 'SQUAD-HUB'}
               onOpenInviteModal={() => setIsGroupModalOpen(true)}
             />
           </div>
@@ -791,16 +861,18 @@ export default function ActiveTripsPage() {
         {/* TAB 6: Squad Room */}
         {activeTab === 'squad' && (
           <SquadRoomHub
-            squadId={currentTrip.squad_room_code || 'GOA-2026-X1BC1'}
+            squadId={currentTrip.squad_room_code || 'ROOM'}
             onOpenInviteModal={() => setIsGroupModalOpen(true)}
           />
+        )}
+          </>
         )}
       </main>
 
       <GroupCollaborationModal
         isOpen={isGroupModalOpen}
         onClose={() => setIsGroupModalOpen(false)}
-        roomCode={currentTrip.squad_room_code || 'GOA-2026-X1BC1'}
+        roomCode={currentTrip?.squad_room_code || 'ROOM'}
       />
 
       <DAInaChatWidget />
