@@ -1020,6 +1020,8 @@ def build_itinerary_with_planner_agent(
             formatted_days.append({
                 "id": it_day.id,
                 "dayNumber": dp.day_number,
+                "day": dp.day_number,
+                "day_number": dp.day_number,
                 "title": it_day.title,
                 "coverImage": it_day.cover_image_url,
                 "weather": it_day.weather_summary,
