@@ -1,0 +1,47 @@
+// Define your color palette
+$primary-color: #fe8535;
+$secondary-color: #2a9df4;
+$success-color: #28a745;
+$danger-color: #dc3545;
+$warning-color: #ffc107;
+$info-color: #17a2b8;
+$text-color-white: #fff;
+$text-color-black: #000;
+$transparent-white:rgb(255 255 255 / 92%);
+$translucent-black:#00000093;
+// Define fonts
+$font-family-primary: 'Arial', sans-serif;
+$font-family-secondary: 'Verdana', sans-serif;
+
+// Mixin for setting colors
+@mixin set-colors {
+  --primary-color: #{$primary-color};
+  --secondary-color: #{$secondary-color};
+  --success-color: #{$success-color};
+  --danger-color: #{$danger-color};
+  --warning-color: #{$warning-color};
+  --info-color: #{$info-color};
+  --text-color-white: #{$text-color-white};
+  --text-color-black: #{$text-color-black};
+  --transparent-white: #{$transparent-white};
+  --translucent-black: #{$translucent-black};
+}
+
+// Mixin for setting fonts
+@mixin set-fonts {  
+  font-family: #{$font-family-primary};
+  font-family: #{$font-family-secondary};
+}
+.btn {
+  border-radius: 0;
+}
+.btn-secondary:hover {
+  color: var(--secondary-color);
+  border: 1px solid var(--secondary-color);
+  background: var(--text-color-white);
+}
+.btn-primary:hover {
+  color: var(--primary-color);
+  border: 1px solid var(--primary-color);
+  background: var(--text-color-white);
+}

@@ -1,0 +1,3381 @@
+{
+  "openapi": "3.0.1",
+  "info": {
+    "title": "Connect API",
+    "description": "Partner Connect API Service\n",
+    "version": "1.0"
+  },
+  "servers": [
+    {
+      "url": "https://metasearch-connect-api.booking.com",
+      "description": "Production URL"
+    }
+  ],
+  "security": [
+    {
+      "BearerAuth": []
+    }
+  ],
+  "paths": {
+    "/demand-api-v3-compatible/search": {
+      "post": {
+        "tags": [
+          "demand-api-v3-compatible"
+        ],
+        "summary": "List available accommodation",
+        "description": "This endpoint returns the cheapest available product for each hotel matching the search criteria.",
+        "operationId": "search",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SearchInputDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseOutputListSearchOutputDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/demand-api-v3-compatible/details": {
+      "post": {
+        "tags": [
+          "demand-api-v3-compatible"
+        ],
+        "summary": "List accommodation details",
+        "description": "This endpoint returns detailed information on all accommodation properties matching a given search criteria.\nBy default, only basic information is returned. To receive extended information use the `extras` parameter.\nIs is mandatory to pass one of the input parameters: accommodations, airport, city, country or region.\n",
+        "operationId": "postDetails",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DetailsInputDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseOutputListDetailsOutputDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/demand-api-v3-compatible/constants": {
+      "post": {
+        "tags": [
+          "demand-api-v3-compatible"
+        ],
+        "summary": "List accommodation constants",
+        "description": "This endpoint enumerates the internal codes and names, in the selected languages,\nfor relevant accommodation specific types.\n\nThese accommodation specific types include the list of facilities\nthat may be available at a property like \"Elevator\" or \"Swimmingpool Outdoor\".\n\nFor example, the following parameters will return\nthe full list in English (US) and French: `{\"languages\":\"en-us\",\"fr\"}`.\n\nTo get the full list call the endpoint passing an empty body.\nThe codes returned are what is used as input and output for other endpoints in the accommodations namespace.\n",
+        "operationId": "getAccommodationConstants",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConstantInputDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseOutputConstantsOutputDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/demand-api-v3-compatible/availability": {
+      "post": {
+        "tags": [
+          "demand-api-v3-compatible"
+        ],
+        "summary": "Get property's availability",
+        "description": "This endpoint returns detailed product availability, price and charges of the accommodation matching a given search criteria.\nBy default, only product availability and price is returned. To receive extended information use the `extras` parameter.\nIs is mandatory to pass the input parameters: accommodation, booker, checkin, checkout and guest.\n",
+        "operationId": "getAvailability",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AvailabilityInputDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseOutputAvailabilityOutputDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/demand-api-v2-compatible/reviewScores": {
+      "get": {
+        "tags": [
+          "demand-api-v2-compatible"
+        ],
+        "summary": "List accommodation review scores",
+        "description": "Gives information about review scores for specified hotel_ids and filter.\nThe information consists of score breakdown per reviewer_type and review questions,\nand overall score distribution per score value (1 - 10).\n\nThe available filter is input parameter reviewer_type=... .\nIt allows generating review score information for just one reviewer type.\n\nLanguage in which the response is rendered can be controlled with the input parameter language=...\n(default: 'en'). Setting the language will reflect on the output fields question and review_score_word.\n\nOne additional output field can be requested with input parameter extras=review_score_word.\n",
+        "operationId": "getHotelsReviewScores",
+        "parameters": [
+          {
+            "name": "reviewScoresInputDto",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ReviewScoresInputDto"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseOutputV2ReviewScoresOutputDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/demand-api-v2-compatible/hotels": {
+      "get": {
+        "tags": [
+          "demand-api-v2-compatible"
+        ],
+        "summary": "Get details of accommodations",
+        "description": "This call returns the hotel and room data. By default, only hotel_id is returned in the output.\n\nOne of the argument: hotel_ids, city_ids, country_ids, region_ids, district_ids, chain_ids is mandatory.\n\nAdditional data needs to be requested via extras parameter.\n\nThe data is returned in English by default.\n",
+        "operationId": "getHotels",
+        "parameters": [
+          {
+            "name": "hotelsInput",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/HotelsInputDto"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseOutputV2HotelsOutputDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/demand-api-v2-compatible/hotelTypes": {
+      "get": {
+        "tags": [
+          "demand-api-v2-compatible"
+        ],
+        "summary": "List hotel types",
+        "description": "This endpoint returns hotel types names and their translations. (EN is default)",
+        "operationId": "getHotelTypes",
+        "parameters": [
+          {
+            "name": "hotelTypeInputDTO",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/HotelTypeInputDTO"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseOutputV2HotelTypesOutputDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/demand-api-v2-compatible/hotelThemeTypes": {
+      "get": {
+        "tags": [
+          "demand-api-v2-compatible"
+        ],
+        "summary": "List hotel theme types",
+        "description": "This endpoint returns a list of hotel theme types (in English).",
+        "operationId": "getHotelThemeTypes",
+        "parameters": [
+          {
+            "name": "hotelThemeTypeInputDTO",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/HotelThemeTypeInputDTO"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseOutputV2HotelThemeTypesOutputDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/demand-api-v2-compatible/hotelFacilityTypes": {
+      "get": {
+        "tags": [
+          "demand-api-v2-compatible"
+        ],
+        "summary": "List facility room types",
+        "description": "This endpoint returns room facility types names and their translations (EN is default).",
+        "operationId": "getRoomFacilityTypes",
+        "parameters": [
+          {
+            "name": "hotelFacilityInputDto",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/HotelFacilityInputDto"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseOutputV2HotelFacilityTypeOutputDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/demand-api-v2-compatible/hotelAvailability": {
+      "get": {
+        "tags": [
+          "demand-api-v2-compatible"
+        ],
+        "summary": "List available hotel rooms",
+        "description": "This endpoint returns the cheapest available room for each hotel matching your check-in and check-out dates.\nYou can search for hotels in a city, or for a specific list of (upto 300) hotels by hotel_ids.\nHere you will find whether the price included breakfast or other meals, as well as whether it is possible to cancel for free.\nIt is possible to have a breakdown of the price returned by this endpoint and to filter by property types and/or hotel facilities.\n",
+        "operationId": "getHotelAvailability",
+        "parameters": [
+          {
+            "name": "hotelAvailabilityInputDto",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/HotelAvailabilityInputDto"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseOutputV2HotelAvailabilityOutputDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/demand-api-v2-compatible/blockAvailability": {
+      "get": {
+        "tags": [
+          "demand-api-v2-compatible"
+        ],
+        "summary": "List all bookable rooms at a property",
+        "description": "This endpoint is where you find a list of all bookable or available rooms at a property.\nA room can have multiple blocks, as a block is a combination of the meal, cancellation policy, occupancy and other things.\nYou can find detailed information about one hotel per search (detail_level)\nwhich will return most of the information needed to replicate the booking.com property page.\n\nIf you want to search multiple hotels, you can, but you get less detail.\nFor searching multiple hotels, it is recommended to use hotelAvailability.\n",
+        "operationId": "getBlockAvailability",
+        "parameters": [
+          {
+            "name": "blockInput",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/BlockAvailabilityInputDto"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseOutputV2BlockAvailabilityOutputDto"
+                }
+              },
+              "application/xml": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseOutputV2BlockAvailabilityOutputDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AllocationInputDto": {
+        "required": [
+          "number_of_adults"
+        ],
+        "type": "object",
+        "properties": {
+          "children": {
+            "type": "array",
+            "description": "The children ages for this room.",
+            "items": {
+              "maximum": 17,
+              "minimum": 0,
+              "type": "integer",
+              "description": "The children ages for this room.",
+              "format": "int32"
+            }
+          },
+          "number_of_adults": {
+            "minimum": 1,
+            "type": "integer",
+            "description": "The number of adults for this room.",
+            "format": "int32"
+          }
+        },
+        "description": "The exact allocation of guests to rooms."
+      },
+      "BookerInputDto": {
+        "required": [
+          "country",
+          "platform"
+        ],
+        "type": "object",
+        "properties": {
+          "country": {
+            "pattern": "^[a-z]{2}$",
+            "type": "string",
+            "description": "The booker country for showing the best price for that user and obeying laws regarding the display of taxes and fees."
+          },
+          "platform": {
+            "type": "string",
+            "description": "The booker platform for showing the platform based deals and prices.",
+            "enum": [
+              "ANDROID",
+              "DESKTOP",
+              "IOS",
+              "MOBILE",
+              "TABLET"
+            ]
+          },
+          "travel_purpose": {
+            "type": "string",
+            "description": "The travel purpose of the booker.",
+            "enum": [
+              "BUSINESS",
+              "LEISURE"
+            ]
+          },
+          "user_groups": {
+            "type": "array",
+            "description": "The user groups that the booker is a member of.",
+            "items": {
+              "type": "string",
+              "description": "The user groups that the booker is a member of.",
+              "enum": [
+                "AUTHENTICATED",
+                "GENIUS",
+                "GENIUS2",
+                "GENIUS3"
+              ]
+            }
+          }
+        },
+        "description": "The booker's information."
+      },
+      "Coordinates": {
+        "required": [
+          "latitude",
+          "longitude",
+          "radius"
+        ],
+        "type": "object",
+        "properties": {
+          "latitude": {
+            "type": "number",
+            "description": "Specify a latitude (as well as a longitude and radius) to do searches around a specific location.",
+            "format": "double"
+          },
+          "longitude": {
+            "type": "number",
+            "description": "Specify a longitude (as well as a latitude and radius) to do searches around a specific location.",
+            "format": "double"
+          },
+          "radius": {
+            "type": "number",
+            "description": "The radius is km to search around the specified latitude and longitude.",
+            "format": "double"
+          }
+        },
+        "description": "Limit the result list to the specified coordinates."
+      },
+      "GuestsInputDto": {
+        "required": [
+          "number_of_adults",
+          "number_of_rooms"
+        ],
+        "type": "object",
+        "properties": {
+          "number_of_adults": {
+            "type": "integer",
+            "description": "The number of adults for the search.",
+            "format": "int32"
+          },
+          "number_of_rooms": {
+            "type": "integer",
+            "description": "The number of rooms needed.",
+            "format": "int32"
+          },
+          "allocation": {
+            "type": "array",
+            "description": "The exact allocation of guests to rooms.",
+            "items": {
+              "$ref": "#/components/schemas/AllocationInputDto"
+            }
+          },
+          "children": {
+            "type": "array",
+            "description": "Array with the children ages.",
+            "items": {
+              "maximum": 17,
+              "minimum": 0,
+              "type": "integer",
+              "description": "Array with the children ages.",
+              "format": "int32"
+            }
+          }
+        },
+        "description": "The guest details for the request."
+      },
+      "SearchInputDto": {
+        "required": [
+          "booker",
+          "checkin",
+          "checkout",
+          "guests"
+        ],
+        "type": "object",
+        "properties": {
+          "checkin": {
+            "type": "string",
+            "description": "The checkin date. Must be within 500 days in the future and in the format yyyy-mm-dd.",
+            "format": "date"
+          },
+          "checkout": {
+            "type": "string",
+            "description": "The checkout date. Must be later than {checkin}. Must be between 1 and 90 days after {checkin}.\nMust be within 500 days in the future and in the format yyyy-mm-dd.\n",
+            "format": "date"
+          },
+          "booker": {
+            "$ref": "#/components/schemas/BookerInputDto"
+          },
+          "currency": {
+            "pattern": "^[A-Z]{3}$",
+            "type": "string",
+            "description": "A three-letter code that uniquely identifies a monetary currency as defined by the ISO 4217 standard.",
+            "example": "EUR"
+          },
+          "city": {
+            "type": "integer",
+            "description": "A signed integer number that uniquely identifies a city. ",
+            "format": "int32"
+          },
+          "country": {
+            "pattern": "^[a-z]{2}$",
+            "type": "string",
+            "description": "A two-letter code that uniquely identifies a country.\nThis code is defined by the ISO 3166-1 alpha-2 standard (ISO2) as described here: https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2.\n",
+            "example": "nl"
+          },
+          "guests": {
+            "$ref": "#/components/schemas/GuestsInputDto"
+          },
+          "extras": {
+            "type": "array",
+            "description": "Input parameter to request for additional information about the products.",
+            "items": {
+              "type": "string",
+              "description": "Input parameter to request for additional information about the products.",
+              "enum": [
+                "EXTRA_CHARGES",
+                "PRODUCTS"
+              ]
+            }
+          },
+          "accommodations": {
+            "maxItems": 100,
+            "minItems": 0,
+            "type": "array",
+            "description": "A signed integer number that uniquely identifies an accommodation property.",
+            "items": {
+              "type": "integer",
+              "description": "A signed integer number that uniquely identifies an accommodation property.",
+              "format": "int32"
+            }
+          },
+          "accommodation_facilities": {
+            "type": "array",
+            "description": "A signed integer number that uniquely identifies an accommodation facility.",
+            "items": {
+              "type": "integer",
+              "description": "A signed integer number that uniquely identifies an accommodation facility.",
+              "format": "int32"
+            }
+          },
+          "room_facilities": {
+            "type": "array",
+            "description": "A signed integer number that uniquely identifies a room facility.",
+            "items": {
+              "type": "integer",
+              "description": "A signed integer number that uniquely identifies a room facility.",
+              "format": "int32"
+            }
+          },
+          "accommodation_types": {
+            "type": "array",
+            "description": "A signed integer number that uniquely identifies an accommodation type.",
+            "items": {
+              "type": "integer",
+              "description": "A signed integer number that uniquely identifies an accommodation type.",
+              "format": "int32"
+            }
+          },
+          "brands": {
+            "type": "array",
+            "description": "A signed integer number that uniquely identifies a brand.",
+            "items": {
+              "type": "integer",
+              "description": "A signed integer number that uniquely identifies a brand.",
+              "format": "int32"
+            }
+          },
+          "airport": {
+            "pattern": "^[A-Z]{3}$",
+            "type": "string",
+            "description": "A three-letter code that uniquely identifies an airport as defined by the International Air Transport Association (IATA).",
+            "example": "AMS"
+          },
+          "district": {
+            "type": "integer",
+            "description": "A signed integer number that uniquely identifies a district. Typically, districts define known areas within a city.",
+            "format": "int32"
+          },
+          "landmark": {
+            "type": "integer",
+            "description": "A signed integer number that uniquely identifies a relevant geographical landmark, like a monument or a natural attraction.",
+            "format": "int32"
+          },
+          "coordinates": {
+            "$ref": "#/components/schemas/Coordinates"
+          },
+          "region": {
+            "type": "integer",
+            "description": "A signed integer number that uniquely identifies a geographical region.\nRegions usually define official administrative areas within a country,\nbut may also include multiple countries and in some cases un-official but popular designations for geographical areas.\nAn example of a region that crosses multiple countries is the Alps in Europe.\n",
+            "format": "int32"
+          },
+          "rows": {
+            "maximum": 1000,
+            "type": "integer",
+            "description": "The maximum number of results to return.",
+            "format": "int32"
+          },
+          "page": {
+            "type": "string",
+            "description": "Pagination token used to retrieve the next page of results. Obtained from `next_page`."
+          }
+        }
+      },
+      "CancellationDto": {
+        "type": "object",
+        "properties": {
+          "free_cancellation_until": {
+            "type": "string",
+            "description": "Until when the order for this product can be cancelled for free.",
+            "format": "date-time"
+          },
+          "type": {
+            "type": "string",
+            "description": "The cancellation scheme supported by this product.",
+            "enum": [
+              "FREE_CANCELLATION",
+              "NON_REFUNDABLE",
+              "SPECIAL_CONDITIONS"
+            ]
+          }
+        },
+        "description": "The cancellation policy for this product."
+      },
+      "ChargeDto": {
+        "type": "object",
+        "properties": {
+          "charge": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "condition": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "CALCULATED_AMOUNT",
+              "INCALCULABLE",
+              "PERCENTAGE",
+              "PER_NIGHT",
+              "PER_PERSON_PER_NIGHT",
+              "PER_PERSON_PER_STAY",
+              "PER_STAY"
+            ]
+          },
+          "percentage": {
+            "type": "number",
+            "format": "double"
+          },
+          "total_amount": {
+            "type": "number",
+            "format": "double"
+          },
+          "unit_amount": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "DealDto": {
+        "type": "object",
+        "properties": {
+          "discount_percentage": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "public_price": {
+            "type": "number",
+            "format": "double"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "BLACK_FRIDAY",
+                "GENIUS",
+                "LIMITED_TIME_DEAL",
+                "LOGGED_IN_DEAL",
+                "MOBILE_RATE",
+                "SEASONAL_DEAL"
+              ]
+            }
+          }
+        },
+        "description": "This specifies the deal tagging for the product."
+      },
+      "ExtraChargesDtoDouble": {
+        "type": "object",
+        "properties": {
+          "excluded": {
+            "type": "number",
+            "description": "Charges not included in 'book'.",
+            "format": "double"
+          },
+          "included": {
+            "type": "number",
+            "description": "Charges included in 'book'.",
+            "format": "double"
+          },
+          "conditional": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "description": "The charge breakdown. Includes taxes and fees."
+      },
+      "ExtraChargesDtoListChargeDto": {
+        "type": "object",
+        "properties": {
+          "excluded": {
+            "type": "array",
+            "description": "Charges not included in 'book'.",
+            "items": {
+              "$ref": "#/components/schemas/ChargeDto"
+            }
+          },
+          "included": {
+            "type": "array",
+            "description": "Charges included in 'book'.",
+            "items": {
+              "$ref": "#/components/schemas/ChargeDto"
+            }
+          },
+          "conditional": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChargeDto"
+            }
+          }
+        },
+        "description": "The charge breakdown. Includes taxes and fees."
+      },
+      "MealPlanDto": {
+        "type": "object",
+        "properties": {
+          "meals": {
+            "type": "array",
+            "description": "The meals included in the meal plan.",
+            "items": {
+              "type": "string",
+              "description": "The meals included in the meal plan.",
+              "enum": [
+                "BREAKFAST",
+                "DINNER",
+                "LUNCH"
+              ]
+            }
+          },
+          "plan": {
+            "type": "string",
+            "description": "The meal plan included in this product.",
+            "enum": [
+              "ALL_INCLUSIVE",
+              "BREAKFAST_INCLUDED",
+              "FULL_BOARD",
+              "HALF_BOARD",
+              "NO_PLAN"
+            ]
+          }
+        },
+        "description": "The meal plan policy for this product."
+      },
+      "PaymentDto": {
+        "type": "object",
+        "properties": {
+          "payment_types": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "PAY_LATER",
+                "PAY_NOW"
+              ]
+            }
+          }
+        },
+        "description": "Payment terms and conditions for this product."
+      },
+      "PoliciesDto": {
+        "type": "object",
+        "properties": {
+          "cancellation": {
+            "$ref": "#/components/schemas/CancellationDto"
+          },
+          "meal_plan": {
+            "$ref": "#/components/schemas/MealPlanDto"
+          },
+          "payment": {
+            "$ref": "#/components/schemas/PaymentDto"
+          }
+        },
+        "description": "The policies for this product."
+      },
+      "PriceDataDtoDouble": {
+        "type": "object",
+        "properties": {
+          "base": {
+            "type": "number",
+            "description": "The base price. Does not include any extra charges.",
+            "format": "double"
+          },
+          "book": {
+            "type": "number",
+            "description": "The price that will be charged by Booking.com.",
+            "format": "double"
+          },
+          "total": {
+            "type": "number",
+            "description": "The total price. Includes all extra charges.",
+            "format": "double"
+          },
+          "extra_charges": {
+            "$ref": "#/components/schemas/ExtraChargesDtoDouble"
+          }
+        },
+        "description": "The price components of this product or selection of products.\n'base' and 'extra_charges' are returned only when explicitly requested (via 'extras=extra_charges')."
+      },
+      "PriceDataDtoListChargeDto": {
+        "type": "object",
+        "properties": {
+          "base": {
+            "type": "number",
+            "description": "The base price. Does not include any extra charges.",
+            "format": "double"
+          },
+          "book": {
+            "type": "number",
+            "description": "The price that will be charged by Booking.com.",
+            "format": "double"
+          },
+          "total": {
+            "type": "number",
+            "description": "The total price. Includes all extra charges.",
+            "format": "double"
+          },
+          "extra_charges": {
+            "$ref": "#/components/schemas/ExtraChargesDtoListChargeDto"
+          }
+        },
+        "description": "The price components of this product or selection of products.\n'base' and 'extra_charges' are returned only when explicitly requested (via 'extras=extra_charges').\n"
+      },
+      "ProductDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique ID of the product."
+          },
+          "policies": {
+            "$ref": "#/components/schemas/PoliciesDto"
+          },
+          "price": {
+            "$ref": "#/components/schemas/PriceDataDtoListChargeDto"
+          },
+          "deal": {
+            "$ref": "#/components/schemas/DealDto"
+          }
+        }
+      },
+      "ResponseOutputListSearchOutputDto": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SearchOutputDto"
+            }
+          },
+          "request_id": {
+            "type": "string",
+            "description": "Uniquely identifies the request. Please provide this identifier when contacting support."
+          },
+          "next_page": {
+            "type": "string",
+            "description": "Indicates that more results are available. Use this pagination token to retrieve the next page of results (via parameter `page`)."
+          }
+        }
+      },
+      "SearchOutputDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "A signed integer number that uniquely identifies an accommodation property.",
+            "format": "int32"
+          },
+          "currency": {
+            "pattern": "^[A-Z]{3}$",
+            "type": "string",
+            "description": "A three-letter code that uniquely identifies a monetary currency as defined by the ISO 4217 standard.",
+            "example": "EUR"
+          },
+          "deep_link_url": {
+            "type": "string",
+            "description": "Deep link mobile app URL."
+          },
+          "url": {
+            "type": "string",
+            "description": "Internet address for the property page on Booking.com."
+          },
+          "price": {
+            "$ref": "#/components/schemas/PriceDataDtoDouble"
+          },
+          "products": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProductDto"
+            }
+          }
+        }
+      },
+      "DetailsInputDto": {
+        "type": "object",
+        "properties": {
+          "accommodations": {
+            "maxItems": 100,
+            "minItems": 1,
+            "type": "array",
+            "description": "A signed integer number that uniquely identifies an accommodation property.",
+            "items": {
+              "type": "integer",
+              "description": "A signed integer number that uniquely identifies an accommodation property.",
+              "format": "int32"
+            }
+          },
+          "accommodation_facilities": {
+            "type": "array",
+            "description": "A signed integer number that uniquely identifies an accommodation property facility.\nExamples of facilities are: Parking, Restaurant, Room service etc.\n",
+            "items": {
+              "type": "integer",
+              "description": "A signed integer number that uniquely identifies an accommodation property facility.\nExamples of facilities are: Parking, Restaurant, Room service etc.\n",
+              "format": "int32"
+            }
+          },
+          "accommodation_types": {
+            "type": "array",
+            "description": "A signed integer number that uniquely identifies an accommodation property type.\nExamples of accommodation types are: Apartment, Hostel, Hotel etc.",
+            "items": {
+              "type": "integer",
+              "description": "A signed integer number that uniquely identifies an accommodation property type.\nExamples of accommodation types are: Apartment, Hostel, Hotel etc.",
+              "format": "int32"
+            }
+          },
+          "airport": {
+            "pattern": "^[A-Z]{3}$",
+            "type": "string",
+            "description": "A three-letter code that uniquely identifies an airport as defined by the International Air Transport Association (IATA).",
+            "example": "AMS"
+          },
+          "brands": {
+            "type": "array",
+            "description": "A signed integer number that uniquely identifies an accommodation brand.\nExamples of brands are: Radisson Blu, WestCord Hotels, Westin etc.\n",
+            "items": {
+              "type": "integer",
+              "description": "A signed integer number that uniquely identifies an accommodation brand.\nExamples of brands are: Radisson Blu, WestCord Hotels, Westin etc.\n",
+              "format": "int32"
+            }
+          },
+          "city": {
+            "type": "integer",
+            "description": "A signed integer number that uniquely identifies a city.",
+            "format": "int32"
+          },
+          "country": {
+            "pattern": "^[a-z]{2}$",
+            "type": "string",
+            "description": "A two-letter code that uniquely identifies a country.\nThis code is defined by the ISO 3166-1 alpha-2 standard (ISO2) as described here: https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2.\n",
+            "example": "nl"
+          },
+          "region": {
+            "type": "integer",
+            "description": "A signed integer number that uniquely identifies a geographical region.\nRegions usually define official administrative areas within a country,\nbut may also include multiple countries and in some cases un-official but popular designations for geographical areas.\nAn example of a region that crosses multiple countries is the Alps in Europe.\n",
+            "format": "int32"
+          },
+          "extras": {
+            "type": "array",
+            "description": "Input parameter to request for additional information about the accommodation property.\nIt should be passed as a JSON array with one or more items.\n",
+            "items": {
+              "type": "string",
+              "description": "Input parameter to request for additional information about the accommodation property.\nIt should be passed as a JSON array with one or more items.\n",
+              "enum": [
+                "DESCRIPTION",
+                "FACILITIES",
+                "PAYMENT",
+                "PHOTOS",
+                "POLICIES",
+                "ROOMS"
+              ]
+            }
+          },
+          "languages": {
+            "pattern": "^[a-z]{2}(-[a-z]{2})?$",
+            "type": "array",
+            "description": "An IETF language tag code that uniquely identifies a supported human language or dialect as described here:\nhttps://en.wikipedia.org/wiki/IETF_language_tag.\n\nNote that in in demand-api-v3-compatible the whole tag is always lowercase.\nExamples: \"nl\" for Dutch/Nederlands or \"en-us\" for English (US).\n",
+            "example": "en-us",
+            "items": {
+              "pattern": "^[a-z]{2}(-[a-z]{2})?$",
+              "type": "string",
+              "description": "An IETF language tag code that uniquely identifies a supported human language or dialect as described here:\nhttps://en.wikipedia.org/wiki/IETF_language_tag.\n\nNote that in in demand-api-v3-compatible the whole tag is always lowercase.\nExamples: \"nl\" for Dutch/Nederlands or \"en-us\" for English (US).\n",
+              "example": "en-us",
+              "enum": [
+                "AR",
+                "BG",
+                "CA",
+                "CS",
+                "DA",
+                "DE",
+                "EL",
+                "EN",
+                "EN_GB",
+                "EN_US",
+                "ES",
+                "ES_AR",
+                "ES_MX",
+                "ET",
+                "FI",
+                "FR",
+                "HE",
+                "HI",
+                "HR",
+                "HU",
+                "ID",
+                "IS",
+                "IT",
+                "JA",
+                "KA",
+                "KO",
+                "LT",
+                "LV",
+                "MS",
+                "NL",
+                "NO",
+                "PL",
+                "PT_BR",
+                "PT_PT",
+                "RO",
+                "RU",
+                "SK",
+                "SL",
+                "SR",
+                "SV",
+                "TH",
+                "TL",
+                "TR",
+                "UK",
+                "VI",
+                "ZH_CN",
+                "ZH_TW"
+              ]
+            }
+          },
+          "rows": {
+            "maximum": 1000,
+            "type": "integer",
+            "description": "The maximum number of results to return.",
+            "format": "int32"
+          },
+          "page": {
+            "type": "string",
+            "description": "Pagination token used to retrieve the next page of results. Obtained from `next_page`."
+          }
+        }
+      },
+      "AlternativeKeyLocationDto": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "city": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "postal_code": {
+            "type": "string"
+          }
+        },
+        "description": "Alternate location to collect the key of this accommodation property.\nThis is returned if the key to access the property is in another location.\n"
+      },
+      "BedConfigurationDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Uniquely identifies this bed configuration."
+          },
+          "configuration": {
+            "type": "array",
+            "description": "Detail list of all different types and number of beds included in this configuration.",
+            "items": {
+              "$ref": "#/components/schemas/BedDto"
+            }
+          }
+        },
+        "description": "Lists all alternative bed configurations that are supported."
+      },
+      "BedDto": {
+        "type": "object",
+        "properties": {
+          "bed_type": {
+            "type": "integer",
+            "description": "A signed integer number that uniquely identifies a bed type. Examples of bed types are: Single, Double etc.",
+            "format": "int32"
+          },
+          "number_of_beds": {
+            "type": "integer",
+            "description": "Number of similar beds included in this configuration.",
+            "format": "int32"
+          }
+        },
+        "description": "Detail list of all different types and number of beds included in this configuration."
+      },
+      "BedOptionDto": {
+        "type": "object",
+        "properties": {
+          "bed_configurations": {
+            "type": "array",
+            "description": "Lists all alternative bed configurations that are supported.",
+            "items": {
+              "$ref": "#/components/schemas/BedConfigurationDto"
+            }
+          },
+          "has_bathroom": {
+            "type": "boolean",
+            "description": "Flags if this area includes its own bathroom."
+          },
+          "is_bedroom": {
+            "type": "boolean",
+            "description": "Flags if this area is marked as a bedroom, otherwise, it should be considered a living room."
+          }
+        },
+        "description": "Lists all possible bedding options for this room or apartment."
+      },
+      "CheckinCheckoutTimesDto": {
+        "type": "object",
+        "properties": {
+          "checkin_from": {
+            "$ref": "#/components/schemas/LocalTime"
+          },
+          "checkin_to": {
+            "$ref": "#/components/schemas/LocalTime"
+          },
+          "checkout_from": {
+            "$ref": "#/components/schemas/LocalTime"
+          },
+          "checkout_to": {
+            "$ref": "#/components/schemas/LocalTime"
+          }
+        }
+      },
+      "ContactDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string",
+              "description": "Email address of the accommodation. It can be `null` if the data is missing."
+            },
+            "description": "Email address of the accommodation. It can be `null` if the data is missing."
+          },
+          "telephone": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string",
+              "description": "Telephone number of the accommodation. It can be `null` if the data is missing."
+            },
+            "description": "Telephone number of the accommodation. It can be `null` if the data is missing."
+          }
+        },
+        "description": "Contact information of the accommodation. It can be `null` if the data is missing."
+      },
+      "ContactsDto": {
+        "type": "object",
+        "properties": {
+          "general": {
+            "$ref": "#/components/schemas/ContactDto"
+          },
+          "reservations": {
+            "$ref": "#/components/schemas/ContactDto"
+          }
+        },
+        "description": "Contact information of the accommodation."
+      },
+      "CoordinatesDto": {
+        "type": "object",
+        "properties": {
+          "latitude": {
+            "multipleOf": 0.00001,
+            "type": "number",
+            "description": "Latitude.",
+            "format": "double",
+            "example": 52.375859
+          },
+          "longitude": {
+            "multipleOf": 0.00001,
+            "type": "number",
+            "description": "Longitude.",
+            "format": "double",
+            "example": 4.886006
+          }
+        },
+        "description": "A signed integer number that uniquely identifies a city."
+      },
+      "CribsAndExtraBedsDto": {
+        "type": "object",
+        "properties": {
+          "are_allowed": {
+            "type": "boolean",
+            "description": "Flags if cots and extra beds can be placed together in the room.\n`true` allows both up to their maximum limits. `false` requires exclusive choice of either cots or extra beds.\n"
+          },
+          "maximum_number_of_cribs": {
+            "type": "integer",
+            "description": "Maximum number of cribs that can be added.",
+            "format": "int32"
+          },
+          "maximum_number_of_extra_beds": {
+            "type": "integer",
+            "description": "Maximum number of extra beds that can be added.",
+            "format": "int32"
+          }
+        },
+        "description": "Lists room options regarding adding cribs and/or extra beds."
+      },
+      "DescriptionDto": {
+        "type": "object",
+        "properties": {
+          "important_information": {
+            "$ref": "#/components/schemas/TranslationInformation"
+          },
+          "license_numbers": {
+            "type": "array",
+            "description": "List of all the license numbers of this accommodation property.",
+            "items": {
+              "type": "string",
+              "description": "List of all the license numbers of this accommodation property."
+            }
+          },
+          "text": {
+            "$ref": "#/components/schemas/TruncatedString"
+          }
+        },
+        "description": "Textual information about the accommodation. Requires `{\"extras\":[\"description\"]}`."
+      },
+      "DetailsOutputDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "A signed integer number that uniquely identifies an accommodation property.",
+            "format": "int32"
+          },
+          "name": {
+            "$ref": "#/components/schemas/TranslatedString"
+          },
+          "accommodation_type": {
+            "type": "integer",
+            "description": "A signed integer number that uniquely identifies an accommodation property type.\nExamples of accommodation types are: Apartment, Hostel, Hotel etc.",
+            "format": "int32"
+          },
+          "brands": {
+            "type": "array",
+            "description": "A signed integer number that uniquely identifies an accommodation brand.",
+            "items": {
+              "type": "integer",
+              "description": "A signed integer number that uniquely identifies an accommodation brand.",
+              "format": "int32"
+            }
+          },
+          "checkin_checkout_times": {
+            "$ref": "#/components/schemas/CheckinCheckoutTimesDto"
+          },
+          "contacts": {
+            "$ref": "#/components/schemas/ContactsDto"
+          },
+          "currency": {
+            "pattern": "^[A-Z]{3}$",
+            "type": "string",
+            "description": "A three-letter code that uniquely identifies a monetary currency as defined by the ISO 4217 standard.",
+            "example": "EUR"
+          },
+          "facilities": {
+            "type": "array",
+            "description": "The list of facilities available in this property. Requires `{\"extras\":[\"facilities\"]}`.",
+            "items": {
+              "$ref": "#/components/schemas/FacilityDto"
+            }
+          },
+          "deep_link_url": {
+            "type": "string",
+            "description": "Deep link mobile app URL."
+          },
+          "description": {
+            "$ref": "#/components/schemas/DescriptionDto"
+          },
+          "is_work_friendly": {
+            "type": "boolean",
+            "description": "Flags if this accommodation is work friendly."
+          },
+          "key_collection_information": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/KeyCollectionInformationDto"
+            }
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationDto"
+          },
+          "number_of_rooms": {
+            "type": "integer",
+            "description": "Total number of rooms in the property.\nPlease note that this is not an availability call and that this number is mostly used to determine the size and type of a property.\n",
+            "format": "int32"
+          },
+          "payment": {
+            "$ref": "#/components/schemas/PaymentDto"
+          },
+          "photos": {
+            "type": "array",
+            "description": "List of photos for this accommodation property.The maximum number of photos returned may be limited by contract.\nRequires `{\"extras\":[\"photos\"]}`. The photos are returned in no particular order.",
+            "items": {
+              "$ref": "#/components/schemas/PhotoDto"
+            }
+          },
+          "policies": {
+            "$ref": "#/components/schemas/PoliciesDto"
+          },
+          "price_category": {
+            "pattern": "[$]{0,4}",
+            "type": "string",
+            "description": "Indicates the qualitative price reference (between $ and $$$$) on how expensive an accommodation is.\nAccommodations in the same city are sorted by ascending price (average per guest per night in the last month),\nthe ones in the lowest 25 percentile are in category $, between 25 and 50 percentile are in category $$,\nbetween 50 and 75 percentile are in category $$$, remaining ones are in category $$$$."
+          },
+          "programmes": {
+            "$ref": "#/components/schemas/ProgramSettingsDto"
+          },
+          "rating": {
+            "$ref": "#/components/schemas/RatingDto"
+          },
+          "rooms": {
+            "type": "array",
+            "description": "The list of room types available at this property. Requires `{\"extras\":[\"rooms\"]}`.",
+            "items": {
+              "$ref": "#/components/schemas/RoomDto"
+            }
+          },
+          "spoken_languages": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "themes": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          "url": {
+            "type": "string"
+          }
+        }
+      },
+      "FacilityDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "A signed integer number that uniquely identifies an accommodation property facility.\nExamples of facilities are: Parking, Restaurant, Room service etc.\n",
+            "format": "int32"
+          },
+          "attributes": {
+            "type": "array",
+            "description": "List of optional attributes for this facility.",
+            "items": {
+              "type": "string",
+              "description": "List of optional attributes for this facility.",
+              "enum": [
+                "OFFSITE",
+                "PAID"
+              ]
+            }
+          }
+        },
+        "description": "The list of facilities available in this property. Requires `{\"extras\":[\"facilities\"]}`."
+      },
+      "KeyCollectionInformationDto": {
+        "type": "object",
+        "properties": {
+          "alternate_location": {
+            "$ref": "#/components/schemas/AlternativeKeyLocationDto"
+          },
+          "checkin_method": {
+            "type": "string",
+            "description": "An enumeration that describes the conditions for the checkin process and for collecting the key to access the property.\nThis is typically relevant for non-hotel accommodations (like houses or apartments) without a 24 hours front-desk.\n"
+          },
+          "key_location": {
+            "type": "string",
+            "description": "Location of the key to access this accommodation property."
+          }
+        }
+      },
+      "LazyTranslatedString": {
+        "type": "object",
+        "properties": {
+          "fallback": {
+            "type": "string"
+          }
+        },
+        "description": "Translated accommodation address."
+      },
+      "LocalTime": {
+        "pattern": "(0[0-9]|1[0-9]|2[0-3]):[0-5][0-9]:00",
+        "type": "object",
+        "properties": {
+          "hour": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "minute": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "second": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "nano": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "description": "The time till when checkout can be done at this property."
+      },
+      "LocationDto": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "$ref": "#/components/schemas/LazyTranslatedString"
+          },
+          "city": {
+            "type": "integer",
+            "description": "A signed integer number that uniquely identifies a city.",
+            "format": "int32"
+          },
+          "coordinates": {
+            "$ref": "#/components/schemas/CoordinatesDto"
+          },
+          "country": {
+            "type": "string",
+            "description": "A two-letter code that uniquely identifies a country.\nThis code is defined by the ISO 3166-1 alpha-2 standard (ISO2) as described here: https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2.\n"
+          },
+          "districts": {
+            "type": "array",
+            "description": "A signed integer number that uniquely identifies a district. Typically, districts define known areas within a city.",
+            "items": {
+              "type": "integer",
+              "description": "A signed integer number that uniquely identifies a district. Typically, districts define known areas within a city.",
+              "format": "int32"
+            }
+          },
+          "postal_code": {
+            "type": "string"
+          },
+          "regions": {
+            "type": "array",
+            "description": "A signed integer number that uniquely identifies a geographical region.\nRegions usually define official administrative areas within a country,\nbut may also include multiple countries and in some cases un-official but popular designations for geographical areas.\nAn example of a region that crosses multiple countries is the Alps in Europe.\n",
+            "items": {
+              "type": "integer",
+              "description": "A signed integer number that uniquely identifies a geographical region.\nRegions usually define official administrative areas within a country,\nbut may also include multiple countries and in some cases un-official but popular designations for geographical areas.\nAn example of a region that crosses multiple countries is the Alps in Europe.\n",
+              "format": "int32"
+            }
+          }
+        },
+        "description": "All location related information of this accommodation property."
+      },
+      "NumberOfRoomsDto": {
+        "type": "object",
+        "properties": {
+          "bathrooms": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "bedrooms": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "living_rooms": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "description": "Total rooms available."
+      },
+      "PhotoDto": {
+        "type": "object",
+        "properties": {
+          "main_photo": {
+            "type": "boolean",
+            "description": "Flags this as the main photo. Not returned otherwise."
+          },
+          "tags": {
+            "type": "array",
+            "description": "A list of tags associated with the photo. Manually generated.",
+            "items": {
+              "type": "string",
+              "description": "A list of tags associated with the photo. Manually generated."
+            }
+          },
+          "url": {
+            "$ref": "#/components/schemas/PhotoUrlDto"
+          }
+        }
+      },
+      "PhotoUrlDto": {
+        "type": "object",
+        "properties": {
+          "large": {
+            "type": "string",
+            "description": "URL of the photo image with a maximum width of 1280 pixels."
+          },
+          "standard": {
+            "type": "string",
+            "description": "URL of the photo image with a maximum width of 500 pixels."
+          },
+          "thumbnail": {
+            "type": "string",
+            "description": "URL of the photo thumbnail image with dimensions 100x100 pixels."
+          },
+          "thumbnail_large": {
+            "type": "string",
+            "description": "URL of the photo thumbnail image with dimensions 300x300 pixels."
+          }
+        }
+      },
+      "ProgramSettingsDto": {
+        "type": "object",
+        "properties": {
+          "travel_proud": {
+            "type": "boolean",
+            "description": "Boolean value is \"true\" if property has travel proud badge and \"false\" otherwise."
+          }
+        },
+        "description": "Details of programmes undergone by the property."
+      },
+      "RatingDto": {
+        "type": "object",
+        "properties": {
+          "number_of_reviews": {
+            "type": "integer",
+            "description": "Number of validated reviews for this accommodation.",
+            "format": "int32"
+          },
+          "preferred": {
+            "type": "boolean",
+            "description": "Boolean value is \"true\" if this accommodation is in the Booking.com's preferred program and \"false\" otherwise."
+          },
+          "review_score": {
+            "type": "number",
+            "description": "A decimal number indicating the current review score of this accommodation property, in the range 1..10.",
+            "format": "double"
+          },
+          "stars": {
+            "multipleOf": 0.1,
+            "maximum": 5,
+            "minimum": 1,
+            "type": "number",
+            "description": "Number of stars of this accommodation property.",
+            "format": "double",
+            "example": 4
+          },
+          "stars_type": {
+            "type": "string",
+            "description": "An enumerated value describing which type of stars this accommodation has.",
+            "enum": [
+              "ESTIMATED_BY_ACCOMMODATION",
+              "ESTIMATED_BY_BOOKING",
+              "OFFICIAL"
+            ]
+          }
+        }
+      },
+      "ResponseOutputListDetailsOutputDto": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DetailsOutputDto"
+            }
+          },
+          "request_id": {
+            "type": "string",
+            "description": "Uniquely identifies the request. Please provide this identifier when contacting support."
+          },
+          "next_page": {
+            "type": "string",
+            "description": "Indicates that more results are available. Use this pagination token to retrieve the next page of results (via parameter `page`)."
+          }
+        }
+      },
+      "RoomDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "A signed integer number that uniquely identifies an accommodation property room.",
+            "format": "int32"
+          },
+          "name": {
+            "$ref": "#/components/schemas/TranslatedString"
+          },
+          "attributes": {
+            "type": "array",
+            "description": "Lists a set of attribute qualifiers for this room. Will not be returned if no relevant attributes are applicable.",
+            "items": {
+              "type": "string",
+              "description": "Lists a set of attribute qualifiers for this room. Will not be returned if no relevant attributes are applicable.",
+              "enum": [
+                "NON_SMOKING",
+                "WORK_FRIENDLY"
+              ]
+            }
+          },
+          "bed_options": {
+            "type": "array",
+            "description": "Lists all possible bedding options for this room or apartment.",
+            "items": {
+              "$ref": "#/components/schemas/BedOptionDto"
+            }
+          },
+          "cribs_and_extra_beds": {
+            "$ref": "#/components/schemas/CribsAndExtraBedsDto"
+          },
+          "description": {
+            "$ref": "#/components/schemas/TranslatedString"
+          },
+          "facilities": {
+            "type": "array",
+            "description": "A signed integer number that uniquely identifies an accommodation property room facility.\nExamples of facilities are: Coffee/Tea maker, TV, Airconditioning, etc.",
+            "items": {
+              "type": "integer",
+              "description": "A signed integer number that uniquely identifies an accommodation property room facility.\nExamples of facilities are: Coffee/Tea maker, TV, Airconditioning, etc.",
+              "format": "int32"
+            }
+          },
+          "maximum_occupancy": {
+            "$ref": "#/components/schemas/RoomMaximumOccupancyDto"
+          },
+          "number_of_rooms": {
+            "$ref": "#/components/schemas/NumberOfRoomsDto"
+          },
+          "room_type": {
+            "type": "integer",
+            "description": "A signed integer number that uniquely identifies an accommodation property room type.\nExample of room types are: Suite, Apartment, Twin/Double etc.\n",
+            "format": "int32"
+          },
+          "size": {
+            "type": "integer",
+            "description": "The room area in square meters.",
+            "format": "int32",
+            "example": 20
+          }
+        },
+        "description": "The list of room types available at this property. Requires `{\"extras\":[\"rooms\"]}`."
+      },
+      "RoomMaximumOccupancyDto": {
+        "type": "object",
+        "properties": {
+          "adults": {
+            "type": "integer",
+            "description": "Maximum number of adults allowed.",
+            "format": "int32"
+          },
+          "children": {
+            "type": "integer",
+            "description": "Maximum number of children allowed (children will be typically defined by being under 18 years of age).",
+            "format": "int32"
+          },
+          "total_guests": {
+            "type": "integer",
+            "description": "**DEPRECATED** Total capacity of adults + children allowed.",
+            "format": "int32"
+          }
+        },
+        "description": "Occupancy limits and options."
+      },
+      "TranslatedString": {
+        "type": "object",
+        "properties": {
+          "translations": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        },
+        "description": "Translated description of this room. The maximum number of characters returned may be limited by contract."
+      },
+      "TranslationInformation": {
+        "type": "object",
+        "properties": {
+          "translated_string": {
+            "$ref": "#/components/schemas/TranslatedString"
+          },
+          "non_lazy_translations": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        },
+        "description": "Text containing important information about the property. The value is translated in the requested languages."
+      },
+      "TruncatedString": {
+        "type": "object",
+        "properties": {
+          "truncate": {
+            "type": "boolean"
+          },
+          "translated_string": {
+            "$ref": "#/components/schemas/TranslatedString"
+          }
+        },
+        "description": "The translated description text of this accommodation property in the requested languages.\nThe maximum number of characters returned may be limited by contract.\n"
+      },
+      "ConstantInputDto": {
+        "type": "object",
+        "properties": {
+          "constants": {
+            "type": "array",
+            "description": "Allows to filter the results only for specific sections.",
+            "items": {
+              "type": "string",
+              "description": "Allows to filter the results only for specific sections.",
+              "enum": [
+                "ACCOMMODATION_TYPES",
+                "ACCOMMODATION_FACILITIES",
+                "ACCOMMODATION_THEMES",
+                "BED_TYPES",
+                "FACILITY_TYPES",
+                "CHARGE_TYPES",
+                "ROOM_TYPES",
+                "ROOM_FACILITIES",
+                "REVIEW_SCORES"
+              ]
+            }
+          },
+          "languages": {
+            "type": "array",
+            "example": "en-us",
+            "items": {
+              "type": "string",
+              "example": "en-us",
+              "default": "en-gb",
+              "enum": [
+                "AR",
+                "BG",
+                "CA",
+                "CS",
+                "DA",
+                "DE",
+                "EL",
+                "EN",
+                "EN_GB",
+                "EN_US",
+                "ES",
+                "ES_AR",
+                "ES_MX",
+                "ET",
+                "FI",
+                "FR",
+                "HE",
+                "HI",
+                "HR",
+                "HU",
+                "ID",
+                "IS",
+                "IT",
+                "JA",
+                "KA",
+                "KO",
+                "LT",
+                "LV",
+                "MS",
+                "NL",
+                "NO",
+                "PL",
+                "PT_BR",
+                "PT_PT",
+                "RO",
+                "RU",
+                "SK",
+                "SL",
+                "SR",
+                "SV",
+                "TH",
+                "TL",
+                "TR",
+                "UK",
+                "VI",
+                "ZH_CN",
+                "ZH_TW"
+              ]
+            },
+            "default": "en-gb"
+          }
+        }
+      },
+      "ConstantsOutputDto": {
+        "type": "object"
+      },
+      "ResponseOutputConstantsOutputDto": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ConstantsOutputDto"
+          },
+          "request_id": {
+            "type": "string",
+            "description": "Uniquely identifies the request. Please provide this identifier when contacting support."
+          },
+          "next_page": {
+            "type": "string",
+            "description": "Indicates that more results are available. Use this pagination token to retrieve the next page of results (via parameter `page`)."
+          }
+        }
+      },
+      "AvailabilityInputDto": {
+        "required": [
+          "accommodation",
+          "booker",
+          "checkin",
+          "checkout",
+          "guests"
+        ],
+        "type": "object",
+        "properties": {
+          "accommodation": {
+            "minimum": 1,
+            "type": "integer",
+            "description": "A signed integer number that uniquely identifies an accommodation property.",
+            "format": "int32"
+          },
+          "booker": {
+            "$ref": "#/components/schemas/BookerInputDto"
+          },
+          "checkin": {
+            "type": "string",
+            "description": "The checkin date. Must be within 500 days in the future and in the format yyyy-mm-dd.",
+            "format": "date"
+          },
+          "checkout": {
+            "type": "string",
+            "description": "The checkout date.\nMust be later than {checkin}.\nMust be between 1 and 90 days after {checkin}.\nMust be within 500 days in the future and in the format yyyy-mm-dd.\n",
+            "format": "date"
+          },
+          "currency": {
+            "pattern": "^[A-Z]{3}$",
+            "type": "string",
+            "description": "A three-letter code that uniquely identifies a monetary currency as defined by the ISO 4217 standard.",
+            "example": "EUR"
+          },
+          "extras": {
+            "type": "array",
+            "description": "Input parameter to request for additional information about this product.",
+            "items": {
+              "type": "string",
+              "description": "Input parameter to request for additional information about this product.",
+              "enum": [
+                "EXTRA_CHARGES"
+              ]
+            }
+          },
+          "guests": {
+            "$ref": "#/components/schemas/GuestsInputDto"
+          },
+          "products": {
+            "type": "array",
+            "description": "Unique ID of the product.",
+            "items": {
+              "type": "string",
+              "description": "Unique ID of the product."
+            }
+          }
+        }
+      },
+      "AvailabilityOutputDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "A signed integer number that uniquely identifies an accommodation property.",
+            "format": "int32"
+          },
+          "currency": {
+            "pattern": "^[A-Z]{3}$",
+            "type": "string",
+            "description": "A three-letter code that uniquely identifies a monetary currency as defined by the ISO 4217 standard.",
+            "example": "EUR"
+          },
+          "deep_link_url": {
+            "type": "string",
+            "description": "Deep link mobile app URL."
+          },
+          "products": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AvailabilityProductDto"
+            }
+          },
+          "recommendation": {
+            "$ref": "#/components/schemas/RecommendationDto"
+          },
+          "url": {
+            "type": "string",
+            "description": "Internet address for the property page on Booking.com."
+          }
+        }
+      },
+      "AvailabilityProductDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "commission": {
+            "$ref": "#/components/schemas/CommissionDto"
+          },
+          "deal": {
+            "$ref": "#/components/schemas/DealDto"
+          },
+          "maximum_occupancy": {
+            "$ref": "#/components/schemas/ProductMaximumOccupancyDto"
+          },
+          "number_available_at_this_price": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "number_of_adults": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "number_of_children": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "policies": {
+            "$ref": "#/components/schemas/PoliciesDto"
+          },
+          "price": {
+            "$ref": "#/components/schemas/PriceDtoListChargeDto"
+          },
+          "room": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "third_party_inventory": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ChildrenDto": {
+        "type": "object",
+        "properties": {
+          "from_age": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "to_age": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "CommissionDto": {
+        "type": "object",
+        "properties": {
+          "amount": {
+            "type": "number",
+            "format": "double"
+          },
+          "percentage": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "PriceDtoDouble": {
+        "type": "object",
+        "properties": {
+          "base": {
+            "type": "number",
+            "description": "The base price. Does not include any extra charges.",
+            "format": "double"
+          },
+          "book": {
+            "type": "number",
+            "description": "The price that will be charged by Booking.com.",
+            "format": "double"
+          },
+          "extra_charges": {
+            "$ref": "#/components/schemas/ExtraChargesDtoDouble"
+          },
+          "total": {
+            "type": "number",
+            "description": "The total price. Includes all extra charges.",
+            "format": "double"
+          }
+        },
+        "description": "The price components of this product or selection of products.\n'base' and 'extra_charges' are returned only when explicitly requested (via 'extras=extra_charges').\n"
+      },
+      "PriceDtoListChargeDto": {
+        "type": "object",
+        "properties": {
+          "base": {
+            "type": "number",
+            "description": "The base price. Does not include any extra charges.",
+            "format": "double"
+          },
+          "book": {
+            "type": "number",
+            "description": "The price that will be charged by Booking.com.",
+            "format": "double"
+          },
+          "extra_charges": {
+            "$ref": "#/components/schemas/ExtraChargesDtoListChargeDto"
+          },
+          "total": {
+            "type": "number",
+            "description": "The total price. Includes all extra charges.",
+            "format": "double"
+          }
+        }
+      },
+      "ProductMaximumOccupancyDto": {
+        "type": "object",
+        "properties": {
+          "adults": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "children": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChildrenDto"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "RecommendationDto": {
+        "type": "object",
+        "properties": {
+          "price": {
+            "$ref": "#/components/schemas/PriceDtoDouble"
+          },
+          "products": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RecommendationProductDto"
+            }
+          }
+        },
+        "description": "The products recommended for the provided search criteria."
+      },
+      "RecommendationProductDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique ID of the product."
+          },
+          "children": {
+            "type": "array",
+            "description": "The ages of the children allocated to this product.",
+            "items": {
+              "type": "integer",
+              "description": "The ages of the children allocated to this product.",
+              "format": "int32"
+            }
+          },
+          "number_of_adults": {
+            "type": "integer",
+            "description": "The number of adults allocated to this product.",
+            "format": "int32"
+          },
+          "price": {
+            "$ref": "#/components/schemas/PriceDtoDouble"
+          }
+        }
+      },
+      "ResponseOutputAvailabilityOutputDto": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/AvailabilityOutputDto"
+          },
+          "request_id": {
+            "type": "string",
+            "description": "Uniquely identifies the request. Please provide this identifier when contacting support."
+          },
+          "next_page": {
+            "type": "string",
+            "description": "Indicates that more results are available. Use this pagination token to retrieve the next page of results (via parameter `page`)."
+          }
+        }
+      },
+      "ReviewScoresInputDto": {
+        "required": [
+          "hotel_ids"
+        ],
+        "type": "object",
+        "properties": {
+          "hotel_ids": {
+            "type": "array",
+            "description": "List of hotel ids for which review score information should be displayed.",
+            "items": {
+              "type": "integer",
+              "description": "List of hotel ids for which review score information should be displayed.",
+              "format": "int32"
+            }
+          },
+          "affiliate_id": {
+            "type": "integer",
+            "description": "Can be used to specify the affiliate id that should be used instead of the default one.",
+            "format": "int32"
+          },
+          "language": {
+            "type": "string",
+            "description": "Code of the language used to render response.\nPlease check the \"Possible Values\" section of the documentation for the accepted language codes.\n",
+            "enum": [
+              "AR",
+              "BG",
+              "CA",
+              "CS",
+              "DA",
+              "DE",
+              "EL",
+              "EN",
+              "EN_GB",
+              "EN_US",
+              "ES",
+              "ES_AR",
+              "ES_MX",
+              "ET",
+              "FI",
+              "FR",
+              "HE",
+              "HI",
+              "HR",
+              "HU",
+              "ID",
+              "IS",
+              "IT",
+              "JA",
+              "KA",
+              "KO",
+              "LT",
+              "LV",
+              "MS",
+              "NL",
+              "NO",
+              "PL",
+              "PT_BR",
+              "PT_PT",
+              "RO",
+              "RU",
+              "SK",
+              "SL",
+              "SR",
+              "SV",
+              "TH",
+              "TL",
+              "TR",
+              "UK",
+              "VI",
+              "ZH_CN",
+              "ZH_TW"
+            ]
+          },
+          "reviewer_type": {
+            "type": "string",
+            "description": "Limits reviews to those written by specific reviewer type.",
+            "enum": [
+              "SOLO_TRAVELLER",
+              "YOUNG_COUPLE",
+              "MATURE_COUPLE",
+              "FAMILY_WITH_YOUNG_CHILDREN",
+              "FAMILY_WITH_OLDER_CHILDREN",
+              "WITH_FRIENDS",
+              "GROUP",
+              "REVIEW_CATEGORY_COUPLES",
+              "REVIEW_CATEGORY_FAMILIES",
+              "REVIEW_CATEGORY_GROUP_OF_FRIENDS",
+              "REVIEW_CATEGORY_BUSINESS_TRAVELLERS"
+            ]
+          }
+        }
+      },
+      "Meta": {
+        "type": "object",
+        "properties": {
+          "ruid": {
+            "type": "string"
+          }
+        }
+      },
+      "QuestionDto": {
+        "type": "object",
+        "properties": {
+          "count": {
+            "type": "integer",
+            "description": "Number of reviewers that answered the question.",
+            "format": "int32"
+          },
+          "question": {
+            "type": "string",
+            "description": "Localized question text. See language=... input parameter."
+          },
+          "question_literal": {
+            "type": "string",
+            "description": "Question literal."
+          },
+          "score": {
+            "multipleOf": 0.1,
+            "type": "number",
+            "description": "Average score that reviewers provided in response to this question.",
+            "format": "double",
+            "example": 8.5
+          }
+        },
+        "description": "Review scores per question."
+      },
+      "ResponseOutputV2ReviewScoresOutputDto": {
+        "type": "object",
+        "properties": {
+          "meta": {
+            "$ref": "#/components/schemas/Meta"
+          },
+          "result": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReviewScoresOutputDto"
+            }
+          }
+        }
+      },
+      "ReviewScoresOutputDto": {
+        "type": "object",
+        "properties": {
+          "hotel_id": {
+            "type": "integer",
+            "description": "Id of the hotel.",
+            "format": "int64"
+          },
+          "hotel_url": {
+            "type": "string",
+            "description": "URL of the hotel's page on Booking.com.",
+            "example": "https://www.booking.com/hotel/nl/amsterdam-canal-hotel.html?tab=4&aid=338734&label=hotel-472820_reviewscore"
+          },
+          "score_breakdown": {
+            "type": "array",
+            "description": "A breakdown of scores per reviewer type and review question.",
+            "items": {
+              "$ref": "#/components/schemas/ScoreBreakdown"
+            }
+          },
+          "score_distribution": {
+            "type": "array",
+            "description": "A breakdown of all review scores into buckets 1 - 10.",
+            "items": {
+              "$ref": "#/components/schemas/ScoreDistribution"
+            }
+          }
+        }
+      },
+      "ScoreBreakdown": {
+        "type": "object",
+        "properties": {
+          "average_score": {
+            "multipleOf": 0.1,
+            "type": "number",
+            "description": "Average score from this reviewer type.",
+            "format": "double",
+            "example": 8.5
+          },
+          "count": {
+            "type": "integer",
+            "description": "Number of responses from this reviewer type.",
+            "format": "int32"
+          },
+          "question": {
+            "type": "array",
+            "description": "Review scores per question.",
+            "items": {
+              "$ref": "#/components/schemas/QuestionDto"
+            }
+          },
+          "reviewer_type": {
+            "type": "string",
+            "description": "Reviewer type."
+          }
+        },
+        "description": "A breakdown of scores per reviewer type and review question."
+      },
+      "ScoreDistribution": {
+        "type": "object",
+        "properties": {
+          "count": {
+            "type": "integer",
+            "description": "Total number of reviews in this bucket.",
+            "format": "int64",
+            "example": 435
+          },
+          "percent": {
+            "multipleOf": 0.01,
+            "type": "number",
+            "description": "Percent of score distribution that went into this bucket.",
+            "format": "double",
+            "example": 17.76
+          },
+          "score": {
+            "type": "integer",
+            "description": "The bucket's review score value (1 - 10).",
+            "format": "int32",
+            "example": 10
+          }
+        },
+        "description": "A breakdown of all review scores into buckets 1 - 10."
+      },
+      "HotelsInputDto": {
+        "type": "object",
+        "properties": {
+          "hotel_ids": {
+            "type": "array",
+            "description": "A list of up to 1000 hotel ids.",
+            "items": {
+              "type": "integer",
+              "description": "A list of up to 1000 hotel ids.",
+              "format": "int32"
+            }
+          },
+          "language": {
+            "type": "string",
+            "description": "The language code to return the results in.\nPlease check the \"Possible Values\" section of the documentation for the accepted language codes.\n",
+            "enum": [
+              "AR",
+              "BG",
+              "CA",
+              "CS",
+              "DA",
+              "DE",
+              "EL",
+              "EN",
+              "EN_GB",
+              "EN_US",
+              "ES",
+              "ES_AR",
+              "ES_MX",
+              "ET",
+              "FI",
+              "FR",
+              "HE",
+              "HI",
+              "HR",
+              "HU",
+              "ID",
+              "IS",
+              "IT",
+              "JA",
+              "KA",
+              "KO",
+              "LT",
+              "LV",
+              "MS",
+              "NL",
+              "NO",
+              "PL",
+              "PT_BR",
+              "PT_PT",
+              "RO",
+              "RU",
+              "SK",
+              "SL",
+              "SR",
+              "SV",
+              "TH",
+              "TL",
+              "TR",
+              "UK",
+              "VI",
+              "ZH_CN",
+              "ZH_TW"
+            ]
+          },
+          "extras": {
+            "type": "array",
+            "description": "Returns extra bits of information about hotels.",
+            "items": {
+              "type": "string",
+              "description": "Returns extra bits of information about hotels.",
+              "enum": [
+                "HOTEL_INFO",
+                "ROOM_INFO",
+                "KEY_COLLECTION_INFO",
+                "HOTEL_FACILITIES",
+                "HOTEL_PHOTOS",
+                "HOTEL_DESCRIPTION"
+              ]
+            }
+          },
+          "offset": {
+            "type": "integer",
+            "description": "The number of rows to offset the results by. NOTE: this needs to be 0 or a multiple of 100.",
+            "format": "int32"
+          },
+          "rows": {
+            "type": "integer",
+            "description": "The maximum number of rows to return. NOTE: this needs to be a multiple of 100.",
+            "format": "int32"
+          }
+        }
+      },
+      "BedroomDto": {
+        "type": "object",
+        "properties": {
+          "bed_configurations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BedConfigurationDto"
+            }
+          }
+        }
+      },
+      "HotelDataDto": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "string",
+            "description": "The street address of the hotel."
+          },
+          "city_id": {
+            "type": "integer",
+            "description": "Id of the city where this property is located.",
+            "format": "int32"
+          },
+          "country": {
+            "type": "string",
+            "description": "Two-letter ISO country code of the hotel."
+          },
+          "location": {
+            "$ref": "#/components/schemas/CoordinatesDto"
+          },
+          "zip": {
+            "type": "string",
+            "description": "Hotel ZIP code"
+          },
+          "currency": {
+            "type": "string",
+            "description": "Three-letter ISO currency code for the hotel."
+          },
+          "checkin_checkout_times": {
+            "$ref": "#/components/schemas/CheckinCheckoutTimesDto"
+          },
+          "hotel_photos": {
+            "type": "array",
+            "description": "Photos specific information of the hotel.",
+            "items": {
+              "$ref": "#/components/schemas/HotelPhotoDto"
+            }
+          },
+          "hotel_description": {
+            "type": "string",
+            "description": "The description text for this hotel."
+          },
+          "url": {
+            "type": "string",
+            "description": "URL of the hotel's page on Booking.com."
+          },
+          "deep_link_url": {
+            "type": "string",
+            "description": "Deep link mobile app URL.",
+            "example": "booking://hotel/10004?affiliate_id=956509"
+          },
+          "region_ids": {
+            "type": "array",
+            "description": "List of region_ids that the hotel belongs to",
+            "items": {
+              "type": "integer",
+              "description": "List of region_ids that the hotel belongs to",
+              "format": "int32"
+            }
+          },
+          "number_of_reviews": {
+            "type": "integer",
+            "description": "Number of reviews for this hotel.",
+            "format": "int32"
+          },
+          "review_score": {
+            "multipleOf": 0.1,
+            "type": "number",
+            "description": "Review score of this hotel.",
+            "format": "double",
+            "example": 7.1
+          },
+          "spoken_languages": {
+            "type": "array",
+            "description": "Languages spoken by the hotel's staff",
+            "items": {
+              "type": "string",
+              "description": "Languages spoken by the hotel's staff"
+            }
+          }
+        },
+        "description": "Hotel specific information."
+      },
+      "HotelPhotoDto": {
+        "type": "object",
+        "properties": {
+          "main_photo": {
+            "type": "boolean",
+            "description": "Is this the main hotel photo."
+          },
+          "url_original": {
+            "type": "string",
+            "description": "Url of the photo with max width of 500 pixels."
+          }
+        },
+        "description": "Photos specific information of the hotel."
+      },
+      "HotelsOutputDto": {
+        "type": "object",
+        "properties": {
+          "hotel_data": {
+            "$ref": "#/components/schemas/HotelDataDto"
+          },
+          "hotel_id": {
+            "type": "integer",
+            "description": "Unique ID to represent this hotel.",
+            "format": "int32"
+          },
+          "room_data": {
+            "type": "array",
+            "description": "This block has room data for this hotel.",
+            "items": {
+              "$ref": "#/components/schemas/RoomDataDto"
+            }
+          }
+        }
+      },
+      "ResponseOutputV2HotelsOutputDto": {
+        "type": "object",
+        "properties": {
+          "meta": {
+            "$ref": "#/components/schemas/Meta"
+          },
+          "result": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HotelsOutputDto"
+            }
+          }
+        }
+      },
+      "RoomDataDto": {
+        "type": "object",
+        "properties": {
+          "room_id": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "room_info": {
+            "$ref": "#/components/schemas/RoomInfoDto"
+          }
+        },
+        "description": "This block has room data for this hotel."
+      },
+      "RoomInfoDto": {
+        "type": "object",
+        "properties": {
+          "bathroom_count": {
+            "type": "number",
+            "format": "double"
+          },
+          "bedroom_count": {
+            "type": "number",
+            "format": "double"
+          },
+          "bedrooms": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BedroomDto"
+            }
+          },
+          "occupancy": {
+            "$ref": "#/components/schemas/RoomOccupancyDto"
+          },
+          "room_size": {
+            "$ref": "#/components/schemas/RoomSizeDto"
+          },
+          "room_type_id": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "RoomOccupancyDto": {
+        "type": "object",
+        "properties": {
+          "allow_cribs_and_extra_beds": {
+            "type": "boolean"
+          },
+          "max_adults": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "max_children": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "max_cribs": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "max_extra_beds": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "max_occupancy": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "RoomSizeDto": {
+        "type": "object",
+        "properties": {
+          "metre_square": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "HotelTypeInputDTO": {
+        "type": "object",
+        "properties": {
+          "hotel_type_ids": {
+            "type": "array",
+            "description": "Limit the results to these hotel types.",
+            "items": {
+              "type": "integer",
+              "description": "Limit the results to these hotel types.",
+              "format": "int32"
+            }
+          },
+          "languages": {
+            "type": "array",
+            "description": "Limit the results to these languages.\nPlease check the \"Possible Values\" section of the documentation for the accepted language codes.\n",
+            "items": {
+              "type": "string",
+              "description": "Limit the results to these languages.\nPlease check the \"Possible Values\" section of the documentation for the accepted language codes.\n",
+              "enum": [
+                "AR",
+                "BG",
+                "CA",
+                "CS",
+                "DA",
+                "DE",
+                "EL",
+                "EN",
+                "EN_GB",
+                "EN_US",
+                "ES",
+                "ES_AR",
+                "ES_MX",
+                "ET",
+                "FI",
+                "FR",
+                "HE",
+                "HI",
+                "HR",
+                "HU",
+                "ID",
+                "IS",
+                "IT",
+                "JA",
+                "KA",
+                "KO",
+                "LT",
+                "LV",
+                "MS",
+                "NL",
+                "NO",
+                "PL",
+                "PT_BR",
+                "PT_PT",
+                "RO",
+                "RU",
+                "SK",
+                "SL",
+                "SR",
+                "SV",
+                "TH",
+                "TL",
+                "TR",
+                "UK",
+                "VI",
+                "ZH_CN",
+                "ZH_TW"
+              ]
+            }
+          },
+          "offset": {
+            "type": "integer",
+            "description": "The number of rows to offset the results by. NOTE: this needs to be 0 or a multiple of 100.",
+            "format": "int32"
+          },
+          "row": {
+            "type": "integer",
+            "description": "The maximum number of rows to return. NOTE: this needs to be a multiple of 100.",
+            "format": "int32"
+          }
+        }
+      },
+      "HotelTypesOutputDto": {
+        "type": "object",
+        "properties": {
+          "translations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TranslationDto"
+            }
+          },
+          "name": {
+            "type": "string"
+          },
+          "hotel_type_id": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "ResponseOutputV2HotelTypesOutputDto": {
+        "type": "object",
+        "properties": {
+          "meta": {
+            "$ref": "#/components/schemas/Meta"
+          },
+          "result": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HotelTypesOutputDto"
+            }
+          }
+        }
+      },
+      "TranslationDto": {
+        "type": "object",
+        "properties": {
+          "language": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "HotelThemeTypeInputDTO": {
+        "type": "object",
+        "properties": {
+          "theme_ids": {
+            "type": "array",
+            "description": "Limit the results to these themes.",
+            "items": {
+              "type": "integer",
+              "description": "Limit the results to these themes.",
+              "format": "int32"
+            }
+          },
+          "offset": {
+            "type": "integer",
+            "description": "The number of rows to offset the results by. NOTE: this needs to be 0 or a multiple of 100.",
+            "format": "int32"
+          },
+          "row": {
+            "type": "integer",
+            "description": "The maximum number of rows to return. NOTE: this needs to be a multiple of 100.",
+            "format": "int32"
+          }
+        }
+      },
+      "HotelThemeTypesOutputDto": {
+        "type": "object",
+        "properties": {
+          "theme_id": {
+            "type": "integer",
+            "description": "Unique ID for this theme.",
+            "format": "int32"
+          },
+          "name": {
+            "type": "string",
+            "description": "Name of the theme.",
+            "example": "Beach/Seaside"
+          }
+        }
+      },
+      "ResponseOutputV2HotelThemeTypesOutputDto": {
+        "type": "object",
+        "properties": {
+          "meta": {
+            "$ref": "#/components/schemas/Meta"
+          },
+          "result": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HotelThemeTypesOutputDto"
+            }
+          }
+        }
+      },
+      "HotelFacilityInputDto": {
+        "type": "object",
+        "properties": {
+          "facility_type_ids": {
+            "type": "array",
+            "description": "Limit the results to these facility types.",
+            "items": {
+              "type": "integer",
+              "description": "Limit the results to these facility types.",
+              "format": "int32"
+            }
+          },
+          "hotel_facility_type_ids": {
+            "type": "array",
+            "description": "Limit the results to these hotel facility types.",
+            "items": {
+              "type": "integer",
+              "description": "Limit the results to these hotel facility types.",
+              "format": "int32"
+            }
+          },
+          "languages": {
+            "type": "array",
+            "description": "Limit the results to these languages.\nPlease check the \"Possible Values\" section of the documentation for the accepted language codes.\n",
+            "items": {
+              "type": "string",
+              "description": "Limit the results to these languages.\nPlease check the \"Possible Values\" section of the documentation for the accepted language codes.\n",
+              "enum": [
+                "AR",
+                "BG",
+                "CA",
+                "CS",
+                "DA",
+                "DE",
+                "EL",
+                "EN",
+                "EN_GB",
+                "EN_US",
+                "ES",
+                "ES_AR",
+                "ES_MX",
+                "ET",
+                "FI",
+                "FR",
+                "HE",
+                "HI",
+                "HR",
+                "HU",
+                "ID",
+                "IS",
+                "IT",
+                "JA",
+                "KA",
+                "KO",
+                "LT",
+                "LV",
+                "MS",
+                "NL",
+                "NO",
+                "PL",
+                "PT_BR",
+                "PT_PT",
+                "RO",
+                "RU",
+                "SK",
+                "SL",
+                "SR",
+                "SV",
+                "TH",
+                "TL",
+                "TR",
+                "UK",
+                "VI",
+                "ZH_CN",
+                "ZH_TW"
+              ]
+            }
+          }
+        }
+      },
+      "HotelFacilityTypeOutputDto": {
+        "type": "object",
+        "properties": {
+          "hotel_facility_type_id": {
+            "type": "integer",
+            "description": "Unique ID of the hotel facility type.",
+            "format": "int32"
+          },
+          "facility_type_id": {
+            "type": "integer",
+            "description": "The type of facility this is, mapped from FacilityTypes.",
+            "format": "int32"
+          },
+          "name": {
+            "type": "string",
+            "description": "The name of this facility type in english.",
+            "example": "Parking"
+          },
+          "translations": {
+            "type": "array",
+            "description": "The fields and their translations in various languages. They are only shown if we have the translations available.",
+            "items": {
+              "$ref": "#/components/schemas/TranslationDto"
+            }
+          }
+        }
+      },
+      "ResponseOutputV2HotelFacilityTypeOutputDto": {
+        "type": "object",
+        "properties": {
+          "meta": {
+            "$ref": "#/components/schemas/Meta"
+          },
+          "result": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HotelFacilityTypeOutputDto"
+            }
+          }
+        }
+      },
+      "HotelAvailabilityInputDto": {
+        "required": [
+          "checkin",
+          "checkout",
+          "guest_country",
+          "no_rooms"
+        ],
+        "type": "object",
+        "properties": {
+          "checkin": {
+            "type": "string",
+            "description": "The arrival date.",
+            "format": "date"
+          },
+          "checkout": {
+            "type": "string",
+            "description": "The departure date. Must be later than {checkin}. Must be between 1 and 30 days after {checkin}.",
+            "format": "date"
+          },
+          "hotel_ids": {
+            "maxItems": 100,
+            "minItems": 0,
+            "type": "array",
+            "description": "Limit the result list to up to 1000 specified hotels where they have availability for the specified guests and dates.",
+            "items": {
+              "type": "integer",
+              "description": "Limit the result list to up to 1000 specified hotels where they have availability for the specified guests and dates.",
+              "format": "int32"
+            }
+          },
+          "currency": {
+            "type": "string",
+            "description": "Returns the price in this currency"
+          },
+          "guest_country": {
+            "type": "string",
+            "description": "Guest country code. Used to accurately display the best prices and price details for people from that country."
+          },
+          "no_rooms": {
+            "type": "integer",
+            "description": "The only group will be split in the given number of rooms automatically",
+            "format": "int32"
+          },
+          "user_platform": {
+            "type": "string",
+            "description": "The user's platform.",
+            "enum": [
+              "ANDROID",
+              "DESKTOP",
+              "IOS",
+              "MOBILE",
+              "TABLET"
+            ]
+          },
+          "rows": {
+            "maximum": 1000,
+            "type": "integer",
+            "description": "The maximum number of results to return.",
+            "format": "int32"
+          },
+          "page": {
+            "type": "string",
+            "description": "Pagination token used to retrieve the next page of results. Obtained from `next_page`."
+          }
+        }
+      },
+      "HotelAvailabilityOutputDto": {
+        "type": "object",
+        "properties": {
+          "hotel_id": {
+            "type": "integer",
+            "description": "The unique identifier of this hotel.",
+            "format": "int32"
+          },
+          "hotel_currency_code": {
+            "type": "string",
+            "description": "The currency code of the hotel's currency."
+          },
+          "price": {
+            "multipleOf": 0.01,
+            "type": "number",
+            "description": "The display price of the room in this hotel.",
+            "format": "double",
+            "example": 100
+          },
+          "net_price": {
+            "multipleOf": 0.01,
+            "type": "number",
+            "description": "The net price (price without charges) of the room in this hotel.",
+            "format": "double",
+            "example": 90
+          }
+        }
+      },
+      "ResponseOutputV2HotelAvailabilityOutputDto": {
+        "type": "object",
+        "properties": {
+          "meta": {
+            "$ref": "#/components/schemas/Meta"
+          },
+          "result": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HotelAvailabilityOutputDto"
+            }
+          }
+        }
+      },
+      "BlockAvailabilityInputDto": {
+        "required": [
+          "checkin",
+          "checkout",
+          "guest_cc",
+          "hotel_ids"
+        ],
+        "type": "object",
+        "properties": {
+          "hotel_ids": {
+            "type": "array",
+            "description": "Hotel ID(s) to check availability for.",
+            "items": {
+              "type": "integer",
+              "description": "Hotel ID(s) to check availability for.",
+              "format": "int32"
+            }
+          },
+          "checkin": {
+            "type": "string",
+            "description": "The arrival date.",
+            "format": "date"
+          },
+          "checkout": {
+            "type": "string",
+            "description": "The departure date. Must be later than {checkin}.",
+            "format": "date"
+          },
+          "guest_cc": {
+            "type": "string",
+            "description": "Guest country code. Used to accurately display the best prices and price details for people from that country."
+          },
+          "currency": {
+            "type": "string",
+            "description": "Returns the prices in this currency, in addition to the hotel currency."
+          },
+          "extras": {
+            "type": "array",
+            "description": "The extra items for this request. See the documentation for more details about each extra.",
+            "items": {
+              "type": "string",
+              "description": "The extra items for this request. See the documentation for more details about each extra.",
+              "enum": [
+                "ADDON_TYPE",
+                "NET_PRICE",
+                "RACK_RATES",
+                "MAX_ROOMS_IN_RESERVATION",
+                "SMOKING_STATUS",
+                "IMPORTANT_INFORMATION",
+                "ALL_EXTRA_CHARGES",
+                "ADDITIONAL_ROOM_INFO",
+                "GROUP_RECOMMENDATIONS",
+                "ROOM_TYPE_ID",
+                "CC_REQUIRED",
+                "SHOW_CONDITIONAL_CHARGES",
+                "POSTCARD_PHOTO",
+                "EXTRA_CHARGES",
+                "PHOTOS",
+                "INTERNET",
+                "IF_DOMESTIC_NO_CC",
+                "FACILITIES",
+                "EXTRA_BEDS",
+                "CANCELLATION_INFO",
+                "MEALPLANS",
+                "DEAL_LASTM",
+                "PAYMENT_TERMS",
+                "ALL_PRICES",
+                "BLOCK_PAYMENT_OPTIONS",
+                "MAX_CHILDREN_FREE_AGE",
+                "NUMBER_OF_ROOMS_LEFT",
+                "MAX_CHILDREN_FREE",
+                "POLICIES",
+                "PREPAYMENT_INFO",
+                "DEAL_FLASH",
+                "IF_NO_CC_ALLOWED",
+                "DEAL_SMART",
+                "ADDONS",
+                "ADDRESS_REQUIRED"
+              ]
+            }
+          },
+          "affiliate_id": {
+            "type": "string",
+            "description": "Application affiliate id"
+          },
+          "block_ids": {
+            "type": "array",
+            "description": "Return only availability hits with these particular block IDs",
+            "example": "5555555_55555555_5_5_5,6666666_66666666_6_6_6",
+            "items": {
+              "type": "string",
+              "description": "Return only availability hits with these particular block IDs",
+              "example": "5555555_55555555_5_5_5,6666666_66666666_6_6_6"
+            }
+          },
+          "guest_ip": {
+            "type": "string",
+            "description": "Guest IP address for determining guest country\nand showing the best price for that user and obeying laws regarding the display of taxes and fees.\n"
+          },
+          "guest_qty": {
+            "type": "array",
+            "description": "Number of guests for which blocks will be found.\nThe total number of guests is used for calculating city tax charges.\nIt is specified as an array of guest numbers.\n\nIf you use this parameter and make bookings through the API,\nyou should also set the exact same value in the guest_quantities parameter\nfor the processBooking call, otherwise per-person included charges may result in\npricing problems, causing the booking to fail.\n\nNOTE: After version 2.6 either this or `room1` needs to be provided.\n",
+            "items": {
+              "type": "integer",
+              "description": "Number of guests for which blocks will be found.\nThe total number of guests is used for calculating city tax charges.\nIt is specified as an array of guest numbers.\n\nIf you use this parameter and make bookings through the API,\nyou should also set the exact same value in the guest_quantities parameter\nfor the processBooking call, otherwise per-person included charges may result in\npricing problems, causing the booking to fail.\n\nNOTE: After version 2.6 either this or `room1` needs to be provided.\n",
+              "format": "int32"
+            }
+          },
+          "language": {
+            "type": "string",
+            "description": "Specify the language for: block_id, policies, room texts and hotel descriptions.\n\nNote: not all text is translated in all languages.\nPlease check the \"Possible Values\" section of the documentation for the accepted language codes.\n",
+            "enum": [
+              "AR",
+              "BG",
+              "CA",
+              "CS",
+              "DA",
+              "DE",
+              "EL",
+              "EN",
+              "EN_GB",
+              "EN_US",
+              "ES",
+              "ES_AR",
+              "ES_MX",
+              "ET",
+              "FI",
+              "FR",
+              "HE",
+              "HI",
+              "HR",
+              "HU",
+              "ID",
+              "IS",
+              "IT",
+              "JA",
+              "KA",
+              "KO",
+              "LT",
+              "LV",
+              "MS",
+              "NL",
+              "NO",
+              "PL",
+              "PT_BR",
+              "PT_PT",
+              "RO",
+              "RU",
+              "SK",
+              "SL",
+              "SR",
+              "SV",
+              "TH",
+              "TL",
+              "TR",
+              "UK",
+              "VI",
+              "ZH_CN",
+              "ZH_TW"
+            ]
+          },
+          "num_rooms": {
+            "type": "integer",
+            "description": "Takes a number of rooms to put guests into",
+            "format": "int32"
+          },
+          "room1": {
+            "type": "array",
+            "description": "Which guests to put in which rooms. Syntax: comma-separated list, `A` for each adult, a number in the range 0..17 for each child.\n",
+            "items": {
+              "type": "string",
+              "description": "Which guests to put in which rooms. Syntax: comma-separated list, `A` for each adult, a number in the range 0..17 for each child.\n"
+            }
+          },
+          "user_platform": {
+            "type": "string",
+            "description": "The user's platform.",
+            "enum": [
+              "ANDROID",
+              "DESKTOP",
+              "IOS",
+              "MOBILE",
+              "TABLET"
+            ]
+          }
+        }
+      },
+      "BlockAvailabilityOutputDto": {
+        "type": "object",
+        "properties": {
+          "block": {
+            "type": "array",
+            "description": "The object containing all the relevant information for the combination of room, policy, meal and occupancy that determines the price.\"\nA block is the unique entity you book with booking.com.",
+            "items": {
+              "$ref": "#/components/schemas/BlockOutputDto"
+            }
+          },
+          "can_pay_now": {
+            "type": "boolean",
+            "description": "Boolean value set to \"true\" if payment can be made during reservation process or \"false\" if it can not."
+          },
+          "checkin": {
+            "type": "string",
+            "description": "The date that was searched for as checkin. Format: YYYY-MM-DD"
+          },
+          "checkout": {
+            "type": "string",
+            "description": "The date that was searched for as checkout. Format: YYYY-MM-DD"
+          },
+          "direct_payment": {
+            "type": "boolean",
+            "description": "Boolean value set to \"true\" if the direct payment is available or \"false\" if it is not."
+          },
+          "hotel_id": {
+            "type": "integer",
+            "description": "Booking.com hotel ID. The unique identifier of this hotel.",
+            "format": "int64"
+          },
+          "hotel_url": {
+            "type": "string",
+            "description": "URL of the hotel's page on Booking.com.",
+            "example": "https://www.booking.com/hotel/nl/toren.html"
+          },
+          "isFlashDeal": {
+            "type": "boolean",
+            "writeOnly": true
+          },
+          "flash_deal": {
+            "type": "boolean"
+          }
+        }
+      },
+      "BlockOutputDto": {
+        "type": "object",
+        "properties": {
+          "block_id": {
+            "type": "string"
+          },
+          "breakfast_included": {
+            "type": "boolean"
+          }
+        },
+        "description": "The object containing all the relevant information for the combination of room, policy, meal and occupancy that determines the price.\"\nA block is the unique entity you book with booking.com."
+      },
+      "ResponseOutputV2BlockAvailabilityOutputDto": {
+        "type": "object",
+        "properties": {
+          "meta": {
+            "$ref": "#/components/schemas/Meta"
+          },
+          "result": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BlockAvailabilityOutputDto"
+            }
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "string"
+      }
+    }
+  }
+}

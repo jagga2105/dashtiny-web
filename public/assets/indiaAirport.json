@@ -1,0 +1,3174 @@
+[
+    {
+        
+        "value": {
+            "location": "",
+            "airport": "",
+            "iata": "",
+            "icao": "",
+            "airporttype": "",
+            "airportstatus": "",
+            "state": "",
+            "___id___": "976"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Kadapa",
+            "airport": "Kadapa Airport",
+            "iata": "CDP",
+            "icao": "VOCP",
+            "airporttype": "Domestic",
+            "airportstatus": "Operational",
+            "state": "Andhra Pradesh",
+            "___id___": "977"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Kurnool",
+            "airport": "Kurnool Airport",
+            "iata": "KJB",
+            "icao": "VOKU",
+            "airporttype": "Domestic",
+            "airportstatus": "Operational",
+            "state": "Andhra Pradesh",
+            "___id___": "978"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Nellore",
+            "airport": "Nellore Airport",
+            "iata": "\u2014",
+            "icao": "\u2014",
+            "airporttype": "Domestic",
+            "airportstatus": "Under Construction",
+            "state": "Andhra Pradesh",
+            "___id___": "979"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Rajahmundry",
+            "airport": "Rajahmundry Airport",
+            "iata": "RJA",
+            "icao": "VORY",
+            "airporttype": "Domestic",
+            "airportstatus": "Operational",
+            "state": "Andhra Pradesh",
+            "___id___": "980"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Tirupati",
+            "airport": "Tirupati International Airport",
+            "iata": "TIR",
+            "icao": "VOTP",
+            "airporttype": "International",
+            "airportstatus": "Operational",
+            "state": "Andhra Pradesh",
+            "___id___": "981"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Vijayawada",
+            "airport": "Vijayawada International Airport",
+            "iata": "VGA",
+            "icao": "VOBZ",
+            "airporttype": "International",
+            "airportstatus": "Operational",
+            "state": "Andhra Pradesh",
+            "___id___": "982"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Visakhapatnam",
+            "airport": "Visakhapatnam Airport",
+            "iata": "VTZ",
+            "icao": "VOVZ",
+            "airporttype": "Customs",
+            "airportstatus": "Operational",
+            "state": "Andhra Pradesh",
+            "___id___": "983"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Visakhapatnam",
+            "airport": "Bhogapuram International Airport",
+            "iata": "\u2014",
+            "icao": "-",
+            "airporttype": "International",
+            "airportstatus": "Under Construction",
+            "state": "Andhra Pradesh",
+            "___id___": "984"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Aalo",
+            "airport": "Along Airport",
+            "iata": "IXV",
+            "icao": "VEAN",
+            "airporttype": "Defence",
+            "airportstatus": "\u2014",
+            "state": "Arunachal Pradesh",
+            "___id___": "985"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Itanagar",
+            "airport": "Donyi Polo Airport",
+            "iata": "HGI",
+            "icao": "VEHO",
+            "airporttype": "Domestic",
+            "airportstatus": "Operational",
+            "state": "Arunachal Pradesh",
+            "___id___": "986"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Mechuka",
+            "airport": "Mechuka Advanced Landing Ground",
+            "iata": "\u2014",
+            "icao": "VE67",
+            "airporttype": "Defence",
+            "airportstatus": "\u2014",
+            "state": "Arunachal Pradesh",
+            "___id___": "987"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Pasighat",
+            "airport": "Pasighat Airport",
+            "iata": "IXT",
+            "icao": "VEPG",
+            "airporttype": "Domestic (CE)",
+            "airportstatus": "Operational",
+            "state": "Arunachal Pradesh",
+            "___id___": "988"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Tezu",
+            "airport": "Tezu Airport",
+            "iata": "TEI",
+            "icao": "VETJ",
+            "airporttype": "Domestic (CE)",
+            "airportstatus": "Operational",
+            "state": "Arunachal Pradesh",
+            "___id___": "989"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Tuting",
+            "airport": "Tuting Advanced Landing Ground",
+            "iata": "\u2014",
+            "icao": "\u2014",
+            "airporttype": "Defence",
+            "airportstatus": "\u2014",
+            "state": "Arunachal Pradesh",
+            "___id___": "990"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Walong",
+            "airport": "Walong Advanced Landing Ground",
+            "iata": "\u2014",
+            "icao": "\u2014",
+            "airporttype": "Defence",
+            "airportstatus": "\u2014",
+            "state": "Arunachal Pradesh",
+            "___id___": "991"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Ziro",
+            "airport": "Ziro Airport",
+            "iata": "ZER",
+            "icao": "VEZO",
+            "airporttype": "Domestic",
+            "airportstatus": "Operational",
+            "state": "Arunachal Pradesh",
+            "___id___": "992"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Dhubri",
+            "airport": "Rupsi Airport",
+            "iata": "RUP",
+            "icao": "VERU",
+            "airporttype": "Domestic",
+            "airportstatus": "Operational",
+            "state": "Assam",
+            "___id___": "993"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Dibrugarh",
+            "airport": "Dibrugarh Airport",
+            "iata": "DIB",
+            "icao": "VEMN",
+            "airporttype": "Domestic",
+            "airportstatus": "Operational",
+            "state": "Assam",
+            "___id___": "994"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Guwahati",
+            "airport": "Lokpriya Gopinath Bordoloi International Airport",
+            "iata": "GAU",
+            "icao": "VEGT",
+            "airporttype": "International",
+            "airportstatus": "Operational",
+            "state": "Assam",
+            "___id___": "995"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Jorhat",
+            "airport": "Jorhat Airport",
+            "iata": "JRH",
+            "icao": "VEJT",
+            "airporttype": "Domestic (CE)",
+            "airportstatus": "Operational",
+            "state": "Assam",
+            "___id___": "996"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "North Lakhimpur",
+            "airport": "Lilabari Airport",
+            "iata": "IXI",
+            "icao": "VELR",
+            "airporttype": "Domestic",
+            "airportstatus": "Operational",
+            "state": "Assam",
+            "___id___": "997"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Silchar",
+            "airport": "Silchar Airport",
+            "iata": "IXS",
+            "icao": "VEKU",
+            "airporttype": "Domestic (CE)",
+            "airportstatus": "Operational",
+            "state": "Assam",
+            "___id___": "998"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Tezpur",
+            "airport": "Tezpur Airport",
+            "iata": "TEZ",
+            "icao": "VETZ",
+            "airporttype": "Domestic (CE)",
+            "airportstatus": "Operational",
+            "state": "Assam",
+            "___id___": "999"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Begusarai",
+            "airport": "Begusarai Airport",
+            "iata": "\u2014",
+            "icao": "\u2014",
+            "airporttype": "Domestic",
+            "airportstatus": "Non Operational",
+            "state": "Bihar",
+            "___id___": "1000"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Bhagalpur Airport",
+            "airport": "Bhagalpur Airport",
+            "iata": "\u2014",
+            "icao": "\u2014",
+            "airporttype": "Domestic",
+            "airportstatus": "Proposed",
+            "state": "Bihar",
+            "___id___": "1001"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Darbhanga",
+            "airport": "Darbhanga Airport",
+            "iata": "DBR",
+            "icao": "VEDH",
+            "airporttype": "Domestic (CE)",
+            "airportstatus": "Operational",
+            "state": "Bihar",
+            "___id___": "1002"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Gaya",
+            "airport": "Gaya Airport",
+            "iata": "GAY",
+            "icao": "VEGY",
+            "airporttype": "International",
+            "airportstatus": "Operational",
+            "state": "Bihar",
+            "___id___": "1003"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Munger",
+            "airport": "Munger Airport",
+            "iata": "\u2014",
+            "icao": "\u2014",
+            "airporttype": "Domestic",
+            "airportstatus": "Non Operational",
+            "state": "Bihar",
+            "___id___": "1004"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Muzaffarpur",
+            "airport": "Muzaffarpur Airport",
+            "iata": "MZU",
+            "icao": "VEMZ",
+            "airporttype": "Domestic",
+            "airportstatus": "Proposed",
+            "state": "Bihar",
+            "___id___": "1005"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Patna",
+            "airport": "Jay Prakash Narayan Airport",
+            "iata": "PAT",
+            "icao": "VEPT",
+            "airporttype": "International",
+            "airportstatus": "Operational",
+            "state": "Bihar",
+            "___id___": "1006"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Purnia",
+            "airport": "Purnia Airport",
+            "iata": "\u2014",
+            "icao": "\u2014",
+            "airporttype": "Domestic",
+            "airportstatus": "Proposed",
+            "state": "Bihar",
+            "___id___": "1007"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Bilaspur",
+            "airport": "Bilaspur Airport",
+            "iata": "PAB",
+            "icao": "VEBU",
+            "airporttype": "Domestic",
+            "airportstatus": "Operational",
+            "state": "Chhattisgarh",
+            "___id___": "1008"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Jagdalpur",
+            "airport": "Jagdalpur Airport",
+            "iata": "JGB",
+            "icao": "VEJR",
+            "airporttype": "Domestic",
+            "airportstatus": "Operational",
+            "state": "Chhattisgarh",
+            "___id___": "1009"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Raipur",
+            "airport": "Swami Vivekananda Airport",
+            "iata": "RPR",
+            "icao": "VARP",
+            "airporttype": "International",
+            "airportstatus": "Operational",
+            "state": "Chhattisgarh",
+            "___id___": "1010"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Dabolim",
+            "airport": "Dabolim Airport",
+            "iata": "GOI",
+            "icao": "VOGO",
+            "airporttype": "International (CE)",
+            "airportstatus": "Operational",
+            "state": "Goa",
+            "___id___": "1011"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Mopa",
+            "airport": "Manohar International Airport",
+            "iata": "GOX",
+            "icao": "VOGA",
+            "airporttype": "International",
+            "airportstatus": "Operational",
+            "state": "Goa",
+            "___id___": "1012"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Ahmedabad",
+            "airport": "Sardar Vallabhbhai Patel International Airport",
+            "iata": "AMD",
+            "icao": "VAAH",
+            "airporttype": "International",
+            "airportstatus": "Operational",
+            "state": "Gujarat",
+            "___id___": "1013"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Amreli",
+            "airport": "Amreli Airport",
+            "iata": "\u2014",
+            "icao": "\u2014",
+            "airporttype": "Domestic",
+            "airportstatus": "Non Operational",
+            "state": "Gujarat",
+            "___id___": "1014"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Bhavnagar",
+            "airport": "Bhavnagar Airport",
+            "iata": "BHU",
+            "icao": "VABV",
+            "airporttype": "Domestic",
+            "airportstatus": "Operational",
+            "state": "Gujarat",
+            "___id___": "1015"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Bhuj",
+            "airport": "Bhuj Airport",
+            "iata": "BHJ",
+            "icao": "VABJ",
+            "airporttype": "Domestic (CE)",
+            "airportstatus": "Operational",
+            "state": "Gujarat",
+            "___id___": "1016"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Dholera",
+            "airport": "Dholera Airport",
+            "iata": "\u2014",
+            "icao": "\u2014",
+            "airporttype": "International",
+            "airportstatus": "Proposed",
+            "state": "Gujarat",
+            "___id___": "1017"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Jamnagar",
+            "airport": "Jamnagar Airport",
+            "iata": "JGA",
+            "icao": "VAJM",
+            "airporttype": "Domestic (CE)",
+            "airportstatus": "Operational",
+            "state": "Gujarat",
+            "___id___": "1018"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Kandla",
+            "airport": "Kandla Airport",
+            "iata": "IXY",
+            "icao": "VAKE",
+            "airporttype": "Domestic",
+            "airportstatus": "Operational",
+            "state": "Gujarat",
+            "___id___": "1019"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Keshod",
+            "airport": "Keshod Airport",
+            "iata": "IXK",
+            "icao": "VAKS",
+            "airporttype": "Domestic",
+            "airportstatus": "Operational",
+            "state": "Gujarat",
+            "___id___": "1020"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Mehsana",
+            "airport": "Mehsana Airport",
+            "iata": "\u2014",
+            "icao": "\u2014",
+            "airporttype": "Flying School",
+            "airportstatus": "\u2014",
+            "state": "Gujarat",
+            "___id___": "1021"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Mundra",
+            "airport": "Mundra Airport",
+            "iata": "\u2014",
+            "icao": "VAMA",
+            "airporttype": "Private",
+            "airportstatus": "Operational",
+            "state": "Gujarat",
+            "___id___": "1022"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Porbandar",
+            "airport": "Porbandar Airport",
+            "iata": "PBD",
+            "icao": "VAPR",
+            "airporttype": "Domestic",
+            "airportstatus": "Non Operational",
+            "state": "Gujarat",
+            "___id___": "1023"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Rajkot",
+            "airport": "Rajkot Airport",
+            "iata": "RAJ",
+            "icao": "VARK",
+            "airporttype": "Domestic",
+            "airportstatus": "Operational",
+            "state": "Gujarat",
+            "___id___": "1024"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Rajkot",
+            "airport": "Rajkot Greenfield Airport",
+            "iata": "\u2014",
+            "icao": "",
+            "airporttype": "International",
+            "airportstatus": "Under Construction",
+            "state": "Gujarat",
+            "___id___": "1025"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Surat",
+            "airport": "Surat International Airport",
+            "iata": "STV",
+            "icao": "VASU",
+            "airporttype": "International",
+            "airportstatus": "Operational",
+            "state": "Gujarat",
+            "___id___": "1026"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Vadodara",
+            "airport": "Vadodara Airport",
+            "iata": "BDQ",
+            "icao": "VABO",
+            "airporttype": "Customs (CE)",
+            "airportstatus": "Operational",
+            "state": "Gujarat",
+            "___id___": "1027"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Bhiwani",
+            "airport": "Bhiwani Airport",
+            "iata": "\u2014",
+            "icao": "VIBW",
+            "airporttype": "Flying School",
+            "airportstatus": "CAD",
+            "state": "Haryana",
+            "___id___": "1028"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Chandigarh Capital Region",
+            "airport": "Chandigarh Airport",
+            "iata": "IXC",
+            "icao": "VICG",
+            "airporttype": "Customs",
+            "airportstatus": "Operational",
+            "state": "Haryana",
+            "___id___": "1029"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Gurugram",
+            "airport": "Gurugram Airstrip",
+            "iata": "\u2014",
+            "icao": "\u2014",
+            "airporttype": "Domestic",
+            "airportstatus": "Non Operational",
+            "state": "Haryana",
+            "___id___": "1030"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Hisar",
+            "airport": "Hisar Airport",
+            "iata": "HSS",
+            "icao": "VIHR",
+            "airporttype": "Domestic",
+            "airportstatus": "Non Operational",
+            "state": "Haryana",
+            "___id___": "1031"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Karnal",
+            "airport": "Karnal Airport",
+            "iata": "\u2014",
+            "icao": "VI40",
+            "airporttype": "Flying School",
+            "airportstatus": "\u2014",
+            "state": "Haryana",
+            "___id___": "1032"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Panchkula",
+            "airport": "Pinjore Airport",
+            "iata": "\u2014",
+            "icao": "VI71",
+            "airporttype": "Flying School",
+            "airportstatus": "\u2014",
+            "state": "Haryana",
+            "___id___": "1033"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Dharamshala - Kangra",
+            "airport": "Kangra Airport",
+            "iata": "DHM",
+            "icao": "VIGG",
+            "airporttype": "Domestic (CE)",
+            "airportstatus": "Operational",
+            "state": "Himachal Pradesh",
+            "___id___": "1034"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Kullu Manali",
+            "airport": "Kullu Airport",
+            "iata": "KUU",
+            "icao": "VIBR",
+            "airporttype": "Domestic",
+            "airportstatus": "Operational",
+            "state": "Himachal Pradesh",
+            "___id___": "1035"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Mandi",
+            "airport": "Mandi Airport",
+            "iata": "\u2014",
+            "icao": "\u2014",
+            "airporttype": "International",
+            "airportstatus": "Proposed",
+            "state": "Himachal Pradesh",
+            "___id___": "1036"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Shimla",
+            "airport": "Shimla Airport",
+            "iata": "SLV",
+            "icao": "VISM",
+            "airporttype": "Domestic",
+            "airportstatus": "Operational",
+            "state": "Himachal Pradesh",
+            "___id___": "1037"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Bokaro",
+            "airport": "Bokaro Airport",
+            "iata": "\u2014",
+            "icao": "VEBK",
+            "airporttype": "Domestic",
+            "airportstatus": "Non Operational",
+            "state": "Jharkhand",
+            "___id___": "1038"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Deoghar",
+            "airport": "Deoghar Airport",
+            "iata": "DGH",
+            "icao": "VEDO",
+            "airporttype": "Domestic",
+            "airportstatus": "Operational",
+            "state": "Jharkhand",
+            "___id___": "1039"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Dhanbad",
+            "airport": "Barwadda Airport",
+            "iata": "DBD",
+            "icao": "VEDB",
+            "airporttype": "Domestic",
+            "airportstatus": "Non Operational",
+            "state": "Jharkhand",
+            "___id___": "1040"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Dumka",
+            "airport": "Dumka Airport",
+            "iata": "\u2014",
+            "icao": "IN-0100",
+            "airporttype": "Domestic",
+            "airportstatus": "Non Operational",
+            "state": "Jharkhand",
+            "___id___": "1041"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Jamshedpur",
+            "airport": "Sonari Airport",
+            "iata": "IXW",
+            "icao": "VEJS",
+            "airporttype": "Domestic",
+            "airportstatus": "Operational",
+            "state": "Jharkhand",
+            "___id___": "1042"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Dhalbhumgarh Airport",
+            "airport": "-",
+            "iata": "\u2014",
+            "icao": "-",
+            "airporttype": "Domestic",
+            "airportstatus": "Proposed",
+            "state": "Jharkhand",
+            "___id___": "1043"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Chakulia Airport",
+            "airport": "-",
+            "iata": "VECK",
+            "icao": "-",
+            "airporttype": "Domestic",
+            "airportstatus": "",
+            "state": "Jharkhand",
+            "___id___": "1044"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Ranchi",
+            "airport": "Birsa Munda Airport",
+            "iata": "IXR",
+            "icao": "VERC",
+            "airporttype": "Domestic",
+            "airportstatus": "Operational",
+            "state": "Jharkhand",
+            "___id___": "1045"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Belgavi",
+            "airport": "Belgavi Airport",
+            "iata": "IXG",
+            "icao": "VOBM",
+            "airporttype": "Domestic",
+            "airportstatus": "Operational",
+            "state": "Karnataka",
+            "___id___": "1046"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Ballari",
+            "airport": "Ballari Airport",
+            "iata": "BEP",
+            "icao": "VOBI",
+            "airporttype": "Domestic",
+            "airportstatus": "Non Operational",
+            "state": "Karnataka",
+            "___id___": "1047"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Vijaynagar",
+            "airport": "Jindal Vijaynagar Airport",
+            "iata": "VDY",
+            "icao": "VOJV",
+            "airporttype": "Domestic",
+            "airportstatus": "Operational",
+            "state": "Karnataka",
+            "___id___": "1048"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Bellary",
+            "airport": "New Bellary airport",
+            "iata": "BEP",
+            "icao": "VOBI",
+            "airporttype": "Domestic",
+            "airportstatus": "Proposed",
+            "state": "Karnataka",
+            "___id___": "1049"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Bengaluru",
+            "airport": "Kempegowda International Airport",
+            "iata": "BLR",
+            "icao": "VOBL",
+            "airporttype": "International",
+            "airportstatus": "Operational",
+            "state": "Karnataka",
+            "___id___": "1050"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "HAL Airport",
+            "airport": "\u2014",
+            "iata": "VOBG",
+            "icao": "Defence",
+            "airporttype": "\u2014",
+            "airportstatus": "HAL",
+            "state": "Karnataka",
+            "___id___": "1051"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Jakkur Aerodrome",
+            "airport": "\u2014",
+            "iata": "VOJK",
+            "icao": "Flying School",
+            "airporttype": "\u2014",
+            "airportstatus": "-",
+            "state": "Karnataka",
+            "___id___": "1052"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Bidar",
+            "airport": "Bidar Airport",
+            "iata": "IXX",
+            "icao": "VOBR",
+            "airporttype": "Domestic (CE)",
+            "airportstatus": "Operational",
+            "state": "Karnataka",
+            "___id___": "1053"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Bijapur",
+            "airport": "Bijapur Airport",
+            "iata": "\u2014",
+            "icao": "\u2014",
+            "airporttype": "Domestic",
+            "airportstatus": "Under Construction",
+            "state": "Karnataka",
+            "___id___": "1054"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Chitradurga",
+            "airport": "Chitradurga Aeronautical Test Range",
+            "iata": "\u2014",
+            "icao": "\u2014",
+            "airporttype": "Defence",
+            "airportstatus": "\u2014",
+            "state": "Karnataka",
+            "___id___": "1055"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Harihar",
+            "airport": "Harihar Airport",
+            "iata": "\u2014",
+            "icao": "VO52",
+            "airporttype": "Private",
+            "airportstatus": "\u2014",
+            "state": "Karnataka",
+            "___id___": "1056"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Hassan",
+            "airport": "Hassan Airport",
+            "iata": "\u2014",
+            "icao": "\u2014",
+            "airporttype": "Domestic",
+            "airportstatus": "Proposed",
+            "state": "Karnataka",
+            "___id___": "1057"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Hubli",
+            "airport": "Hubli Airport",
+            "iata": "HBX",
+            "icao": "VOHB",
+            "airporttype": "Domestic",
+            "airportstatus": "Operational",
+            "state": "Karnataka",
+            "___id___": "1058"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Kalaburagi",
+            "airport": "Kalaburagi Airport",
+            "iata": "GBI",
+            "icao": "VOGB",
+            "airporttype": "Domestic",
+            "airportstatus": "Operational",
+            "state": "Karnataka",
+            "___id___": "1059"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Karwar",
+            "airport": "Karwar Airport",
+            "iata": "\u2014",
+            "icao": "\u2014",
+            "airporttype": "Domestic",
+            "airportstatus": "Proposed",
+            "state": "Karnataka",
+            "___id___": "1060"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Mangaluru",
+            "airport": "Mangalore International Airport",
+            "iata": "IXE",
+            "icao": "VOML",
+            "airporttype": "International",
+            "airportstatus": "Operational",
+            "state": "Karnataka",
+            "___id___": "1061"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Mysuru",
+            "airport": "Mysore Airport",
+            "iata": "MYQ",
+            "icao": "VOMY",
+            "airporttype": "Domestic",
+            "airportstatus": "Operational",
+            "state": "Karnataka",
+            "___id___": "1062"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Raichur",
+            "airport": "Raichur Airport",
+            "iata": "\u2014",
+            "icao": "\u2014",
+            "airporttype": "Domestic",
+            "airportstatus": "Proposed",
+            "state": "Karnataka",
+            "___id___": "1063"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Shivamogga",
+            "airport": "Kuvempu Airport",
+            "iata": "\u2014",
+            "icao": "\u2014",
+            "airporttype": "Domestic",
+            "airportstatus": "Operational",
+            "state": "Karnataka",
+            "___id___": "1064"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Idukki - NCC",
+            "airport": "Sathram Airstrip",
+            "iata": "\u2014",
+            "icao": "\u2014",
+            "airporttype": "Airstrip",
+            "airportstatus": "Circumstantial Usage",
+            "state": "Kerala",
+            "___id___": "1065"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Kannur",
+            "airport": "Kannur International Airport",
+            "iata": "CNN",
+            "icao": "VOKN",
+            "airporttype": "International",
+            "airportstatus": "Operational",
+            "state": "Kerala",
+            "___id___": "1066"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Kasargod",
+            "airport": "Bekal Airport",
+            "iata": "\u2014",
+            "icao": "\u2014",
+            "airporttype": "Domestic",
+            "airportstatus": "Proposed",
+            "state": "Kerala",
+            "___id___": "1067"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Kochi",
+            "airport": "Cochin International Airport",
+            "iata": "COK",
+            "icao": "VOCI",
+            "airporttype": "International",
+            "airportstatus": "Operational",
+            "state": "Kerala",
+            "___id___": "1068"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Kollam",
+            "airport": "Quilon Aerodrome",
+            "iata": "\u2014",
+            "icao": "\u2014",
+            "airporttype": "Domestic",
+            "airportstatus": "Non operational",
+            "state": "Kerala",
+            "___id___": "1069"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Kottayam",
+            "airport": "Sabarimala International Airport",
+            "iata": "\u2014",
+            "icao": "\u2014",
+            "airporttype": "International",
+            "airportstatus": "Proposed",
+            "state": "Kerala",
+            "___id___": "1070"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Kozhikode",
+            "airport": "Calicut International Airport",
+            "iata": "CCJ",
+            "icao": "VOCL",
+            "airporttype": "International",
+            "airportstatus": "Operational",
+            "state": "Kerala",
+            "___id___": "1071"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Thiruvambady",
+            "airport": "Thiruvambady Airport",
+            "iata": "\u2014",
+            "icao": "\u2014",
+            "airporttype": "Domestic",
+            "airportstatus": "Proposed",
+            "state": "Kerala",
+            "___id___": "1072"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Thiruvananthapuram",
+            "airport": "Trivandrum International Airport",
+            "iata": "TRV",
+            "icao": "VOTV",
+            "airporttype": "International",
+            "airportstatus": "Operational",
+            "state": "Kerala",
+            "___id___": "1073"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Bhopal",
+            "airport": "Raja Bhoj Airport",
+            "iata": "BHO",
+            "icao": "VABP",
+            "airporttype": "Domestic",
+            "airportstatus": "Operational",
+            "state": "Madhya Pradesh",
+            "___id___": "1074"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Gwalior",
+            "airport": "Gwalior Airport",
+            "iata": "GWL",
+            "icao": "VIGR",
+            "airporttype": "Domestic (CE)",
+            "airportstatus": "Operational",
+            "state": "Madhya Pradesh",
+            "___id___": "1075"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Indore",
+            "airport": "Devi Ahilya Bai Holkar Airport",
+            "iata": "IDR",
+            "icao": "VAID",
+            "airporttype": "Customs",
+            "airportstatus": "Operational",
+            "state": "Madhya Pradesh",
+            "___id___": "1076"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Jabalpur",
+            "airport": "Jabalpur Airport",
+            "iata": "JLR",
+            "icao": "VAJB",
+            "airporttype": "Domestic",
+            "airportstatus": "Operational",
+            "state": "Madhya Pradesh",
+            "___id___": "1077"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Khajuraho",
+            "airport": "Khajuraho Airport",
+            "iata": "HJR",
+            "icao": "VAKJ",
+            "airporttype": "Domestic",
+            "airportstatus": "Operational",
+            "state": "Madhya Pradesh",
+            "___id___": "1078"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Rewa",
+            "airport": "Rewa Airport",
+            "iata": "REW",
+            "icao": "\u2014",
+            "airporttype": "Domestic",
+            "airportstatus": "Under Construction",
+            "state": "Madhya Pradesh",
+            "___id___": "1079"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Satna",
+            "airport": "Satna Airport",
+            "iata": "TNI",
+            "icao": "VIST",
+            "airporttype": "Domestic",
+            "airportstatus": "Non Operational",
+            "state": "Madhya Pradesh",
+            "___id___": "1080"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Aamby Valley City",
+            "airport": "Aamby Valley Airport",
+            "iata": "IN-0033",
+            "icao": "VAAV",
+            "airporttype": "Private",
+            "airportstatus": "\u2014",
+            "state": "Maharashtra",
+            "___id___": "1081"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Amravati",
+            "airport": "Amravati Airport",
+            "iata": "\u2014",
+            "icao": "IN-0065",
+            "airporttype": "Domestic",
+            "airportstatus": "Non Operational",
+            "state": "Maharashtra",
+            "___id___": "1082"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Aurangabad",
+            "airport": "Aurangabad Airport",
+            "iata": "IXU",
+            "icao": "VAAU",
+            "airporttype": "Customs",
+            "airportstatus": "Operational",
+            "state": "Maharashtra",
+            "___id___": "1083"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Baramati",
+            "airport": "Baramati Airport",
+            "iata": "\u2014",
+            "icao": "IN-0024",
+            "airporttype": "Flying School",
+            "airportstatus": "\u2014",
+            "state": "Maharashtra",
+            "___id___": "1084"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Chandrapur",
+            "airport": "Chandrapur Airport",
+            "iata": "\u2014",
+            "icao": "VA1B",
+            "airporttype": "Flying School",
+            "airportstatus": "\u2014",
+            "state": "Maharashtra",
+            "___id___": "1085"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Chandrapur Greenfield Airport",
+            "airport": "\u2014",
+            "iata": "\u2014",
+            "icao": "Domestic",
+            "airporttype": "Proposed",
+            "airportstatus": "-",
+            "state": "Maharashtra",
+            "___id___": "1086"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Dhule",
+            "airport": "Dhule Airport",
+            "iata": "DHL",
+            "icao": "VA53",
+            "airporttype": "Flying School",
+            "airportstatus": "\u2014",
+            "state": "Maharashtra",
+            "___id___": "1087"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Gondia",
+            "airport": "Gondia Airport",
+            "iata": "GDB",
+            "icao": "VAGD",
+            "airporttype": "Domestic",
+            "airportstatus": "Operational",
+            "state": "Maharashtra",
+            "___id___": "1088"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Jalgaon",
+            "airport": "Jalgaon Airport",
+            "iata": "JLG",
+            "icao": "VAJL",
+            "airporttype": "Domestic",
+            "airportstatus": "Operational",
+            "state": "Maharashtra",
+            "___id___": "1089"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Karad",
+            "airport": "Karad Airport",
+            "iata": "IN-0024",
+            "icao": "VA1M",
+            "airporttype": "Flying School",
+            "airportstatus": "\u2014",
+            "state": "Maharashtra",
+            "___id___": "1090"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Kolhapur",
+            "airport": "Chhatrapati Rajaram Maharaj Airport",
+            "iata": "KLH",
+            "icao": "VAKP",
+            "airporttype": "Domestic",
+            "airportstatus": "Operational",
+            "state": "Maharashtra",
+            "___id___": "1091"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Latur",
+            "airport": "Latur Airport",
+            "iata": "LTU",
+            "icao": "VALT",
+            "airporttype": "Domestic",
+            "airportstatus": "Non Operational",
+            "state": "Maharashtra",
+            "___id___": "1092"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Mumbai (Bombay)",
+            "airport": "Chhatrapati Shivaji Maharaj International Airport",
+            "iata": "BOM",
+            "icao": "VABB",
+            "airporttype": "International",
+            "airportstatus": "Operational",
+            "state": "Maharashtra",
+            "___id___": "1093"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Juhu Aerodrome",
+            "airport": "Oldest Airport in India",
+            "iata": "",
+            "icao": "VAJJ",
+            "airporttype": "Domestic",
+            "airportstatus": "Non Operational",
+            "state": "Maharashtra",
+            "___id___": "1094"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Nagpur",
+            "airport": "Dr. Babasaheb Ambedkar International Airport",
+            "iata": "NAG",
+            "icao": "VANP",
+            "airporttype": "International",
+            "airportstatus": "Operational",
+            "state": "Maharashtra",
+            "___id___": "1095"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Nanded",
+            "airport": "Shri Guru Gobind Singh Ji Airport",
+            "iata": "NDC",
+            "icao": "VAND",
+            "airporttype": "Domestic",
+            "airportstatus": "Operational",
+            "state": "Maharashtra",
+            "___id___": "1096"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Nashik",
+            "airport": "Gandhinagar Airport",
+            "iata": "ISK",
+            "icao": "VANR",
+            "airporttype": "Defence",
+            "airportstatus": "\u2014",
+            "state": "Maharashtra",
+            "___id___": "1097"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Nashik International Airport - HAL",
+            "airport": "",
+            "iata": "ISK",
+            "icao": "VAOZ",
+            "airporttype": "International",
+            "airportstatus": "Operational",
+            "state": "Maharashtra",
+            "___id___": "1098"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Navi Mumbai",
+            "airport": "Navi Mumbai International Airport",
+            "iata": "\u2014",
+            "icao": "\u2014",
+            "airporttype": "International",
+            "airportstatus": "Under Construction",
+            "state": "Maharashtra",
+            "___id___": "1099"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Osmanabad",
+            "airport": "Osmanabad Airport",
+            "iata": "OMN",
+            "icao": "\u2014",
+            "airporttype": "Flying School",
+            "airportstatus": "\u2014",
+            "state": "Maharashtra",
+            "___id___": "1100"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Pune",
+            "airport": "Pune Airport",
+            "iata": "PNQ",
+            "icao": "VAPO",
+            "airporttype": "Customs",
+            "airportstatus": "Operational",
+            "state": "Maharashtra",
+            "___id___": "1101"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Hadapsar Airport",
+            "airport": "\u2014",
+            "iata": "\u2014",
+            "icao": "Flying School",
+            "airporttype": "\u2014",
+            "airportstatus": "DGCA",
+            "state": "Maharashtra",
+            "___id___": "1102"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "New Pune Airport",
+            "airport": "\u2014",
+            "iata": "\u2014",
+            "icao": "International",
+            "airporttype": "Under Construction",
+            "airportstatus": "Maharashtra",
+            "state": "",
+            "___id___": "1103"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Ratnagiri",
+            "airport": "Ratnagiri Airport",
+            "iata": "RTC",
+            "icao": "VARG",
+            "airporttype": "Defence",
+            "airportstatus": "\u2014",
+            "state": "Maharashtra",
+            "___id___": "1104"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Shirdi",
+            "airport": "Shirdi Airport",
+            "iata": "SAG",
+            "icao": "VASD",
+            "airporttype": "Domestic",
+            "airportstatus": "Operational",
+            "state": "Maharashtra",
+            "___id___": "1105"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Shirpur",
+            "airport": "Shirpur Airstrip",
+            "iata": "-",
+            "icao": "\u2014",
+            "airporttype": "Private",
+            "airportstatus": "\u2014",
+            "state": "Maharashtra",
+            "___id___": "1106"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Sindhudurg",
+            "airport": "Sindhudurg Airport",
+            "iata": "SDW",
+            "icao": "VOSR",
+            "airporttype": "Domestic",
+            "airportstatus": "Operational",
+            "state": "Maharashtra",
+            "___id___": "1107"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Solapur",
+            "airport": "Solapur Airport",
+            "iata": "SSE",
+            "icao": "VASL",
+            "airporttype": "Domestic",
+            "airportstatus": "Non Operational",
+            "state": "Maharashtra",
+            "___id___": "1108"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Yavatmal",
+            "airport": "Yavatmal Airport",
+            "iata": "\u2014",
+            "icao": "VA78",
+            "airporttype": "Domestic",
+            "airportstatus": "Non Operational",
+            "state": "Maharashtra",
+            "___id___": "1109"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Imphal",
+            "airport": "Imphal International Airport",
+            "iata": "IMF",
+            "icao": "VEIM",
+            "airporttype": "International",
+            "airportstatus": "Operational",
+            "state": "Manipur",
+            "___id___": "1110"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Shillong",
+            "airport": "Shillong Airport",
+            "iata": "SHL",
+            "icao": "VEBI",
+            "airporttype": "Domestic",
+            "airportstatus": "Operational",
+            "state": "Meghalaya",
+            "___id___": "1111"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Tura",
+            "airport": "Baljek Airport",
+            "iata": "\u2014",
+            "icao": "VETU",
+            "airporttype": "Domestic",
+            "airportstatus": "Non Operational",
+            "state": "Meghalaya",
+            "___id___": "1112"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Aizawl",
+            "airport": "Lengpui Airport",
+            "iata": "AJL",
+            "icao": "VELP",
+            "airporttype": "Domestic",
+            "airportstatus": "Operational",
+            "state": "Mizoram",
+            "___id___": "1113"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Dimapur",
+            "airport": "Dimapur Airport",
+            "iata": "DMU",
+            "icao": "VEMR",
+            "airporttype": "Domestic",
+            "airportstatus": "Operational",
+            "state": "Nagaland",
+            "___id___": "1114"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Kohima",
+            "airport": "Kohima Chiethu Airport",
+            "iata": "\u2014",
+            "icao": "\u2014",
+            "airporttype": "Domestic",
+            "airportstatus": "Under Construction",
+            "state": "Nagaland",
+            "___id___": "1115"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Angul",
+            "airport": "Savitri Jindal Airport",
+            "iata": "\u2014",
+            "icao": "VEAL",
+            "airporttype": "Private",
+            "airportstatus": "\u2014",
+            "state": "Odisha",
+            "___id___": "1116"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Barbil",
+            "airport": "Barbil Tonto Aerodrome",
+            "iata": "\u2014",
+            "icao": "VEBL",
+            "airporttype": "Private",
+            "airportstatus": "\u2014",
+            "state": "Odisha",
+            "___id___": "1117"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Bhawanipatna",
+            "airport": "Utkela Airport",
+            "iata": "\u2014",
+            "icao": "VEUK",
+            "airporttype": "Domestic",
+            "airportstatus": "Non Operational",
+            "state": "Odisha",
+            "___id___": "1118"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Bhubaneswar",
+            "airport": "Biju Patnaik International Airport",
+            "iata": "BBI",
+            "icao": "VEBS",
+            "airporttype": "International",
+            "airportstatus": "Operational",
+            "state": "Odisha",
+            "___id___": "1119"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Brahmapur",
+            "airport": "Rangeilunda Airport",
+            "iata": "QBM",
+            "icao": "VEBM",
+            "airporttype": "Domestic",
+            "airportstatus": "Commercial (Non-Scheduled)",
+            "state": "Odisha",
+            "___id___": "1120"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Cuttack",
+            "airport": "Charbatia Air Base",
+            "iata": "\u2014",
+            "icao": "\u2014",
+            "airporttype": "Defence",
+            "airportstatus": "Aviation Research Centre",
+            "state": "Odisha",
+            "___id___": "1121"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Dhamra",
+            "airport": "Dhamra Airport",
+            "iata": "\u2014",
+            "icao": "\u2014",
+            "airporttype": "Domestic",
+            "airportstatus": "Proposed",
+            "state": "Odisha",
+            "___id___": "1122"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Dhenkanal",
+            "airport": "Birasal Airstrip",
+            "iata": "\u2014",
+            "icao": "\u2014",
+            "airporttype": "Flying School",
+            "airportstatus": "\u2014",
+            "state": "Odisha",
+            "___id___": "1123"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Jeypore",
+            "airport": "Jeypore Airport",
+            "iata": "PYB",
+            "icao": "VEJP",
+            "airporttype": "Domestic",
+            "airportstatus": "Operational",
+            "state": "Odisha",
+            "___id___": "1124"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Jharsuguda",
+            "airport": "Veer Surendra Sai Airport",
+            "iata": "JRG",
+            "icao": "VEJH",
+            "airporttype": "Domestic",
+            "airportstatus": "Operational",
+            "state": "Odisha",
+            "___id___": "1125"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Lanjigarh",
+            "airport": "Lanjigarh Airstrip",
+            "iata": "\u2014",
+            "icao": "\u2014",
+            "airporttype": "Private",
+            "airportstatus": "\u2014",
+            "state": "Odisha",
+            "___id___": "1126"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Rourkela",
+            "airport": "Rourkela Airport",
+            "iata": "RRK",
+            "icao": "VERK",
+            "airporttype": "Domestic",
+            "airportstatus": "Operational",
+            "state": "Odisha",
+            "___id___": "1127"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Amritsar",
+            "airport": "Sri Guru Ram Dass Jee International Airport",
+            "iata": "ATQ",
+            "icao": "VIAR",
+            "airporttype": "International",
+            "airportstatus": "Operational",
+            "state": "Punjab",
+            "___id___": "1128"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Beas Airport",
+            "airport": "\u2014",
+            "iata": "VIBS",
+            "icao": "Private",
+            "airporttype": "\u2014",
+            "airportstatus": "Spectrum Aero",
+            "state": "Punjab",
+            "___id___": "1129"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Bathinda",
+            "airport": "Bathinda Airport",
+            "iata": "BUP",
+            "icao": "VIBT",
+            "airporttype": "Domestic (CE)",
+            "airportstatus": "Operational",
+            "state": "Punjab",
+            "___id___": "1130"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Jalandhar",
+            "airport": "Adampur Airport",
+            "iata": "AIP",
+            "icao": "VIAX",
+            "airporttype": "Domestic (CE)",
+            "airportstatus": "Operational",
+            "state": "Punjab",
+            "___id___": "1131"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Ludhiana",
+            "airport": "Ludhiana Airport",
+            "iata": "LUH",
+            "icao": "VILD",
+            "airporttype": "Domestic",
+            "airportstatus": "Operational",
+            "state": "Punjab",
+            "___id___": "1132"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Ludhiana",
+            "airport": "Ludhiana International Airport",
+            "iata": "-",
+            "icao": "VIHX",
+            "airporttype": "International",
+            "airportstatus": "Under Construction",
+            "state": "Punjab",
+            "___id___": "1133"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Pathankot",
+            "airport": "Pathankot Airport",
+            "iata": "IXP",
+            "icao": "VIPK",
+            "airporttype": "Domestic (CE)",
+            "airportstatus": "Operational",
+            "state": "Punjab",
+            "___id___": "1134"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Patiala",
+            "airport": "Patiala Airport",
+            "iata": "\u2014",
+            "icao": "VIPL",
+            "airporttype": "Flying School",
+            "airportstatus": "\u2014",
+            "state": "Punjab",
+            "___id___": "1135"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Chandigarh Capital Region",
+            "airport": "Shaheed Bhagat Singh International Airport",
+            "iata": "IXC",
+            "icao": "VIPL",
+            "airporttype": "Customs",
+            "airportstatus": "Operational",
+            "state": "Punjab",
+            "___id___": "1136"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Ajmer",
+            "airport": "Kishangarh Airport",
+            "iata": "KQH",
+            "icao": "VIKG",
+            "airporttype": "Domestic",
+            "airportstatus": "Operational",
+            "state": "Rajasthan",
+            "___id___": "1137"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Bikaner",
+            "airport": "Bikaner Airport",
+            "iata": "BKB",
+            "icao": "VIBK",
+            "airporttype": "Domestic (CE)",
+            "airportstatus": "Operational",
+            "state": "Rajasthan",
+            "___id___": "1138"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Jaipur",
+            "airport": "Jaipur International Airport",
+            "iata": "JAI",
+            "icao": "VIJP",
+            "airporttype": "International",
+            "airportstatus": "Operational",
+            "state": "Rajasthan",
+            "___id___": "1139"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Jaisalmer",
+            "airport": "Jaisalmer Airport",
+            "iata": "JSA",
+            "icao": "VIJR",
+            "airporttype": "Domestic (CE)",
+            "airportstatus": "Operational",
+            "state": "Rajasthan",
+            "___id___": "1140"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Jhalawar",
+            "airport": "Kolana Airport",
+            "iata": "\u2014",
+            "icao": "\u2014",
+            "airporttype": "Domestic",
+            "airportstatus": "Non Operational",
+            "state": "Rajasthan",
+            "___id___": "1141"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Jodhpur",
+            "airport": "Jodhpur Airport",
+            "iata": "JDH",
+            "icao": "VIJO",
+            "airporttype": "Domestic (CE)",
+            "airportstatus": "Operational",
+            "state": "Rajasthan",
+            "___id___": "1142"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Kota",
+            "airport": "Kota Airport",
+            "iata": "KTU",
+            "icao": "VIKO",
+            "airporttype": "Domestic",
+            "airportstatus": "Operational",
+            "state": "Rajasthan",
+            "___id___": "1143"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Sri Ganganagar",
+            "airport": "Lalgarh Airport",
+            "iata": "\u2014",
+            "icao": "",
+            "airporttype": "Domestic",
+            "airportstatus": "Non Operational",
+            "state": "Rajasthan",
+            "___id___": "1144"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Udaipur",
+            "airport": "Maharana Pratap Airport",
+            "iata": "UDR",
+            "icao": "VAUD",
+            "airporttype": "Domestic",
+            "airportstatus": "Operational",
+            "state": "Rajasthan",
+            "___id___": "1145"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Gangtok",
+            "airport": "Pakyong Airport",
+            "iata": "PYG",
+            "icao": "VEPY",
+            "airporttype": "Domestic",
+            "airportstatus": "Operational",
+            "state": "Sikkim",
+            "___id___": "1146"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Chennai",
+            "airport": "Chennai International Airport",
+            "iata": "MAA",
+            "icao": "VOMM",
+            "airporttype": "International",
+            "airportstatus": "Operational",
+            "state": "Tamil Nadu",
+            "___id___": "1147"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "New Chennai Greeenfield International Airport",
+            "airport": "Parandur",
+            "iata": "\u2014",
+            "icao": "\u2014",
+            "airporttype": "International",
+            "airportstatus": "Proposed",
+            "state": "Tamil Nadu",
+            "___id___": "1148"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Coimbatore",
+            "airport": "Coimbatore International Airport",
+            "iata": "CJB",
+            "icao": "VOCB",
+            "airporttype": "International",
+            "airportstatus": "Operational",
+            "state": "Tamil Nadu",
+            "___id___": "1149"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Madurai",
+            "airport": "Madurai Airport",
+            "iata": "IXM",
+            "icao": "VOMD",
+            "airporttype": "Customs",
+            "airportstatus": "Operational",
+            "state": "Tamil Nadu",
+            "___id___": "1150"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Neyveli",
+            "airport": "Neyveli Airport",
+            "iata": "NVY",
+            "icao": "VONY",
+            "airporttype": "Domestic",
+            "airportstatus": "Non Operational",
+            "state": "Tamil Nadu",
+            "___id___": "1151"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Salem",
+            "airport": "Salem Airport",
+            "iata": "SXV",
+            "icao": "VOSM",
+            "airporttype": "Domestic",
+            "airportstatus": "Non Operational",
+            "state": "Tamil Nadu",
+            "___id___": "1152"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Thoothukkudi",
+            "airport": "Tuticorin Airport",
+            "iata": "TCR",
+            "icao": "VOTK",
+            "airporttype": "Domestic",
+            "airportstatus": "Operational",
+            "state": "Tamil Nadu",
+            "___id___": "1153"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Tiruchirappalli",
+            "airport": "Tiruchirappalli International Airport",
+            "iata": "TRZ",
+            "icao": "VOTR",
+            "airporttype": "International",
+            "airportstatus": "Operational",
+            "state": "Tamil Nadu",
+            "___id___": "1154"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Vellore",
+            "airport": "Vellore Airport",
+            "iata": "\u2014",
+            "icao": "VOVR",
+            "airporttype": "Domestic",
+            "airportstatus": "Non Operational",
+            "state": "Tamil Nadu",
+            "___id___": "1155"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Hyderabad",
+            "airport": "Rajiv Gandhi International Airport",
+            "iata": "HYD",
+            "icao": "VOHS",
+            "airporttype": "International",
+            "airportstatus": "Operational",
+            "state": "Telangana",
+            "___id___": "1156"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Begumpet",
+            "airport": "Begumpet Airport",
+            "iata": "BPM",
+            "icao": "VOHY",
+            "airporttype": "Flying School",
+            "airportstatus": "\u2014",
+            "state": "Telangana",
+            "___id___": "1157"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Nadirgul",
+            "airport": "Nadirgul Airfield",
+            "iata": "\u2014",
+            "icao": "\u2014",
+            "airporttype": "Flying School",
+            "airportstatus": "\u2014",
+            "state": "Telangana",
+            "___id___": "1158"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Kothagudem",
+            "airport": "Kothagudem Airport",
+            "iata": "\u2014",
+            "icao": "\u2014",
+            "airporttype": "Domestic",
+            "airportstatus": "Proposed",
+            "state": "Telangana",
+            "___id___": "1159"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Nizamabad",
+            "airport": "Nizamabad Airport",
+            "iata": "\u2014",
+            "icao": "\u2014",
+            "airporttype": "Domestic",
+            "airportstatus": "Proposed",
+            "state": "Telangana",
+            "___id___": "1160"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Ramagundam",
+            "airport": "Ramagundam Airport",
+            "iata": "\u2014",
+            "icao": "\u2014",
+            "airporttype": "Domestic",
+            "airportstatus": "Proposed",
+            "state": "Telangana",
+            "___id___": "1161"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Warangal",
+            "airport": "Warangal Airport",
+            "iata": "WGC",
+            "icao": "VOWA",
+            "airporttype": "Domestic",
+            "airportstatus": "Proposed",
+            "state": "Telangana",
+            "___id___": "1162"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Agartala",
+            "airport": "Maharaja Bir Bikram Airport",
+            "iata": "IXA",
+            "icao": "VEAT",
+            "airporttype": "Domestic",
+            "airportstatus": "Operational",
+            "state": "Tripura",
+            "___id___": "1163"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Agra",
+            "airport": "Agra Airport",
+            "iata": "AGR",
+            "icao": "VIAG",
+            "airporttype": "Domestic (CE)",
+            "airportstatus": "Operational",
+            "state": "Uttar Pradesh",
+            "___id___": "1164"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Aligarh",
+            "airport": "Aligarh Airport",
+            "iata": "\u2014",
+            "icao": "\u2014",
+            "airporttype": "Domestic",
+            "airportstatus": "Proposed",
+            "state": "Uttar Pradesh",
+            "___id___": "1165"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Ayodhya",
+            "airport": "Maryada Purushottam Shri Ram International Airport",
+            "iata": "\u2014",
+            "icao": "\u2014",
+            "airporttype": "International",
+            "airportstatus": "Under Construction",
+            "state": "Uttar Pradesh",
+            "___id___": "1166"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Azamgarh",
+            "airport": "Azamgarh Airport",
+            "iata": "\u2014",
+            "icao": "\u2014",
+            "airporttype": "Domestic",
+            "airportstatus": "Proposed",
+            "state": "Uttar Pradesh",
+            "___id___": "1167"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Bareilly",
+            "airport": "Bareilly Airport",
+            "iata": "BEK",
+            "icao": "VIBY",
+            "airporttype": "Domestic (CE)",
+            "airportstatus": "Operational",
+            "state": "Uttar Pradesh",
+            "___id___": "1168"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Chitrakoot",
+            "airport": "Chitrakoot Airport",
+            "iata": "\u2014",
+            "icao": "\u2014",
+            "airporttype": "Domestic",
+            "airportstatus": "Proposed",
+            "state": "Uttar Pradesh",
+            "___id___": "1169"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Ghaziabad",
+            "airport": "Hindon Airport",
+            "iata": "QAH",
+            "icao": "VIDX",
+            "airporttype": "Domestic (CE)",
+            "airportstatus": "Operational",
+            "state": "Uttar Pradesh",
+            "___id___": "1170"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Gorakhpur",
+            "airport": "Gorakhpur Airport",
+            "iata": "GOP",
+            "icao": "VEGK",
+            "airporttype": "Domestic (CE)",
+            "airportstatus": "Operational",
+            "state": "Uttar Pradesh",
+            "___id___": "1171"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Jhansi",
+            "airport": "Jhansi Airport",
+            "iata": "\u2014",
+            "icao": "\u2014",
+            "airporttype": "Domestic",
+            "airportstatus": "Proposed",
+            "state": "Uttar Pradesh",
+            "___id___": "1172"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Kanpur",
+            "airport": "Flight Laboratory",
+            "iata": "\u2014",
+            "icao": "VICX",
+            "airporttype": "Flying School",
+            "airportstatus": "\u2014",
+            "state": "Uttar Pradesh",
+            "___id___": "1173"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Kanpur Airport",
+            "airport": "Kanpur Airport",
+            "iata": "KNU",
+            "icao": "VICX",
+            "airporttype": "Domestic (CE)",
+            "airportstatus": "Operational",
+            "state": "Uttar Pradesh",
+            "___id___": "1174"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Kushinagar",
+            "airport": "Kushinagar International Airport",
+            "iata": "KBK",
+            "icao": "VEKI",
+            "airporttype": "International",
+            "airportstatus": "Operational",
+            "state": "Uttar Pradesh",
+            "___id___": "1175"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Lalitpur",
+            "airport": "Lalitpur Airport",
+            "iata": "\u2014",
+            "icao": "\u2014",
+            "airporttype": "Domestic",
+            "airportstatus": "Proposed",
+            "state": "Uttar Pradesh",
+            "___id___": "1176"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Lucknow",
+            "airport": "Chaudhary Charan Singh International Airport",
+            "iata": "LKO",
+            "icao": "VILK",
+            "airporttype": "International",
+            "airportstatus": "Operational",
+            "state": "Uttar Pradesh",
+            "___id___": "1177"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Moradabad",
+            "airport": "Moradabad Airport",
+            "iata": "\u2014",
+            "icao": "\u2014",
+            "airporttype": "Domestic",
+            "airportstatus": "Proposed",
+            "state": "Uttar Pradesh",
+            "___id___": "1178"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Noida",
+            "airport": "Noida International Airport",
+            "iata": "\u2014",
+            "icao": "\u2014",
+            "airporttype": "International",
+            "airportstatus": "Under Construction",
+            "state": "Uttar Pradesh",
+            "___id___": "1179"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Prayagraj",
+            "airport": "Prayagraj Airport",
+            "iata": "IXD",
+            "icao": "VEAB",
+            "airporttype": "Domestic (CE)",
+            "airportstatus": "Operational",
+            "state": "Uttar Pradesh",
+            "___id___": "1180"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Raebareli",
+            "airport": "Fursatganj Airfield",
+            "iata": "\u2014",
+            "icao": "VERB",
+            "airporttype": "Flying School",
+            "airportstatus": "\u2014",
+            "state": "Uttar Pradesh",
+            "___id___": "1181"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Shravasti",
+            "airport": "Shravasti Airport",
+            "iata": "\u2014",
+            "icao": "\u2014",
+            "airporttype": "Domestic",
+            "airportstatus": "Proposed",
+            "state": "Uttar Pradesh",
+            "___id___": "1182"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Sonbhadra",
+            "airport": "Muirpur Airport",
+            "iata": "\u2014",
+            "icao": "VI1D",
+            "airporttype": "Domestic",
+            "airportstatus": "Proposed",
+            "state": "Uttar Pradesh",
+            "___id___": "1183"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Varanasi",
+            "airport": "Lal Bahadur Shastri International Airport",
+            "iata": "VNS",
+            "icao": "VEBN",
+            "airporttype": "International",
+            "airportstatus": "Operational",
+            "state": "Uttar Pradesh",
+            "___id___": "1184"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Almora",
+            "airport": "Chaukhutia Airport",
+            "iata": "\u2014",
+            "icao": "\u2014",
+            "airporttype": "Domestic",
+            "airportstatus": "Proposed",
+            "state": "Uttarakhand",
+            "___id___": "1185"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Dehradun",
+            "airport": "Dehradun Airport",
+            "iata": "DED",
+            "icao": "VIDN",
+            "airporttype": "Domestic",
+            "airportstatus": "Operational",
+            "state": "Uttarakhand",
+            "___id___": "1186"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Pantnagar",
+            "airport": "Pantnagar Airport",
+            "iata": "PGH",
+            "icao": "VIPT",
+            "airporttype": "Domestic",
+            "airportstatus": "Operational",
+            "state": "Uttarakhand",
+            "___id___": "1187"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Pithoragarh",
+            "airport": "Pithoragarh Airport",
+            "iata": "NNS",
+            "icao": "VIDF",
+            "airporttype": "Domestic",
+            "airportstatus": "Operational",
+            "state": "Uttarakhand",
+            "___id___": "1188"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Uttarkashi",
+            "airport": "Chinyalisaur Airport",
+            "iata": "\u2014",
+            "icao": "VI82",
+            "airporttype": "Domestic",
+            "airportstatus": "Non Operational",
+            "state": "Uttarakhand",
+            "___id___": "1189"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Asansol",
+            "airport": "Burnpur Airport",
+            "iata": "\u2014",
+            "icao": "VE23",
+            "airporttype": "Domestic",
+            "airportstatus": "Non Operational",
+            "state": "West Bengal",
+            "___id___": "1190"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Balurghat",
+            "airport": "Balurghat Airport",
+            "iata": "RGH",
+            "icao": "VEBG",
+            "airporttype": "Domestic",
+            "airportstatus": "Non Operational",
+            "state": "West Bengal",
+            "___id___": "1191"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Cooch Behar",
+            "airport": "Cooch Behar Airport",
+            "iata": "COH",
+            "icao": "VECO",
+            "airporttype": "Domestic",
+            "airportstatus": "Operational",
+            "state": "West Bengal",
+            "___id___": "1192"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Durgapur",
+            "airport": "Kazi Nazrul Islam Airport",
+            "iata": "RDP",
+            "icao": "VEDG",
+            "airporttype": "Domestic",
+            "airportstatus": "Operational",
+            "state": "West Bengal",
+            "___id___": "1193"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Kolkata",
+            "airport": "Behala Airport",
+            "iata": "\u2014",
+            "icao": "VEBA",
+            "airporttype": "Flying School",
+            "airportstatus": "\u2014",
+            "state": "West Bengal",
+            "___id___": "1194"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Netaji Subhas Chandra Bose International Airport",
+            "airport": "CCU",
+            "iata": "\u2014",
+            "icao": "VECC",
+            "airporttype": "International",
+            "airportstatus": "Operational",
+            "state": "West Bengal",
+            "___id___": "1195"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Malda",
+            "airport": "Malda Airport",
+            "iata": "LDA",
+            "icao": "VEMH",
+            "airporttype": "Domestic",
+            "airportstatus": "Non Operational",
+            "state": "West Bengal",
+            "___id___": "1196"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Siliguri",
+            "airport": "Bagdogra International Airport",
+            "iata": "IXB",
+            "icao": "VEBD",
+            "airporttype": "Customs",
+            "airportstatus": "Operational",
+            "state": "West Bengal",
+            "___id___": "1197"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Campbell Bay",
+            "airport": "INS Baaz",
+            "iata": "\u2014",
+            "icao": "VOBX",
+            "airporttype": "Defence",
+            "airportstatus": "\u2014",
+            "state": "Andaman and Nicobar Islands",
+            "___id___": "1198"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Car Nicobar",
+            "airport": "Car Nicobar Air Force Base",
+            "iata": "CBD",
+            "icao": "VOCX",
+            "airporttype": "Defence",
+            "airportstatus": "\u2014",
+            "state": "Andaman and Nicobar Islands",
+            "___id___": "1199"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Diglipur",
+            "airport": "INS Kohassa",
+            "iata": "IN-0053",
+            "icao": "VODX",
+            "airporttype": "Defence",
+            "airportstatus": "\u2014",
+            "state": "Andaman and Nicobar Islands",
+            "___id___": "1200"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Port Blair",
+            "airport": "Veer Savarkar International Airport",
+            "iata": "IXZ",
+            "icao": "VOPB",
+            "airporttype": "International (CE)",
+            "airportstatus": "Operational",
+            "state": "Andaman and Nicobar Islands",
+            "___id___": "1201"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Chandigarh Capital Region",
+            "airport": "Shaheed Bhagat Singh International Airport",
+            "iata": "IXC",
+            "icao": "VICG",
+            "airporttype": "Customs",
+            "airportstatus": "Operational",
+            "state": "Chandigarh",
+            "___id___": "1202"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Daman",
+            "airport": "Daman Airport",
+            "iata": "NMB",
+            "icao": "VADN",
+            "airporttype": "Defence",
+            "airportstatus": "\u2014",
+            "state": "Daman and Diu",
+            "___id___": "1203"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Diu",
+            "airport": "Diu Airport",
+            "iata": "DIU",
+            "icao": "VADU",
+            "airporttype": "Domestic",
+            "airportstatus": "Operational",
+            "state": "Daman and Diu",
+            "___id___": "1204"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "National Capital Region - New Delhi",
+            "airport": "Indira Gandhi International Airport",
+            "iata": "DEL",
+            "icao": "VIDP",
+            "airporttype": "International",
+            "airportstatus": "Operational",
+            "state": "Delhi",
+            "___id___": "1205"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Safdarjung Airport",
+            "airport": "VIDD",
+            "iata": "\u2014",
+            "icao": "\u2014",
+            "airporttype": "Domestic",
+            "airportstatus": "Non Operational",
+            "state": "Delhi",
+            "___id___": "1206"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Jammu",
+            "airport": "Jammu Airport",
+            "iata": "IXJ",
+            "icao": "VIJU",
+            "airporttype": "Domestic (CE)",
+            "airportstatus": "Operational",
+            "state": "Jammu and Kashmir",
+            "___id___": "1207"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Kishtwar",
+            "airport": "Kishtwar Airstrip",
+            "iata": "\u2014",
+            "icao": "\u2014",
+            "airporttype": "Domestic",
+            "airportstatus": "Proposed",
+            "state": "Jammu and Kashmir",
+            "___id___": "1208"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Srinagar",
+            "airport": "Sheikh ul-Alam International Airport",
+            "iata": "SXR",
+            "icao": "VISR",
+            "airporttype": "International (CE)",
+            "airportstatus": "Operational",
+            "state": "Jammu and Kashmir",
+            "___id___": "1209"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Kargil",
+            "airport": "Kargil Airport",
+            "iata": "\u2014",
+            "icao": "VI65",
+            "airporttype": "Domestic (CE)",
+            "airportstatus": "Non Operational",
+            "state": "Ladakh",
+            "___id___": "1210"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Leh",
+            "airport": "Kushok Bakula Rimpochee Airport",
+            "iata": "IXL",
+            "icao": "VILH",
+            "airporttype": "Domestic (CE)",
+            "airportstatus": "Operational",
+            "state": "Ladakh",
+            "___id___": "1211"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Agatti Island",
+            "airport": "Agatti Airport",
+            "iata": "AGX",
+            "icao": "VOAT",
+            "airporttype": "Domestic",
+            "airportstatus": "Operational",
+            "state": "Lakshadweep",
+            "___id___": "1212"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Karaikal",
+            "airport": "Karaikal Airport",
+            "iata": "\u2014",
+            "icao": "\u2014",
+            "airporttype": "Domestic",
+            "airportstatus": "Proposed",
+            "state": "Puducherry",
+            "___id___": "1213"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Pondicherry",
+            "airport": "Pondicherry Airport",
+            "iata": "PNY",
+            "icao": "VOPC",
+            "airporttype": "Domestic",
+            "airportstatus": "Operational",
+            "state": "Pondicherry",
+            "___id___": "1214"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Muzaffarabad",
+            "airport": "Muzaffarabad Airport",
+            "iata": "MFG",
+            "icao": "\u2014",
+            "airporttype": "\u2014",
+            "airportstatus": "-",
+            "state": "\u2014",
+            "___id___": "1215"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Rawalakot",
+            "airport": "Rawalakot Airport",
+            "iata": "RAZ",
+            "icao": "\u2014",
+            "airporttype": "\u2014",
+            "airportstatus": "-",
+            "state": "\u2014",
+            "___id___": "1216"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Skardu",
+            "airport": "Skardu International Airport",
+            "iata": "KDU",
+            "icao": "\u2014",
+            "airporttype": "\u2014",
+            "airportstatus": "-",
+            "state": "\u2014",
+            "___id___": "1217"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Chilas",
+            "airport": "Chilas Airport",
+            "iata": "CHB",
+            "icao": "\u2014",
+            "airporttype": "\u2014",
+            "airportstatus": "-",
+            "state": "\u2014",
+            "___id___": "1218"
+        }
+    },
+    {
+        
+        "value": {
+            "location": "Gilgit",
+            "airport": "Gilgit Airport",
+            "iata": "GIL",
+            "icao": "\u2014",
+            "airporttype": "\u2014",
+            "airportstatus": "-",
+            "state": "\u2014",
+            "___id___": "1219"
+        }
+    }
+]

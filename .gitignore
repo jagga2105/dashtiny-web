@@ -1,8 +1,16 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+# ==============================================================================
+# DashTiny — Unified Fullstack .gitignore (Next.js + Python FastAPI)
+# ==============================================================================
 
-# dependencies
+# --- Node / Next.js Dependencies & Artifacts ---
+node_modules/
 /node_modules
-/.pnp
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+lerna-debug.log*
+.pnp
 .pnp.*
 .yarn/*
 !.yarn/patches
@@ -10,32 +18,155 @@
 !.yarn/releases
 !.yarn/versions
 
-# testing
-/coverage
-
-# next.js
+# Next.js Build Outputs
+.next/
 /.next/
+out/
 /out/
-
-# production
+build/
 /build
+dist/
 
-# misc
-.DS_Store
-*.pem
-
-# debug
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-.pnpm-debug.log*
-
-# env files (can opt-in for committing if needed)
-.env*
-
-# vercel
-.vercel
-
-# typescript
+# TypeScript
 *.tsbuildinfo
 next-env.d.ts
+
+# Testing & Coverage
+coverage/
+/coverage
+*.lcov
+.nyc_output
+
+# Vercel
+.vercel
+
+# --- Python & FastAPI Backend ---
+# Virtual Environments
+venv/
+*/venv/
+backend/venv/
+.venv/
+*/.venv/
+env/
+*/env/
+ENV/
+env.bak/
+venv.bak/
+
+# Byte-compiled / optimized files
+__pycache__/
+*/__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Python distribution / packaging
+develop-eggs/
+downloads/
+eggs/
+.eggs/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Python unit test / coverage
+.pytest_cache/
+*/.pytest_cache/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+
+# Type checking / Linting
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+.pytype/
+.ruff_cache/
+
+# Databases & local stores
+*.sqlite
+*.sqlite3
+*.db
+*.db-journal
+*.db-wal
+
+# Celery / Redis local dumps
+celerybeat-schedule
+celerybeat.pid
+dump.rdb
+
+# --- Environment & Secret Files ---
+.env
+.env.*
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+backend/.env
+backend/.env.local
+*.pem
+*.key
+*.crt
+*.pfx
+*.p12
+
+# --- Operating System & Editor Files ---
+# macOS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+[Dd]esktop.ini
+
+# Linux
+*~
+
+# IDEs & Editors
+.idea/
+*.swp
+*.swo
+*~
+*.sublime-project
+*.sublime-workspace
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# Logs
+logs/
+*.log
+
+# Temporary / Scratch files
+tmp/
+temp/
+scratch/
+
+# AI Agent tooling & local workspaces
+.agents/
+.gemini/
+.claude/
+.cursor/
+
