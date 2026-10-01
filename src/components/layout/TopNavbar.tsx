@@ -23,11 +23,13 @@ export function TopNavbar() {
   const pathname = usePathname();
   const { user, logout, initializeAuth } = useAuthStore();
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const coins = user?.coins ?? 250;
   const userName = user?.full_name || 'Explorer';
 
   useEffect(() => {
+    setMounted(true);
     initializeAuth();
   }, [initializeAuth]);
 
@@ -90,8 +92,10 @@ export function TopNavbar() {
         </nav>
 
         {/* Right side — Contextual user profile */}
-        <div className="flex items-center gap-3">
-          {user ? (
+        <div className="flex items-center gap-3 min-w-[70px] justify-end">
+          {!mounted ? (
+            <div className="w-18 h-8 rounded-xl bg-slate-100/60 animate-pulse" />
+          ) : user ? (
             <div className="relative" ref={menuRef}>
               <button
                 onClick={() => setShowUserMenu(!showUserMenu)}
