@@ -575,7 +575,9 @@ def get_llm_client() -> Optional[Tuple[OpenAI, str]]:
     """
     if getattr(settings, "GEMINI_API_KEY", None):
         base_url = getattr(settings, "LLM_BASE_URL", None) or "https://generativelanguage.googleapis.com/v1beta/openai/"
-        model = getattr(settings, "LLM_MODEL", None) or "gemini-1.5-flash"
+        model = getattr(settings, "LLM_MODEL", None) or "gemini-3.5-flash"
+        if model in ["gemini-1.5-flash", "gemini-2.5-flash"]:
+            model = "gemini-3.5-flash"
         return OpenAI(api_key=settings.GEMINI_API_KEY, base_url=base_url), model
 
     if getattr(settings, "GROQ_API_KEY", None):
@@ -658,15 +660,35 @@ def generate_llm_plan(
         f"Generate a structured {days_count}-day itinerary."
     )
 
-    response = client.chat.completions.create(
-        model=model,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt}
-        ],
-        response_format={"type": "json_object"},
-        temperature=0.7
-    )
+    candidate_models = [model]
+    if "gemini" in model.lower():
+        for alt in ["gemini-3.5-flash", "gemini-3.8-flash", "gemini-flash-latest"]:
+            if alt not in candidate_models:
+                candidate_models.append(alt)
+
+    response = None
+    last_err = None
+    used_model = model
+
+    for m in candidate_models:
+        try:
+            response = client.chat.completions.create(
+                model=m,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                response_format={"type": "json_object"},
+                temperature=0.7
+            )
+            used_model = m
+            break
+        except Exception as e:
+            last_err = e
+            continue
+
+    if response is None:
+        raise last_err or RuntimeError("Failed to generate plan with LLM")
 
     raw_text = response.choices[0].message.content
     parsed_json = json.loads(raw_text)
@@ -675,7 +697,7 @@ def generate_llm_plan(
 
     plan = AIItineraryRaw.model_validate(parsed_json)
     tokens_used = response.usage.total_tokens if response.usage else 0
-    return plan, tokens_used
+    return plan, used_model, tokens_used
 
 def validate_plan_constraints(
     raw_plan: AIItineraryRaw,
@@ -876,7 +898,7 @@ def build_itinerary_with_planner_agent(
     if llm_tuple is not None:
         client, model_name = llm_tuple
         try:
-            raw_ai_plan, ai_tokens = generate_llm_plan(
+            raw_ai_plan, active_model, ai_tokens = generate_llm_plan(
                 destination=clean_dest,
                 days_count=clean_days,
                 total_budget=clean_budget,
@@ -903,7 +925,7 @@ def build_itinerary_with_planner_agent(
                     origin=origin,
                     travellers=clean_travellers
                 )
-                used_model = model_name
+                used_model = active_model
                 tokens_used = ai_tokens
                 logger.info(f"Generated AI itinerary via {used_model} ({tokens_used} tokens)")
         except Exception as e:

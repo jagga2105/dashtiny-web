@@ -31,6 +31,17 @@ def setup_test_db():
     yield
     Base.metadata.drop_all(bind=engine)
 
+@pytest.fixture(autouse=True)
+def isolate_test_environment(monkeypatch):
+    """
+    Ensures unit tests run deterministically without consuming live external API quotas
+    unless explicitly mocked or enabled by a test.
+    """
+    from app.config import settings
+    monkeypatch.setattr(settings, "GEMINI_API_KEY", None)
+    monkeypatch.setattr(settings, "GROQ_API_KEY", None)
+    monkeypatch.setattr(settings, "OPENAI_API_KEY", None)
+
 @pytest.fixture
 def db_session():
     connection = engine.connect()
