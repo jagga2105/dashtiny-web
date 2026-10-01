@@ -37,6 +37,7 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: Optional[str] = None
     LLM_PROVIDER: str = "gemini"  # gemini, groq, ollama, openai
     LLM_MODEL: str = "gemini-3.5-flash"
+    LLM_FALLBACK_MODEL: Optional[str] = "gemini-3.8-flash"
     LLM_BASE_URL: Optional[str] = None
 
 settings = Settings()

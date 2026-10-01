@@ -350,10 +350,15 @@ def test_daina_ai_planning_pipeline_and_observability(client, db_session, monkey
     assert data["days"][0]["title"] == "Arrival & Historic Temple Discovery"
     assert data["days"][1]["title"] == "Bamboo Groves & Artisan Heritage"
 
-    # 2. Tool verification layer verified spatial geocoding & labeled estimates
+    # 2. Tool verification layer verified spatial geocoding & separated source provenance
     d1_act0 = data["days"][0]["activities"][0]
     assert d1_act0["lat"] is not None  # Kyoto coordinates resolved
-    assert d1_act0["provenance"] in ["CURATED", "PROVIDER_VERIFIED"]
+    assert d1_act0["provenance"] == "AI_GENERATED"
+    assert d1_act0["generationSource"] == "AI_GENERATED"
+    assert d1_act0["locationSource"] in ["CURATED", "PROVIDER_VERIFIED"]
+    assert d1_act0["contentSource"] == "AI"
+    assert d1_act0["costType"] == "ESTIMATED_ALLOCATION"
+    assert d1_act0["estimatedAllocation"] > 0
     assert "(Estimated)" in d1_act0["estimatedTransit"]
     assert "(Estimated)" in d1_act0["crowdWarning"]
 
@@ -399,3 +404,86 @@ def test_daina_ai_planning_graceful_fallback_on_error(client, db_session, monkey
     assert ai_run is not None
     assert ai_run.model == "deterministic-planner-v1"
     assert ai_run.tokens_used == 0
+
+def test_provider_selection_strictly_respects_llm_provider(monkeypatch):
+    """
+    Test that get_llm_client() strictly respects LLM_PROVIDER setting.
+    If LLM_PROVIDER='ollama', it must NOT select Gemini even if GEMINI_API_KEY is configured.
+    """
+    import app.ai.agents.planner_agent as pa
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "LLM_PROVIDER", "ollama")
+    monkeypatch.setattr(settings, "LLM_BASE_URL", "http://localhost:11434/v1")
+    monkeypatch.setattr(settings, "GEMINI_API_KEY", "dummy-gemini-key")
+    monkeypatch.setattr(settings, "GROQ_API_KEY", "dummy-groq-key")
+
+    client, model = pa.get_llm_client()
+    assert model == "llama3.2"
+    assert "11434" in str(client.base_url)
+
+def test_destination_boundary_enforcement_in_spatial_verification():
+    """
+    Test that geographic boundary verification rejects landmarks that do not belong to target destination.
+    Eiffel Tower (Paris) proposed for Kyoto MUST be rejected as UNRESOLVED with lat/lng=None.
+    """
+    from app.ai.tools.maps import get_coordinates
+
+    # 1. Out-of-bounds mismatch: Eiffel Tower when destination is Kyoto
+    mismatch_geo = get_coordinates("Eiffel Tower", target_destination="Kyoto")
+    assert mismatch_geo["found"] is False
+    assert mismatch_geo["lat"] is None
+    assert mismatch_geo["lng"] is None
+    assert mismatch_geo["location_source"] == "UNRESOLVED"
+    assert mismatch_geo.get("mismatch") is True
+
+    # 2. In-bounds valid spot: Arashiyama when destination is Kyoto
+    valid_geo = get_coordinates("Arashiyama Bamboo Grove", target_destination="Kyoto")
+    assert valid_geo["found"] is True
+    assert valid_geo["lat"] is not None
+    assert valid_geo["location_source"] == "CURATED"
+
+def test_strict_constraint_validator():
+    """
+    Test that validate_plan_constraints strictly requires sequential day numbers 1..N
+    and enforces exactly 3 activities per day.
+    """
+    from app.ai.agents.planner_agent import validate_plan_constraints, AIItineraryRaw, AIDayRaw, AIActivityRaw
+
+    # Day count too low -> raises ValueError
+    insufficient_days = AIItineraryRaw(
+        title="Test",
+        days=[
+            AIDayRaw(
+                day_number=1,
+                title="Day 1",
+                activities=[
+                    AIActivityRaw(time_slot="09:00 AM", description="A1", location="Kyoto"),
+                    AIActivityRaw(time_slot="01:00 PM", description="A2", location="Kyoto")
+                ]
+            )
+        ]
+    )
+    with pytest.raises(ValueError, match="expected 2"):
+        validate_plan_constraints(insufficient_days, expected_days=2)
+
+    # Valid plan with 4 activities per day -> truncated strictly to 3 activities
+    plan_with_4 = AIItineraryRaw(
+        title="Test",
+        days=[
+            AIDayRaw(
+                day_number=1,
+                title="Day 1",
+                activities=[
+                    AIActivityRaw(time_slot="09:00 AM", description="A1", location="Kyoto"),
+                    AIActivityRaw(time_slot="01:00 PM", description="A2", location="Kyoto"),
+                    AIActivityRaw(time_slot="04:00 PM", description="A3", location="Kyoto"),
+                    AIActivityRaw(time_slot="07:00 PM", description="A4", location="Kyoto")
+                ]
+            )
+        ]
+    )
+    validated = validate_plan_constraints(plan_with_4, expected_days=1)
+    assert len(validated.days) == 1
+    assert len(validated.days[0].activities) == 3
+

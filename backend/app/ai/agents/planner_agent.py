@@ -31,7 +31,7 @@ class AIActivityRaw(BaseModel):
     description: str
     location: str
     place_type: str = "TA"  # H = Hotel, R = Restaurant, TA = Tour/Activity
-    why_recommended: str
+    why_recommended: str = ""
 
 class AIDayRaw(BaseModel):
     day_number: int
@@ -53,6 +53,9 @@ class ActivityItem(BaseModel):
     lat: Optional[float] = None
     lng: Optional[float] = None
     provenance: str = "DETERMINISTIC"
+    generation_source: str = "DETERMINISTIC"  # AI_GENERATED, CURATED, USER_GENERATED, DETERMINISTIC
+    location_source: str = "UNRESOLVED"      # PROVIDER_VERIFIED, CURATED, UNRESOLVED
+    content_source: str = "CURATED"          # PROVIDER, RAG, AI, USER, CURATED
     why_recommended: Optional[str] = None
 
 class DayPlan(BaseModel):
@@ -320,6 +323,7 @@ def generate_algorithmic_plan(
             morn_lat = hotel_lat
             morn_lng = hotel_lng
             morn_prov = hotel_prov
+            morn_loc_source = "PROVIDER_VERIFIED" if hotel_lat is not None else "UNRESOLVED"
 
             # Midday Culinary Activity (Day 1)
             if has_seafood:
@@ -441,10 +445,11 @@ def generate_algorithmic_plan(
                 checkin_transit = "⏱️ 15m walk (Estimated)"
                 why_checkin = "Morning exploration through curated local landmarks."
 
-            morn_geo = get_coordinates(morn_loc)
+            morn_geo = get_coordinates(morn_loc, target_destination=clean_dest)
             morn_lat = morn_geo["lat"] if morn_geo.get("found") else None
             morn_lng = morn_geo["lng"] if morn_geo.get("found") else None
             morn_prov = morn_geo.get("provenance", "CURATED") if morn_geo.get("found") else "CURATED_UNRESOLVED"
+            morn_loc_source = morn_geo.get("location_source", "CURATED") if morn_geo.get("found") else "UNRESOLVED"
 
             # Midday Culinary (Day 2+)
             if has_seafood:
@@ -500,15 +505,17 @@ def generate_algorithmic_plan(
                 why_eve = f"Curated viewpoint for sunset views over {clean_dest}."
 
         # Geocode activities via genuine spatial registry (NO fabricated offsets)
-        lunch_geo = get_coordinates(lunch_loc)
+        lunch_geo = get_coordinates(lunch_loc, target_destination=clean_dest)
         lunch_lat = lunch_geo["lat"] if lunch_geo.get("found") else None
         lunch_lng = lunch_geo["lng"] if lunch_geo.get("found") else None
         lunch_prov = lunch_geo.get("provenance", "CURATED") if lunch_geo.get("found") else "CURATED_UNRESOLVED"
+        lunch_loc_source = lunch_geo.get("location_source", "CURATED") if lunch_geo.get("found") else "UNRESOLVED"
 
-        evening_geo = get_coordinates(eve_loc)
+        evening_geo = get_coordinates(eve_loc, target_destination=clean_dest)
         evening_lat = evening_geo["lat"] if evening_geo.get("found") else None
         evening_lng = evening_geo["lng"] if evening_geo.get("found") else None
         evening_prov = evening_geo.get("provenance", "CURATED") if evening_geo.get("found") else "CURATED_UNRESOLVED"
+        evening_loc_source = evening_geo.get("location_source", "CURATED") if evening_geo.get("found") else "UNRESOLVED"
 
         activities: List[ActivityItem] = [
             ActivityItem(
@@ -522,6 +529,9 @@ def generate_algorithmic_plan(
                 lat=morn_lat,
                 lng=morn_lng,
                 provenance=morn_prov,
+                generation_source="DETERMINISTIC",
+                location_source=morn_loc_source,
+                content_source="CURATED",
                 why_recommended=why_checkin
             ),
             ActivityItem(
@@ -535,6 +545,9 @@ def generate_algorithmic_plan(
                 lat=lunch_lat,
                 lng=lunch_lng,
                 provenance=lunch_prov,
+                generation_source="DETERMINISTIC",
+                location_source=lunch_loc_source,
+                content_source="CURATED",
                 why_recommended=why_lunch
             ),
             ActivityItem(
@@ -548,6 +561,9 @@ def generate_algorithmic_plan(
                 lat=evening_lat,
                 lng=evening_lng,
                 provenance=evening_prov,
+                generation_source="DETERMINISTIC",
+                location_source=evening_loc_source,
+                content_source="CURATED",
                 why_recommended=why_eve
             )
         ]
@@ -566,33 +582,47 @@ def generate_algorithmic_plan(
 
 def get_llm_client() -> Optional[Tuple[OpenAI, str]]:
     """
-    Returns (OpenAI_client, model_name) for free tier LLM providers, or None if no API key/server is present.
-    Supported Free Providers:
-    1. Google Gemini Flash (Free tier via Google AI Studio at aistudio.google.com)
-    2. Groq (Free tier via console.groq.com)
-    3. Local Ollama (100% Free offline on Mac without keys)
-    4. OpenAI (Standard)
+    Returns (OpenAI_client, model_name) strictly respecting the configured LLM_PROVIDER.
+    Supported Providers:
+    1. 'gemini': Google Gemini Flash via Google AI Studio
+    2. 'groq': Groq via console.groq.com
+    3. 'ollama': Local offline inference on Mac via http://localhost:11434/v1
+    4. 'openai': Standard OpenAI
     """
-    if getattr(settings, "GEMINI_API_KEY", None):
-        base_url = getattr(settings, "LLM_BASE_URL", None) or "https://generativelanguage.googleapis.com/v1beta/openai/"
-        model = getattr(settings, "LLM_MODEL", None) or "gemini-3.5-flash"
-        if model in ["gemini-1.5-flash", "gemini-2.5-flash"]:
-            model = "gemini-3.5-flash"
-        return OpenAI(api_key=settings.GEMINI_API_KEY, base_url=base_url), model
+    provider = (getattr(settings, "LLM_PROVIDER", None) or "gemini").lower().strip()
 
-    if getattr(settings, "GROQ_API_KEY", None):
-        base_url = getattr(settings, "LLM_BASE_URL", None) or "https://api.groq.com/openai/v1"
-        model = getattr(settings, "LLM_MODEL", None) or "llama-3.3-70b-versatile"
-        return OpenAI(api_key=settings.GROQ_API_KEY, base_url=base_url), model
+    if provider == "gemini":
+        if getattr(settings, "GEMINI_API_KEY", None):
+            base_url = getattr(settings, "LLM_BASE_URL", None) or "https://generativelanguage.googleapis.com/v1beta/openai/"
+            model = getattr(settings, "LLM_MODEL", None) or "gemini-3.5-flash"
+            if model in ["gemini-1.5-flash", "gemini-2.5-flash"]:
+                model = "gemini-3.5-flash"
+            return OpenAI(api_key=settings.GEMINI_API_KEY, base_url=base_url), model
+        return None
 
-    if getattr(settings, "LLM_PROVIDER", None) == "ollama" or (getattr(settings, "LLM_BASE_URL", None) and "localhost" in str(settings.LLM_BASE_URL)):
-        base_url = settings.LLM_BASE_URL or "http://localhost:11434/v1"
-        model = getattr(settings, "LLM_MODEL", None) or "llama3.2"
+    if provider == "groq":
+        if getattr(settings, "GROQ_API_KEY", None):
+            base_url = getattr(settings, "LLM_BASE_URL", None) or "https://api.groq.com/openai/v1"
+            model = getattr(settings, "LLM_MODEL", None)
+            if not model or "gemini" in model.lower():
+                model = "llama-3.3-70b-versatile"
+            return OpenAI(api_key=settings.GROQ_API_KEY, base_url=base_url), model
+        return None
+
+    if provider == "ollama":
+        base_url = getattr(settings, "LLM_BASE_URL", None) or "http://localhost:11434/v1"
+        model = getattr(settings, "LLM_MODEL", None)
+        if not model or "gemini" in model.lower():
+            model = "llama3.2"
         return OpenAI(api_key="ollama", base_url=base_url), model
 
-    if getattr(settings, "OPENAI_API_KEY", None):
-        model = getattr(settings, "LLM_MODEL", None) or "gpt-4o-mini"
-        return OpenAI(api_key=settings.OPENAI_API_KEY), model
+    if provider == "openai":
+        if getattr(settings, "OPENAI_API_KEY", None):
+            model = getattr(settings, "LLM_MODEL", None)
+            if not model or "gemini" in model.lower():
+                model = "gpt-4o-mini"
+            return OpenAI(api_key=settings.OPENAI_API_KEY), model
+        return None
 
     return None
 
@@ -609,11 +639,12 @@ def generate_llm_plan(
     weather_info: Dict[str, Any],
     hotels_info: List[Dict[str, Any]],
     client: OpenAI,
-    model: str
-) -> Tuple[Optional[AIItineraryRaw], int]:
+    model: str,
+    raw_prompt: Optional[str] = None
+) -> Tuple[AIItineraryRaw, str, int]:
     """
     Step 1: LLM proposes structured planner output via JSON schema.
-    Returns (AIItineraryRaw, tokens_used).
+    Returns (AIItineraryRaw, used_model, tokens_used).
     """
     system_prompt = (
         "You are DAIna, DashTiny's intelligent travel itinerary architect.\n"
@@ -632,14 +663,20 @@ def generate_llm_plan(
         "             \"description\": \"Specific activity description tailored to party and preferences\",\n"
         "             \"location\": \"Real neighborhood or landmark in the destination\",\n"
         "             \"place_type\": \"H\" | \"R\" | \"TA\",\n"
-        "             \"why_recommended\": \"Explain why this matches user preference (e.g. 'Matches your photography preference with unobstructed sunset views'). Never claim fake ratings/reviews.\"\n"
+        "             \"why_recommended\": \"Explain why this matches user preference. Never claim fake ratings/reviews.\"\n"
         "           }\n"
         "         ]\n"
         "       }\n"
         "     ]\n"
         "   }\n"
         "2. Provide exactly 3 cohesive activities per day (Morning orientation/tour, Midday regional dining, Evening sunset/social).\n"
-        "3. Incorporate the traveler's stated vibe, interests, origin city, and party size throughout the narrative."
+        "3. Incorporate the traveler's stated vibe, interests, origin city, and party size throughout the narrative.\n"
+        "4. CRITICAL FACTUAL RULES:\n"
+        "   - NEVER invent or assert third-party ratings, awards, reviews (e.g. '5-star rated', 'top TripAdvisor review', 'highest-rated restaurant'), popularity rankings, live crowd counts, or opening hours.\n"
+        "   - Ground every 'why_recommended' strictly in the traveler's explicit preferences, stated vibe, party size, and requested interests (e.g. 'Matches your interest in stepwell photography with morning golden-hour lighting').\n"
+        "   - Weather context provided is advisory/historical baseline. Do not present it as live satellite forecast data unless verified.\n"
+        "   - All transit durations and crowd levels are estimates and will be validated by DashTiny's verification tools.\n"
+        "   - All locations MUST be authentic places located strictly within the requested destination."
     )
 
     hotel_names = ", ".join(h["name"] for h in hotels_info[:2]) if hotels_info else "Boutique Sanctuary"
@@ -651,20 +688,26 @@ def generate_llm_plan(
         f"Trip Duration: {days_count} days\n"
         f"Party Size: {travellers} traveler(s)\n"
         f"Departure Origin: {origin or 'Not specified'}\n"
-        f"Total Budget: {currency} {total_budget:,.0f}\n"
+        f"Estimated Budget Allocation: {currency} {total_budget:,.0f}\n"
         f"Traveler Persona: {persona}\n"
         f"Desired Vibe: {vibe or 'Balanced'}\n"
         f"Key Interests: {interests_str}\n"
-        f"Local Weather Context: {weather_cond}\n"
-        f"Curated Hotel Baseline: {hotel_names}\n\n"
-        f"Generate a structured {days_count}-day itinerary."
+        f"Local Weather Advisory (Historical / Curated baseline - do NOT cite as live guaranteed forecast): {weather_cond}\n"
+        f"Curated Hotel Baseline: {hotel_names}\n"
     )
 
+    if raw_prompt and raw_prompt.strip():
+        user_prompt += (
+            f"\nORIGINAL TRAVELER REQUEST / NUANCES (CRITICAL: Prioritize these explicit preferences, dislikes, or pacing wishes):\n"
+            f"\"{raw_prompt.strip()}\"\n"
+        )
+
+    user_prompt += f"\nGenerate a structured {days_count}-day itinerary."
+
     candidate_models = [model]
-    if "gemini" in model.lower():
-        for alt in ["gemini-3.5-flash", "gemini-3.8-flash", "gemini-flash-latest"]:
-            if alt not in candidate_models:
-                candidate_models.append(alt)
+    fallback_model = getattr(settings, "LLM_FALLBACK_MODEL", None)
+    if fallback_model and fallback_model not in candidate_models:
+        candidate_models.append(fallback_model)
 
     response = None
     last_err = None
@@ -704,19 +747,25 @@ def validate_plan_constraints(
     expected_days: int
 ) -> AIItineraryRaw:
     """
-    Step 2: Constraint validation layer.
-    Enforces day continuity, slot sequencing, and activity pacing.
+    Step 2: Strict constraint validation layer.
+    Enforces:
+    1. Day count must be at least expected_days.
+    2. Strictly sequential day numbering 1, 2, ..., expected_days without gaps or duplicates.
+    3. Exactly 3 activities per day (Morning, Midday, Evening) as specified by the contract.
     """
     if len(raw_plan.days) < expected_days:
         raise ValueError(f"AI Plan returned {len(raw_plan.days)} days, expected {expected_days}")
 
-    # Sort days by day_number and truncate to expected_days
+    # Enforce strictly sequential day ordering [1, 2, ..., expected_days]
     raw_plan.days = sorted(raw_plan.days, key=lambda d: d.day_number)[:expected_days]
+    for idx, d in enumerate(raw_plan.days, 1):
+        d.day_number = idx
 
     for d in raw_plan.days:
         if len(d.activities) < 2:
             raise ValueError(f"Day {d.day_number} has fewer than 2 activities")
-        d.activities = d.activities[:4]
+        # Enforce exactly 3 activities per day
+        d.activities = d.activities[:3]
 
     return raw_plan
 
@@ -750,20 +799,24 @@ def verify_plan_with_tools(
         act_count = len(day_raw.activities)
 
         for a_idx, act_raw in enumerate(day_raw.activities):
-            # 1. Spatial geocoding verification
-            geo = get_coordinates(act_raw.location)
+            # 1. Spatial geocoding verification with destination boundary enforcement
+            geo = get_coordinates(act_raw.location, target_destination=destination)
             if geo.get("found"):
                 act_lat = geo["lat"]
                 act_lng = geo["lng"]
-                act_prov = geo.get("provenance", "CURATED")
+                act_location_source = geo.get("location_source", "CURATED")
             elif d_idx == 1 and a_idx == 0 and hotel and hotel_lat is not None:
                 act_lat = hotel_lat
                 act_lng = hotel_lng
-                act_prov = "PROVIDER_VERIFIED"
+                act_location_source = "PROVIDER_VERIFIED"
             else:
                 act_lat = None
                 act_lng = None
-                act_prov = "CURATED_UNRESOLVED"
+                act_location_source = "UNRESOLVED"
+
+            act_generation_source = "AI_GENERATED"
+            act_content_source = "AI"
+            act_provenance = "AI_GENERATED"
 
             # 2. Transit estimation with truthful labeling
             if d_idx == 1 and a_idx == 0:
@@ -804,7 +857,10 @@ def verify_plan_with_tools(
                     cost_estimate=cost_est,
                     lat=act_lat,
                     lng=act_lng,
-                    provenance=act_prov,
+                    provenance=act_provenance,
+                    generation_source=act_generation_source,
+                    location_source=act_location_source,
+                    content_source=act_content_source,
                     why_recommended=why
                 )
             )
@@ -911,7 +967,8 @@ def build_itinerary_with_planner_agent(
                 weather_info=weather_info,
                 hotels_info=hotels_info,
                 client=client,
-                model=model_name
+                model=model_name,
+                raw_prompt=effective_prompt
             )
             if raw_ai_plan:
                 validated_plan = validate_plan_constraints(raw_ai_plan, clean_days)
@@ -998,6 +1055,9 @@ def build_itinerary_with_planner_agent(
                     lng=act.lng,
                     sort_order=a_idx,
                     provenance=act.provenance,
+                    generation_source=act.generation_source,
+                    location_source=act.location_source,
+                    content_source=act.content_source,
                     why_recommended=act.why_recommended
                 )
                 db.add(it_act)
@@ -1011,9 +1071,19 @@ def build_itinerary_with_planner_agent(
                     "estimatedTransit": act.estimated_transit,
                     "crowdWarning": act.crowd_warning,
                     "costEstimate": act.cost_estimate,
+                    "cost": act.cost_estimate,
+                    "estimatedAllocation": act.cost_estimate,
+                    "estimated_allocation": act.cost_estimate,
+                    "costType": "ESTIMATED_ALLOCATION",
                     "lat": act.lat,
                     "lng": act.lng,
                     "provenance": act.provenance,
+                    "generationSource": act.generation_source,
+                    "generation_source": act.generation_source,
+                    "locationSource": act.location_source,
+                    "location_source": act.location_source,
+                    "contentSource": act.content_source,
+                    "content_source": act.content_source,
                     "whyRecommended": act.why_recommended
                 })
 
