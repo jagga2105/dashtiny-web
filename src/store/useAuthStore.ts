@@ -29,6 +29,7 @@ interface AuthState {
   loginWithEmail: (email: string, password: string) => Promise<void>;
   registerWithEmail: (email: string, password: string, fullName: string, accountType?: string) => Promise<void>;
   loginWithGoogle: (googleProfile?: Partial<User>) => Promise<void>;
+  loginWithDemo: (demoProfile?: { role?: string; name?: string; email?: string }) => Promise<void>;
   logout: () => void;
   updateCoins: (amount: number) => void;
   openAuthModal: (reason?: string, onAuthSuccess?: () => void) => void;
@@ -113,27 +114,37 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     get().login(res.user, res.access_token);
   },
 
-  loginWithGoogle: async (googleProfile) => {
-    const isExplicitDemo = !googleProfile?.email;
-    const googleId = `google_demo_${Date.now()}`;
-    const email = googleProfile?.email || 'demo.traveler@dashtiny.ai';
-    const fullName = googleProfile?.full_name || 'Demo Explorer [Sandbox]';
-    const avatarUrl = googleProfile?.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80';
-
-    const apiRes = await apiService.loginWithGoogle({
-      google_id: googleId,
-      email,
-      full_name: fullName,
-      avatar_url: avatarUrl,
+  loginWithDemo: async (demoProfile) => {
+    const res = await apiService.loginWithDemo({
+      role: demoProfile?.role || 'demo_explorer',
+      name: demoProfile?.name || 'Demo Explorer [Sandbox]',
+      email: demoProfile?.email,
     });
-
     const userWithFlag: User = {
-      ...apiRes.user,
-      is_demo: isExplicitDemo,
-      provider: 'google',
+      ...res.user,
+      is_demo: true,
+      provider: 'email',
     };
+    get().login(userWithFlag, res.access_token);
+  },
 
-    get().login(userWithFlag, apiRes.access_token);
+  loginWithGoogle: async (googleProfile) => {
+    try {
+      const apiRes = await apiService.loginWithGoogle({
+        google_id: `google_${Date.now()}`,
+        email: googleProfile?.email || 'traveler@gmail.com',
+        full_name: googleProfile?.full_name || 'Traveler',
+        avatar_url: googleProfile?.avatar_url,
+      });
+      get().login(apiRes.user, apiRes.access_token);
+    } catch {
+      // Graceful sandbox fallback if production Google OAuth is unconfigured
+      await get().loginWithDemo({
+        role: 'google_sandbox',
+        name: googleProfile?.full_name || 'Demo Explorer [Sandbox]',
+        email: googleProfile?.email || 'demo.explorer@dashtiny.travel',
+      });
+    }
   },
 
   logout: () => {

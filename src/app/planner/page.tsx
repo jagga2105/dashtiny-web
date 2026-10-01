@@ -72,12 +72,27 @@ function PlannerContent() {
     // Real natural language request parsing
     const parsed = parseTravelPrompt(textToUse);
 
+    // Synchronize persona: if prompt specifies companions or persona, prioritize it and sync UI
+    const hasExplicitPersonaInPrompt = /(solo|alone|partner|couple|romantic|wife|husband|girlfriend|boyfriend|family|kids|children|parents|squad|friends|gang|buddies|nomad|workation)/i.test(textToUse);
+    const effectivePersona = hasExplicitPersonaInPrompt ? parsed.persona : (selectedPersona || parsed.persona);
+    if (hasExplicitPersonaInPrompt && parsed.persona) {
+      setSelectedPersona(parsed.persona as PersonaType);
+    }
+
     try {
       const res = await apiService.generateItinerary({
         destination: parsed.destination,
-        budget: parsed.budget,
+        origin: parsed.origin,
+        start_date: parsed.start_date,
+        end_date: parsed.end_date,
         days_count: parsed.days_count,
-        persona: selectedPersona || parsed.persona,
+        travellers: parsed.travellers,
+        budget: parsed.budget,
+        currency: parsed.currency || 'INR',
+        persona: effectivePersona,
+        vibe: parsed.vibe,
+        interests: parsed.interests,
+        raw_prompt: textToUse,
         prompt: textToUse,
       });
 
@@ -131,7 +146,7 @@ function PlannerContent() {
                   <span className="text-orange-600 font-extrabold">₹{activeItinerary.budget.toLocaleString('en-IN')}</span>
                 </>
               ) : (
-                'Bespoke multi-day travel passages synthesized by DAIna AI and saved directly to PostgreSQL'
+                'Curated travel intelligence and multi-day passages saved directly to PostgreSQL'
               )}
             </p>
           </div>
@@ -256,7 +271,7 @@ function PlannerContent() {
                 <strong className="text-orange-700 font-extrabold">Natural Language:</strong> Supports any destination worldwide with realistic budget parsing (e.g. &quot;1.5 lakh&quot;, &quot;80k&quot;) and squad sync.
               </p>
             </div>
-            <span className="text-[11px] text-slate-500 font-mono font-bold shrink-0">Live AI Engine</span>
+            <span className="text-[11px] text-slate-500 font-mono font-bold shrink-0">AI-Assisted Planning Engine</span>
           </div>
         </section>
 
@@ -274,7 +289,7 @@ function PlannerContent() {
                 Where does your squad want to escape?
               </h2>
               <p className="text-xs sm:text-sm text-slate-600 font-medium">
-                Type your dream destination and budget. DAIna AI structures a multi-day passage with verified sanctuary stays, regional dining, and golden hour routes.
+                Type your dream destination, dates, and budget. DAIna structures a multi-day passage with curated boutique stays, regional dining, and golden hour routes.
               </p>
             </div>
 

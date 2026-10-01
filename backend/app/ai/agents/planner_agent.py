@@ -7,6 +7,7 @@ Golden Engineering Rule:
 """
 import os
 import re
+import time
 import uuid
 import json
 import logging
@@ -16,7 +17,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.models.models import Itinerary, ItineraryDay, ItineraryActivity, SquadRoom, User
+from app.models.models import Itinerary, ItineraryDay, ItineraryActivity, SquadRoom, User, AIRun, AIToolCall
 from app.ai.tools.weather import get_destination_weather
 from app.ai.tools.hotel_search import search_hotels
 from app.ai.tools.maps import get_coordinates
@@ -342,6 +343,13 @@ def build_itinerary_with_planner_agent(
     user: User,
     db: Session,
     start_date_str: Optional[str] = None,
+    end_date_str: Optional[str] = None,
+    origin: Optional[str] = None,
+    travellers: int = 2,
+    currency: str = "INR",
+    vibe: Optional[str] = None,
+    interests: Optional[List[str]] = None,
+    raw_prompt: Optional[str] = None,
     prompt: Optional[str] = None
 ) -> Dict[str, Any]:
     """
@@ -349,19 +357,23 @@ def build_itinerary_with_planner_agent(
     1. Coordinates Tools: Weather, Hotels, Geocoding
     2. Builds Structured Day Plans (with honest provenance)
     3. Persists directly to PostgreSQL attached strictly to authenticated user
-    4. Creates squad room code
-    5. Returns typed structured object
+    4. Fixes Activity ID consistency: returns persisted IDs identical to database
+    5. Records honest AI Observability telemetry (deterministic-planner-v1, 0 tokens)
+    6. Creates squad room code
+    7. Returns typed canonical structured object
     """
+    start_time = time.time()
     clean_dest = destination.strip().title()
     clean_days = max(1, min(14, days_count))
     clean_budget = budget if budget > 0 else 12000.0 * clean_days
+    effective_prompt = raw_prompt or prompt
 
     # 1. Execute AI Tools
     weather_info = get_destination_weather(clean_dest)
-    hotels_info = search_hotels(clean_dest, guests=2)
+    hotels_info = search_hotels(clean_dest, guests=travellers or 2)
     coords = get_coordinates(clean_dest)
 
-    # 2. Date calculation
+    # 2. Date calculation from canonical input
     if start_date_str:
         try:
             start_d = datetime.strptime(start_date_str.split("T")[0], "%Y-%m-%d").date()
@@ -370,8 +382,18 @@ def build_itinerary_with_planner_agent(
     else:
         start_d = date.today() + timedelta(days=14)
 
-    # End date is inclusive: for a 4-day trip starting Oct 10, end date is Oct 13
-    end_d = start_d + timedelta(days=max(0, clean_days - 1))
+    if end_date_str:
+        try:
+            end_d = datetime.strptime(end_date_str.split("T")[0], "%Y-%m-%d").date()
+            if end_d < start_d:
+                end_d = start_d + timedelta(days=max(0, clean_days - 1))
+            else:
+                # Recalculate clean_days if both dates explicitly provided
+                clean_days = (end_d - start_d).days + 1
+        except Exception:
+            end_d = start_d + timedelta(days=max(0, clean_days - 1))
+    else:
+        end_d = start_d + timedelta(days=max(0, clean_days - 1))
 
     # 3. Generate Structured Days (Tools + Validation)
     structured_days = generate_algorithmic_plan(
@@ -385,23 +407,27 @@ def build_itinerary_with_planner_agent(
         coords=coords
     )
 
-    # 4. Persist to PostgreSQL (Strict User Ownership)
+    # 4. Persist to PostgreSQL (Strict User Ownership with canonical fields)
     new_itinerary = Itinerary(
         owner_id=user.id,
         title=f"Bespoke {clean_days}-Day {clean_dest} Sanctuary Passage",
         destination=clean_dest,
+        origin=origin,
         start_date=start_d,
         end_date=end_d,
         total_budget=clean_budget,
-        currency="INR",
+        currency=currency or "INR",
         persona=persona,
+        travellers=travellers or 2,
+        vibe=vibe,
+        raw_prompt=effective_prompt,
         status="active"
     )
     db.add(new_itinerary)
     db.commit()
     db.refresh(new_itinerary)
 
-    # 5. Persist Days & Activities
+    # 5. Persist Days & Activities (Fix Data Consistency: Persisted IDs match client response)
     formatted_days = []
     for dp in structured_days:
         it_day = ItineraryDay(
@@ -417,7 +443,9 @@ def build_itinerary_with_planner_agent(
 
         day_acts = []
         for a_idx, act in enumerate(dp.activities):
+            act_id = str(uuid.uuid4())
             it_act = ItineraryActivity(
+                id=act_id,
                 day_id=it_day.id,
                 time_slot=act.time_slot,
                 description=act.description,
@@ -433,7 +461,7 @@ def build_itinerary_with_planner_agent(
             )
             db.add(it_act)
             day_acts.append({
-                "id": str(uuid.uuid4()),
+                "id": act_id,
                 "time": act.time_slot,
                 "description": act.description,
                 "location": act.location,
@@ -469,14 +497,33 @@ def build_itinerary_with_planner_agent(
     db.add(squad_room)
     db.commit()
 
+    # 7. AI Observability: Honest Telemetry (No fake LLM tokens)
+    latency_ms = int((time.time() - start_time) * 1000)
+    ai_run = AIRun(
+        user_id=user.id,
+        trip_id=new_itinerary.id,
+        prompt=effective_prompt or f"Generate itinerary for {clean_dest}",
+        model="deterministic-planner-v1",
+        latency_ms=latency_ms,
+        tokens_used=0,
+        status="success"
+    )
+    db.add(ai_run)
+    db.commit()
+
     return {
         "id": new_itinerary.id,
         "title": new_itinerary.title,
         "destination": new_itinerary.destination,
+        "origin": new_itinerary.origin,
         "startDate": str(new_itinerary.start_date),
         "endDate": str(new_itinerary.end_date),
+        "daysCount": clean_days,
         "budget": float(new_itinerary.total_budget),
+        "currency": new_itinerary.currency,
         "persona": new_itinerary.persona,
+        "travellers": new_itinerary.travellers,
+        "vibe": new_itinerary.vibe,
         "squad_room_code": room_code,
         "weather_advisory": weather_info.get("packing_advisory"),
         "days": formatted_days

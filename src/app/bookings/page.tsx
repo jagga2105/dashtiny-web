@@ -330,7 +330,7 @@ export default function BookingsPage() {
 
               <div className="flex items-center gap-3">
                 <span className="text-xs text-slate-500 font-medium">
-                  {isSearchingFlights ? 'Querying live airline APIs...' : `${flightsList.length} normalized offers verified`}
+                  {isSearchingFlights ? 'Querying airline schedules...' : `${flightsList.length} curated flight offers loaded`}
                 </span>
                 <Button
                   variant="outline"

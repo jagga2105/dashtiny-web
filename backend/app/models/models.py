@@ -57,6 +57,10 @@ class Itinerary(Base):
     total_budget = Column(Numeric(12, 2), nullable=False)
     currency = Column(String(10), default="INR")
     persona = Column(String(50), default="solo")
+    origin = Column(String(100), nullable=True)
+    travellers = Column(Integer, default=2)
+    vibe = Column(String(100), nullable=True)
+    raw_prompt = Column(Text, nullable=True)
     status = Column(String(50), default="draft")  # draft, active, completed
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
@@ -188,9 +192,9 @@ class AIRun(Base):
     user_id = Column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     trip_id = Column(String(36), ForeignKey("itineraries.id", ondelete="SET NULL"), nullable=True)
     prompt = Column(Text, nullable=False)
-    model = Column(String(100), default="gpt-4o-mini")
+    model = Column(String(100), default="deterministic-planner-v1")
     latency_ms = Column(Integer, default=0)
-    tokens_used = Column(Integer, default=0)
+    tokens_used = Column(Integer, default=0, nullable=True)
     status = Column(String(50), default="success")  # success, error
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 

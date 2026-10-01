@@ -2,7 +2,7 @@
 
 import { User, Users, Baby, Compass } from 'lucide-react';
 
-export type PersonaType = 'solo' | 'family' | 'group' | 'daytripper';
+export type PersonaType = 'solo' | 'couple' | 'family' | 'group' | 'daytripper' | 'squad' | 'nomad';
 
 interface PersonaSelectorProps {
   activePersona: PersonaType;

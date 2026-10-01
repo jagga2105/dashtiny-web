@@ -15,14 +15,23 @@ from app.api.deps import get_current_user
 
 router = APIRouter(prefix="/planner", tags=["DAIna AI Getaway Architect"])
 
-class GenerateItineraryRequest(BaseModel):
+class PlannerRequest(BaseModel):
     destination: str
-    budget: float
-    days_count: int = 4
-    persona: str = "solo"
+    origin: Optional[str] = None
     start_date: Optional[str] = None
     end_date: Optional[str] = None
+    days_count: int = 4
+    travellers: int = 2
+    budget: float = 0.0
+    currency: str = "INR"
+    persona: str = "solo"
+    vibe: Optional[str] = None
+    interests: Optional[List[str]] = None
+    raw_prompt: Optional[str] = None
     prompt: Optional[str] = None
+
+# Backward compatibility alias
+GenerateItineraryRequest = PlannerRequest
 
 # Curated authentic hub templates
 DESTINATION_TEMPLATES: Dict[str, Dict[str, Any]] = {
@@ -264,7 +273,7 @@ from app.ai.agents.planner_agent import build_itinerary_with_planner_agent
 
 @router.post("/generate")
 def generate_itinerary(
-    request: GenerateItineraryRequest,
+    request: PlannerRequest,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -279,5 +288,12 @@ def generate_itinerary(
         user=user,
         db=db,
         start_date_str=request.start_date,
+        end_date_str=request.end_date,
+        origin=request.origin,
+        travellers=request.travellers,
+        currency=request.currency,
+        vibe=request.vibe,
+        interests=request.interests,
+        raw_prompt=request.raw_prompt,
         prompt=request.prompt
     )

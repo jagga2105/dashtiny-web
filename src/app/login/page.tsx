@@ -15,7 +15,7 @@ type AccountType = 'personal_traveler' | 'corporate_manager' | 'travel_agent' | 
 
 export default function LoginPage() {
   const router = useRouter();
-  const { login, loginWithEmail, registerWithEmail, loginWithGoogle } = useAuthStore();
+  const { login, loginWithEmail, registerWithEmail, loginWithGoogle, loginWithDemo } = useAuthStore();
   const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
   const [authMethod, setAuthMethod] = useState<'email' | 'phone'>('email');
   const [accountType, setAccountType] = useState<AccountType>('personal_traveler');
@@ -67,15 +67,12 @@ export default function LoginPage() {
   const handleQuickDemoLogin = async (accType: AccountType) => {
     setLoading(true);
     setErrorMsg('');
-    const demoEmail = `${accType}@dashtiny.ai`;
-    const demoPassword = 'password123';
     try {
-      try {
-        await loginWithEmail(demoEmail, demoPassword);
-      } catch {
-        // If not created yet, register it
-        await registerWithEmail(demoEmail, demoPassword, `${accType.replace('_', ' ').toUpperCase()} Explorer`, accType);
-      }
+      await loginWithDemo({
+        role: accType,
+        name: `${accType.replace('_', ' ').toUpperCase()} Explorer`,
+        email: `${accType}@dashtiny.travel`,
+      });
       router.push('/dashboard');
     } catch (err: any) {
       setErrorMsg(err.message || 'Demo login failed');

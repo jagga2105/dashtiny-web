@@ -124,9 +124,9 @@ def ai_query(
         user_id=user.id,
         trip_id=trip.id,
         prompt=request.instruction,
-        model="gpt-4o-mini",
+        model="deterministic-planner-v1",
         latency_ms=latency_ms,
-        tokens_used=350,
+        tokens_used=0,
         status="success"
     )
     db.add(ai_run)

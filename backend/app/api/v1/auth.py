@@ -47,10 +47,17 @@ class LoginRequest(BaseModel):
     email: EmailStr
     password: str
 
+class DemoLoginRequest(BaseModel):
+    role: Optional[str] = "demo_explorer"
+    full_name: Optional[str] = "Demo Explorer [Sandbox]"
+    email: Optional[EmailStr] = None
+    avatar_url: Optional[str] = None
+
 class GoogleLoginRequest(BaseModel):
-    google_id: str
-    email: EmailStr
-    full_name: str
+    id_token: Optional[str] = None
+    google_id: Optional[str] = None
+    email: Optional[EmailStr] = None
+    full_name: Optional[str] = None
     avatar_url: Optional[str] = None
 
 class AuthResponse(BaseModel):
@@ -146,20 +153,27 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
         "user": serialize_user(user, db)
     }
 
-@router.post("/google", response_model=AuthResponse)
-def google_login(request: GoogleLoginRequest, db: Session = Depends(get_db)):
+@router.post("/demo", response_model=AuthResponse)
+def demo_login(request: DemoLoginRequest = DemoLoginRequest(), db: Session = Depends(get_db)):
     """
-    Authenticate or register user with Google OAuth credentials in PostgreSQL.
+    Explicit Sandbox Demo Mode:
+    Provides an ephemeral/sandbox explorer identity for development and previewing.
+    Architecturally separated from production OAuth.
     """
-    user = db.query(User).filter((User.google_id == request.google_id) | (User.email == request.email)).first()
+    demo_email = request.email or f"{request.role or 'demo_explorer'}@dashtiny.travel"
+    demo_name = request.full_name or "Demo Explorer [Sandbox]"
+    avatar = request.avatar_url or "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80"
+
+    user = db.query(User).filter(User.email == demo_email).first()
     if not user:
         user = User(
-            google_id=request.google_id,
-            email=request.email,
-            full_name=request.full_name,
-            avatar_url=request.avatar_url,
-            is_verified=True,
-            trust_score="99% Verified Explorer"
+            email=demo_email,
+            password_hash=hash_password("sandbox_demo_secret_2026"),
+            full_name=demo_name,
+            account_type="sandbox_demo",
+            is_verified=False,  # Honest: Sandbox accounts are NOT marked verified
+            trust_score="Sandbox Demo Explorer",
+            avatar_url=avatar
         )
         db.add(user)
         db.commit()
@@ -172,12 +186,6 @@ def google_login(request: GoogleLoginRequest, db: Session = Depends(get_db)):
         )
         db.add(profile)
         db.commit()
-    else:
-        if not user.google_id:
-            user.google_id = request.google_id
-        if request.avatar_url:
-            user.avatar_url = request.avatar_url
-        db.commit()
 
     token = create_access_token({"sub": user.id, "email": user.email})
     return {
@@ -185,6 +193,18 @@ def google_login(request: GoogleLoginRequest, db: Session = Depends(get_db)):
         "token_type": "bearer",
         "user": serialize_user(user, db)
     }
+
+@router.post("/google", response_model=AuthResponse)
+def google_login(request: GoogleLoginRequest):
+    """
+    Production Google OAuth endpoint:
+    Requires verified server-side ID token exchange with Google Identity APIs and GOOGLE_CLIENT_ID.
+    Client-fabricated credentials are not accepted here. Use /auth/demo for development/sandbox mode.
+    """
+    raise HTTPException(
+        status_code=status.HTTP_501_NOT_IMPLEMENTED,
+        detail="Production Google OAuth requires server-side ID token verification with GOOGLE_CLIENT_ID. Please use /auth/demo for development/sandbox mode."
+    )
 
 @router.get("/me")
 def get_current_user_profile(user: User = Depends(get_current_user), db: Session = Depends(get_db)):

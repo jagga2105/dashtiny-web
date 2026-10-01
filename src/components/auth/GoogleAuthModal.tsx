@@ -7,21 +7,22 @@ import { useAuthStore } from '@/store/useAuthStore';
 import { Card } from '@/components/ui/Card';
 
 export function GoogleAuthModal() {
-  const { isAuthModalOpen, authModalReason, closeAuthModal, loginWithGoogle } = useAuthStore();
+  const { isAuthModalOpen, authModalReason, closeAuthModal, loginWithDemo } = useAuthStore();
   const [isLoading, setIsLoading] = useState(false);
 
   if (!isAuthModalOpen) return null;
 
-  const handleGoogleSignIn = () => {
+  const handleDemoSignIn = async () => {
     setIsLoading(true);
-    setTimeout(() => {
-      loginWithGoogle({
-        full_name: 'Kumkum Pandey',
-        email: 'kumkum.pandey@gmail.com',
-        avatar_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+    try {
+      await loginWithDemo({
+        name: 'Demo Explorer [Sandbox]',
+        email: 'demo.explorer@dashtiny.travel',
+        role: 'sandbox_explorer',
       });
+    } finally {
       setIsLoading(false);
-    }, 800);
+    }
   };
 
   return (
@@ -87,7 +88,7 @@ export function GoogleAuthModal() {
         {/* Buttons */}
         <div className="space-y-3 relative z-10 pt-1">
           <button
-            onClick={handleGoogleSignIn}
+            onClick={handleDemoSignIn}
             disabled={isLoading}
             className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-extrabold text-sm py-3 px-4 rounded-2xl shadow-md hover:shadow-lg transition-all disabled:opacity-50"
           >

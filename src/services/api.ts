@@ -79,16 +79,25 @@ export interface GoogleLoginPayload {
   avatar_url?: string;
 }
 
-export interface GenerateItineraryPayload {
+export interface PlannerRequest {
   destination: string;
-  budget: number;
+  origin?: string;
+  start_date?: string;
+  end_date?: string;
   days_count?: number;
   duration?: number;
+  travellers?: number;
+  companions?: number;
+  budget: number;
+  currency?: string;
   persona?: string;
   vibe?: string;
-  companions?: number;
+  interests?: string[];
+  raw_prompt?: string;
   prompt?: string;
 }
+
+export type GenerateItineraryPayload = PlannerRequest;
 
 export interface BookingPayload {
   category: 'flight' | 'hotel' | 'train' | 'bus' | 'cab';
@@ -142,6 +151,13 @@ export const apiService = {
     });
   },
 
+  async loginWithDemo(payload?: { role?: string; name?: string; email?: string }): Promise<AuthResponse> {
+    return request<AuthResponse>('/auth/demo', {
+      method: 'POST',
+      body: JSON.stringify(payload || {}),
+    });
+  },
+
   async getCurrentUser() {
     return request<any>('/auth/me');
   },
@@ -191,16 +207,24 @@ export const apiService = {
 
   // Planner API (DAIna AI Getaway Architect)
   async generateItinerary(payload: GenerateItineraryPayload) {
-    const normalizedPayload = {
+    const canonicalPayload = {
       destination: payload.destination,
-      budget: payload.budget,
+      origin: payload.origin,
+      start_date: payload.start_date,
+      end_date: payload.end_date,
       days_count: payload.days_count || payload.duration || 4,
-      persona: payload.persona || payload.vibe || 'solo',
-      prompt: payload.prompt,
+      travellers: payload.travellers || payload.companions || 2,
+      budget: payload.budget,
+      currency: payload.currency || 'INR',
+      persona: payload.persona || 'solo',
+      vibe: payload.vibe,
+      interests: payload.interests,
+      raw_prompt: payload.raw_prompt || payload.prompt,
+      prompt: payload.prompt || payload.raw_prompt,
     };
     return request<any>('/planner/generate', {
       method: 'POST',
-      body: JSON.stringify(normalizedPayload),
+      body: JSON.stringify(canonicalPayload),
     });
   },
 
