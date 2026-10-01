@@ -219,87 +219,92 @@ export function DAInaChatWidget() {
 
   return (
     <>
-      {/* Floating Gold Butler Action Button */}
+      {/* Floating Action Button — Calm, clear, mobile-safe */}
       <button
         onClick={() => setIsOpen(true)}
-        className="fixed bottom-20 md:bottom-6 right-6 z-40 flex items-center gap-3 p-3.5 rounded-2xl bg-gradient-to-r from-amber-500 via-amber-400 to-amber-600 text-black shadow-2xl shadow-amber-500/20 hover:scale-105 transition-all border border-amber-300/50 group"
+        className="fixed bottom-20 md:bottom-6 right-5 sm:right-6 z-40 flex items-center gap-2.5 px-4 py-2.5 rounded-full bg-slate-900 text-white shadow-lg shadow-slate-900/20 hover:bg-slate-800 transition-colors border border-slate-700/60 cursor-pointer"
+        aria-label="Ask DAIna travel assistant"
       >
-        <div className="w-8 h-8 rounded-full overflow-hidden border border-black/40 shrink-0">
-          <Image src="/assets/ai/daina.png" alt="DAIna AI" width={32} height={32} className="w-full h-full object-cover" />
+        <div className="w-6 h-6 rounded-full overflow-hidden shrink-0 border border-slate-600">
+          <Image src="/assets/ai/daina.png" alt="DAIna" width={24} height={24} className="w-full h-full object-cover" />
         </div>
-        <span className="text-xs font-extrabold pr-1 tracking-wider uppercase font-sans-editorial hidden sm:inline">Concierge Butler</span>
-        <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping absolute -top-0.5 -right-0.5" />
+        <span className="text-xs font-semibold tracking-wide">✨ Ask DAIna</span>
       </button>
 
-      {/* 9-Step Guided Input Modal */}
+      {/* Guided Input Modal */}
       <TravelInputDialogModal
         isOpen={isFormModalOpen}
         onClose={() => setIsFormModalOpen(false)}
         onSubmit={handleFormSubmit}
       />
 
-      {/* Getaway Chat Modal Drawer */}
+      {/* Travel Chat Modal Drawer */}
       {isOpen && (
-        <div className="fixed bottom-24 md:bottom-20 right-4 sm:right-6 z-40 w-full max-w-sm sm:max-w-md bg-white/95 backdrop-blur-2xl rounded-3xl border border-slate-200/90 shadow-2xl overflow-hidden flex flex-col h-[580px] transition-all animate-in fade-in slide-in-from-bottom-5">
+        <div className="fixed bottom-20 md:bottom-20 right-3 sm:right-6 z-50 w-full max-w-[calc(100vw-24px)] sm:max-w-md bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden flex flex-col h-[520px] transition-all animate-in fade-in slide-in-from-bottom-5">
           {/* Header */}
-          <div className="p-4 bg-white border-b border-slate-100 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl overflow-hidden border border-orange-300 shadow-md shrink-0">
-                <Image src="/assets/ai/daina.png" alt="DAIna" width={40} height={40} className="w-full h-full object-cover" />
+          <div className="p-3.5 bg-white border-b border-slate-100 flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-full overflow-hidden border border-slate-200 shrink-0">
+                <Image src="/assets/ai/daina.png" alt="DAIna" width={32} height={32} className="w-full h-full object-cover" />
               </div>
               <div>
-                <h3 className="font-serif-editorial font-bold text-slate-900 text-base flex items-center gap-1.5">
-                  DAIna Concierge
-                  <Award className="w-3.5 h-3.5 text-orange-500" />
+                <h3 className="font-semibold text-slate-900 text-sm flex items-center gap-1.5">
+                  DAIna
                 </h3>
-                <p className="text-[10px] text-orange-600 uppercase tracking-widest font-extrabold">24/7 Smart Getaway Butler</p>
+                <p className="text-[11px] text-slate-500 font-medium">Intelligent Travel Companion</p>
               </div>
             </div>
             <div className="flex items-center gap-1.5">
               <button
                 onClick={() => setIsFormModalOpen(true)}
-                className="px-3.5 py-1.5 rounded-xl bg-orange-50 text-orange-700 hover:bg-orange-100 text-[11px] font-extrabold border border-orange-200 flex items-center gap-1"
+                className="px-2.5 py-1 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 text-[11px] font-medium border border-slate-200 transition-colors"
               >
-                <SlidersHorizontal className="w-3 h-3 text-orange-600" />
-                <span>9-Step Form</span>
+                Refine
               </button>
               <button
                 onClick={() => setIsOpen(false)}
-                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-900 hover:bg-slate-100 transition-colors"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                aria-label="Close DAIna chat"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4" />
               </button>
             </div>
           </div>
 
           {/* Quick Action Suggestion Chips */}
-          <div className="px-3 py-2 bg-slate-50/80 border-b border-slate-100 flex gap-1.5 overflow-x-auto no-scrollbar">
-            {['Plan 3-day luxury Goa', 'Find 5-Star Villas under ₹10k', 'Flight Cashback', 'Snow trek in Manali'].map((chip, idx) => (
+          <div className="px-3 py-2 bg-slate-50/90 border-b border-slate-100 flex gap-1.5 overflow-x-auto no-scrollbar">
+            {[
+              { label: 'Plan a trip', prompt: 'Plan a 4-day trip to Goa under ₹25k' },
+              { label: 'Improve my itinerary', prompt: 'How can I make my trip slower and more relaxed?' },
+              { label: 'Find a hotel', prompt: 'Find boutique stays with good views' },
+              { label: 'Compare flights', prompt: 'Compare direct flights for my upcoming dates' },
+              { label: 'Ask about a destination', prompt: 'What is the best season and local food in Kyoto?' },
+            ].map((chip, idx) => (
               <button
                 key={idx}
-                onClick={() => handleSend(chip)}
-                className="text-[10px] px-3 py-1 rounded-full bg-white text-slate-700 hover:text-orange-700 hover:bg-orange-50 border border-slate-200/90 shrink-0 font-bold transition-colors shadow-2xs cursor-pointer active:scale-95"
+                onClick={() => handleSend(chip.prompt)}
+                className="text-[11px] px-3 py-1 rounded-full bg-white text-slate-700 hover:text-orange-600 hover:bg-orange-50/50 border border-slate-200 shrink-0 font-medium transition-colors shadow-2xs cursor-pointer"
               >
-                ✦ {chip}
+                {chip.label}
               </button>
             ))}
           </div>
 
           {/* Message History */}
-          <div className="flex-1 p-4 overflow-y-auto space-y-3 bg-slate-50/50 text-xs no-scrollbar">
+          <div className="flex-1 p-4 overflow-y-auto space-y-3 bg-slate-50/40 text-xs no-scrollbar">
             {messages.map((msg) => (
               <div key={msg.id} className="space-y-2">
                 <div className={`flex gap-2.5 ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
                   {msg.sender === 'daina' && (
-                    <div className="w-6 h-6 rounded-full overflow-hidden shrink-0 border border-orange-300">
+                    <div className="w-6 h-6 rounded-full overflow-hidden shrink-0 border border-slate-200">
                       <Image src="/assets/ai/daina.png" alt="DAIna" width={24} height={24} className="w-full h-full object-cover" />
                     </div>
                   )}
                   <div
-                    className={`p-3.5 rounded-2xl max-w-[85%] leading-relaxed ${
+                    className={`p-3 rounded-xl max-w-[85%] leading-relaxed ${
                       msg.sender === 'user'
-                        ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white font-extrabold shadow-sm'
-                        : 'bg-white text-slate-800 border border-slate-200/90 shadow-2xs font-medium'
+                        ? 'bg-orange-500 text-white font-medium'
+                        : 'bg-white text-slate-800 border border-slate-200 shadow-2xs'
                     }`}
                   >
                     {msg.text}
@@ -308,34 +313,37 @@ export function DAInaChatWidget() {
 
                 {/* Render Itinerary Card Preview inside Chat */}
                 {msg.isItinerary && msg.itineraryData && (
-                  <div className="ml-8 p-4 rounded-2xl bg-white border border-orange-200 space-y-2 shadow-md">
+                  <div className="ml-8 p-3.5 rounded-xl bg-white border border-slate-200 space-y-2 shadow-xs">
                     <div className="flex items-center justify-between">
-                      <span className="font-serif-editorial font-bold text-slate-900 text-xs">{msg.itineraryData.title}</span>
-                      <span className="text-[10px] text-orange-600 font-extrabold">₹{msg.itineraryData.budget.toLocaleString('en-IN')}</span>
+                      <span className="font-semibold text-slate-900 text-xs">{msg.itineraryData.title}</span>
+                      <span className="text-[11px] text-orange-600 font-bold">₹{msg.itineraryData.budget.toLocaleString('en-IN')}</span>
                     </div>
                     <div className="space-y-1">
-                      {msg.itineraryData.days[0]?.activities?.map((act: ActivityItem, i: number) => (
-                        <div key={i} className="flex items-center justify-between text-[11px] text-slate-700 font-medium">
-                          <span>• {act.description}</span>
-                          <span className="px-1.5 py-0.5 rounded bg-orange-100 text-[9px] font-mono text-orange-700 font-extrabold border border-orange-200">
-                            [{act.placeType || 'TA'}]
-                          </span>
-                        </div>
-                      ))}
+                      {msg.itineraryData.days[0]?.activities?.map((act: ActivityItem, i: number) => {
+                        const label = act.placeType === 'H' ? 'Hotel' : act.placeType === 'R' ? 'Dining' : 'Activity';
+                        return (
+                          <div key={i} className="flex items-center justify-between text-[11px] text-slate-700">
+                            <span className="truncate pr-2">• {act.description}</span>
+                            <span className="px-1.5 py-0.5 rounded bg-slate-100 text-[10px] text-slate-600 font-medium border border-slate-200 shrink-0">
+                              {label}
+                            </span>
+                          </div>
+                        );
+                      })}
                     </div>
                     <div className="flex gap-2 pt-1">
                       <Button
                         variant="secondary"
                         size="sm"
-                        className="flex-1 text-[11px] py-1 border border-orange-200 text-orange-700 hover:bg-orange-50 font-bold"
+                        className="flex-1 text-[11px] py-1 border border-slate-200 text-slate-700 hover:bg-slate-50 font-medium"
                         onClick={() => handleSaveItineraryToDB(msg.itineraryData!)}
                       >
-                        Save to PostgreSQL
+                        Save trip
                       </Button>
                       <Button
                         variant="primary"
                         size="sm"
-                        className="flex-1 text-[11px] py-1 bg-gradient-to-r from-orange-500 to-amber-500 text-white font-extrabold"
+                        className="flex-1 text-[11px] py-1 bg-orange-500 hover:bg-orange-600 text-white font-semibold"
                         onClick={() => {
                           setIsOpen(false);
                           router.push('/planner');
@@ -351,32 +359,33 @@ export function DAInaChatWidget() {
 
             {isThinking && (
               <div className="flex gap-2.5 justify-start items-center">
-                <div className="w-6 h-6 rounded-full overflow-hidden shrink-0 border border-orange-300">
+                <div className="w-6 h-6 rounded-full overflow-hidden shrink-0 border border-slate-200">
                   <Image src="/assets/ai/daina.png" alt="DAIna" width={24} height={24} className="w-full h-full object-cover" />
                 </div>
-                <div className="p-3 rounded-2xl bg-white border border-orange-200 text-slate-700 shadow-2xs flex items-center gap-2">
+                <div className="p-2.5 rounded-xl bg-white border border-slate-200 text-slate-600 shadow-2xs flex items-center gap-2">
                   <Sparkles className="w-3.5 h-3.5 text-orange-500 animate-spin" />
-                  <span className="text-[11px] font-medium text-slate-600">DAIna is querying route fares & sanctuaries...</span>
+                  <span className="text-[11px] font-medium">DAIna is researching places...</span>
                 </div>
               </div>
             )}
           </div>
 
           {/* Input Bar */}
-          <div className="p-3 bg-white border-t border-slate-100 flex items-center gap-2">
+          <div className="p-2.5 bg-white border-t border-slate-100 flex items-center gap-2">
             <input
               type="text"
-              placeholder="Ask DAIna anything about getaways..."
+              placeholder="Ask DAIna anything about your trip..."
               value={inputMsg}
               onChange={(e) => setInputMsg(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-              className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-orange-500 font-medium"
+              className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-orange-500 font-medium"
             />
             <button
               onClick={() => handleSend()}
-              className="p-2.5 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 text-white hover:scale-105 active:scale-95 transition-all shadow-md shadow-orange-500/20"
+              className="p-2 rounded-xl bg-orange-500 hover:bg-orange-600 text-white transition-colors"
+              aria-label="Send message"
             >
-              <Send className="w-4 h-4" />
+              <Send className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>

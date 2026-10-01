@@ -258,345 +258,225 @@ export default function DashboardPage() {
     <div className="min-h-screen pb-24 md:pb-12 flex flex-col bg-[#FAFAF9] text-slate-900 font-sans selection:bg-orange-500 selection:text-white">
       <TopNavbar />
 
-      {/* === Hero Section with Modern Light Luxury Backdrop === */}
-      <section className="relative w-full overflow-hidden border-b border-slate-200/80 py-14 sm:py-20">
-        <Image
-          src="https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=1800&auto=format&fit=crop&q=80"
-          alt="Sunrise Riviera Backdrop"
-          fill
-          priority
-          className="object-cover object-center brightness-95 scale-105"
-        />
-        {/* Soft Ambient Light Gradient Overlay */}
-        <div className="absolute inset-0 bg-gradient-to-r from-white/95 via-white/90 to-white/75" />
-        <div className="absolute inset-0 bg-gradient-to-b from-white/60 via-transparent to-[#FAFAF9]" />
+      {/* === Hero Section — Calm, focused, one primary question === */}
+      <section className="relative w-full overflow-hidden border-b border-slate-200/80 py-12 sm:py-16 bg-white">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 md:px-8 space-y-6 text-center">
+          <div className="space-y-3">
+            <h1 className="text-3xl sm:text-5xl font-serif-editorial font-bold text-slate-900 tracking-tight">
+              Where do you want to go?
+            </h1>
+            <p className="text-slate-600 text-sm sm:text-base font-normal max-w-xl mx-auto">
+              Tell DAIna about your trip. We'll help you figure out the rest.
+            </p>
+          </div>
 
-        {/* Sunrise Ambient Light Glow Orbs */}
-        <div className="absolute top-0 right-10 w-[550px] h-[350px] bg-sky-300/30 rounded-full blur-[140px] pointer-events-none" />
-        <div className="absolute -top-10 left-10 w-[450px] h-[300px] bg-orange-300/30 rounded-full blur-[130px] pointer-events-none" />
-
-        {/* Hero Content Container */}
-        <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 md:px-8 space-y-8">
-          <PriceForecastBanner />
-
-          <div className="max-w-3xl space-y-6">
-            <div className="space-y-4">
-              <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-orange-50 border border-orange-200/80 text-orange-800 text-xs font-extrabold uppercase tracking-wider backdrop-blur-md shadow-2xs">
-                <Sparkles className="w-3.5 h-3.5 text-orange-600 animate-pulse" />
-                <span>DAINA GETAWAY ARCHITECT & BOOKING AGGREGATOR</span>
-              </div>
-              <h1 className="text-4xl sm:text-6xl font-serif-editorial font-extrabold tracking-tight leading-tight text-slate-900 drop-shadow-2xs">
-                Plan an entire getaway in<br />
-                <span className="text-sunrise-gradient">30 seconds using DAIna AI.</span>
-              </h1>
-              <p className="text-slate-700 text-base sm:text-lg font-medium max-w-2xl leading-relaxed">
-                Tell DAIna where you want to go or your budget. Get live flights, stays, daily itineraries, and squad expense splitting instantly.
-              </p>
+          {/* Conversational Prompt Box */}
+          <form onSubmit={handleQuickPlan} className="p-2 sm:p-2.5 rounded-2xl bg-slate-50 border border-slate-200 shadow-sm flex flex-col sm:flex-row gap-2 max-w-2xl mx-auto focus-within:border-orange-500 focus-within:bg-white transition-all">
+            <div className="relative flex-1 flex items-center">
+              <Sparkles className="absolute left-3.5 w-4 h-4 text-orange-500" />
+              <input
+                type="text"
+                placeholder="5 days in Japan under ₹1.5L, with great food and photography..."
+                value={promptText}
+                onChange={(e) => setPromptText(e.target.value)}
+                className="w-full bg-transparent border-0 pl-10 pr-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none font-medium"
+              />
             </div>
+            <Button
+              type="submit"
+              variant="primary"
+              size="md"
+              className="bg-orange-500 hover:bg-orange-600 text-white font-semibold text-xs px-6 py-2.5 rounded-xl transition-colors cursor-pointer"
+            >
+              Plan my trip
+            </Button>
+          </form>
 
-            {/* Primary & Secondary Action CTAs */}
-            <div className="flex flex-wrap items-center gap-3.5 pt-1">
-              <Button
-                variant="primary"
-                size="lg"
-                onClick={() => router.push('/planner')}
-                className="bg-gradient-to-r from-orange-500 via-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-extrabold px-8 py-3.5 shadow-lg shadow-orange-500/25 hover:scale-105 transition-all"
+          {/* Popular destination quick prompts */}
+          <div className="flex flex-wrap items-center justify-center gap-2 text-xs text-slate-500 pt-1">
+            <span className="font-medium text-slate-400">Popular:</span>
+            {[
+              { label: 'Goa', query: '4 days in Goa under ₹25k, beaches and seafood' },
+              { label: 'Manali', query: '5 days Manali mountain retreat with scenic trails' },
+              { label: 'Kyoto', query: '6 days in Kyoto, culture, food and photography' },
+              { label: 'Kerala', query: '4 days in Kerala, tea plantations and houseboats' },
+            ].map((item, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={() => setPromptText(item.query)}
+                className="px-2.5 py-1 rounded-full bg-slate-100 hover:bg-orange-50 hover:text-orange-600 text-slate-600 transition-colors font-medium cursor-pointer"
               >
-                <Sparkles className="w-5 h-5 mr-2 text-white" />
-                <span>Start DAIna AI Planner</span>
-              </Button>
-              <Button
-                variant="outline"
-                size="lg"
-                onClick={() => {
-                  document.getElementById('popular-sanctuaries')?.scrollIntoView({ behavior: 'smooth' });
-                }}
-                className="bg-white/90 border-slate-200 text-slate-900 font-extrabold px-7 hover:bg-slate-50 shadow-2xs hover:scale-105 transition-all"
-              >
-                <Compass className="w-5 h-5 mr-2 text-orange-500" />
-                <span>Explore Sanctuaries</span>
-              </Button>
-            </div>
+                {item.label}
+              </button>
+            ))}
+          </div>
 
-            {/* Floating Conversational Prompt Bar */}
-            <div className="space-y-4 pt-2">
-              <form onSubmit={handleQuickPlan} className="input-glow-orange p-3.5 rounded-2xl bg-white/95 border border-slate-200/90 shadow-xl shadow-sky-500/10 flex flex-col sm:flex-row gap-3 max-w-2xl backdrop-blur-md">
-                <div className="relative flex-1">
-                  <Compass className={`absolute left-4 top-3.5 w-5 h-5 text-orange-500 transition-all ${compassFocused ? 'animate-spin-slow' : ''}`} />
-                  <input
-                    type="text"
-                    placeholder="4 days in Goa under ₹25k… or ask anything"
-                    value={promptText}
-                    onChange={(e) => setPromptText(e.target.value)}
-                    onFocus={() => setCompassFocused(true)}
-                    onBlur={() => setCompassFocused(false)}
-                    className="w-full bg-transparent border-0 pl-12 pr-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none font-semibold"
-                  />
-                </div>
-                <Button type="submit" variant="primary" size="md" className="shrink-0 bg-gradient-to-r from-orange-500 via-orange-500 to-amber-500 text-white font-extrabold text-xs px-6 py-3 shadow-md shadow-orange-500/20 hover:scale-105">
-                  <Sparkles className="w-4 h-4 mr-1.5" />
-                  Plan with DAIna
-                </Button>
-              </form>
-
-              {/* Quick Prompts */}
-              <div className="flex flex-wrap gap-2 pt-1">
-                {[
-                  { label: 'Weekend in Coorg', prompt: 'Weekend in Coorg', icon: Sun },
-                  { label: '5 days Goa under ₹20k', prompt: '5 days Goa under ₹20k', icon: Waves },
-                  { label: 'Honeymoon in Andaman', prompt: 'Honeymoon in Andaman', icon: Heart },
-                  { label: 'Solo Manali trek', prompt: 'Solo Manali trek', icon: Mountain },
-                ].map((chip, i) => {
-                  const ChipIcon = chip.icon;
-                  return (
-                    <button
-                      key={i}
-                      onClick={() => setPromptText(chip.prompt)}
-                      className="px-4 py-2 rounded-full bg-white/90 hover:bg-orange-50 text-slate-700 hover:text-orange-700 border border-slate-200 hover:border-orange-300 transition-all text-xs font-semibold shadow-2xs backdrop-blur-md flex items-center gap-1.5 hover:scale-105"
-                    >
-                      <ChipIcon className="w-3.5 h-3.5 text-orange-500" />
-                      <span>{chip.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-
-              <AIMemoryChips />
-            </div>
+          {/* Transparent Memory Chips */}
+          <div className="max-w-2xl mx-auto text-left pt-2">
+            <AIMemoryChips />
           </div>
         </div>
       </section>
 
-      {/* === Main Body Content Container === */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 md:px-8 py-10 space-y-14">
+      {/* === Main Body Content === */}
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 md:px-8 py-8 space-y-12">
 
-        {/* Interactive Travel Map Radar Section */}
-        <section>
-          <InteractiveTravelMap />
-        </section>
-
-        {/* Actionable Getaway Category Pills */}
-        <section id="popular-sanctuaries" className="p-6 rounded-3xl bg-white border border-slate-200/90 shadow-2xs space-y-4">
-          <div className="flex items-center justify-between">
-            <span className="text-xs uppercase font-extrabold text-orange-600 tracking-wider">Quick Getaway Categories</span>
-            <span className="text-xs text-slate-500 font-medium">Filter by travel style</span>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-            {[
-              { id: 'all', label: 'Trending', desc: 'Popular this week', icon: Flame },
-              { id: 'weekend', label: 'Weekend', desc: '2-3 day escapes', icon: Zap },
-              { id: 'family', label: 'Family', desc: 'Kid-friendly stays', icon: Users },
-              { id: 'beach', label: 'Beach', desc: 'Sea & sunset villas', icon: Waves },
-              { id: 'international', label: 'International', desc: 'Visa-easy getaways', icon: Globe },
-              { id: 'budget', label: 'Budget', desc: 'Under ₹15,000', icon: Wallet },
-            ].map((cat) => {
-              const CatIcon = cat.icon;
-              const isSelected = activeVibe === cat.id || (activeVibe === 'all' && cat.id === 'all');
-              return (
-                <button
-                  key={cat.id}
-                  onClick={() => setActiveVibe(cat.id === 'all' ? 'all' : cat.id)}
-                  className={`p-4 rounded-2xl border text-left transition-all ${
-                    isSelected
-                      ? 'bg-gradient-to-br from-orange-50 to-amber-50/50 border-orange-300 text-orange-950 font-extrabold shadow-sm scale-[1.02]'
-                      : 'bg-slate-50/70 border-slate-200/80 text-slate-800 hover:bg-slate-100/80 hover:border-slate-300'
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <CatIcon className={`w-4 h-4 ${isSelected ? 'text-orange-600' : 'text-slate-500'}`} />
-                    <p className="text-xs font-extrabold">{cat.label}</p>
-                  </div>
-                  <p className="text-[10px] text-slate-500 font-medium mt-1">{cat.desc}</p>
-                </button>
-              );
-            })}
-          </div>
-        </section>
-
-        {/* Active & Upcoming Getaway Banner (Central Trip Workspace Cockpit) */}
+        {/* YOUR NEXT TRIP — Central Cockpit Card */}
         {realActiveTrip ? (
-          <section className="p-6 sm:p-8 rounded-3xl bg-white border border-slate-200/90 shadow-md space-y-4 relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-64 h-64 bg-orange-400/5 rounded-full blur-2xl pointer-events-none" />
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative z-10">
-              <div className="space-y-1.5">
+          <section className="p-6 rounded-2xl bg-white border border-slate-200 shadow-sm relative overflow-hidden">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="space-y-1">
                 <div className="flex items-center gap-2">
-                  <span className="px-3 py-0.5 rounded-full bg-emerald-50 text-emerald-800 text-[10px] font-extrabold uppercase border border-emerald-300 flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" /> Central Trip Workspace
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-orange-600">
+                    Your Active Trip
                   </span>
-                  <span className="text-xs text-orange-600 font-mono font-bold">
-                    {realActiveTrip.startDate ? `Starts ${realActiveTrip.startDate}` : 'Active Passage'}
+                  <span className="text-xs text-slate-400">·</span>
+                  <span className="text-xs text-slate-500">
+                    {realActiveTrip.startDate ? `Starts ${realActiveTrip.startDate}` : 'Upcoming'}
                   </span>
                 </div>
-                <h3 className="text-2xl sm:text-3xl font-serif-editorial font-bold text-slate-900">
+                <h3 className="text-xl sm:text-2xl font-serif-editorial font-bold text-slate-900">
                   {realActiveTrip.title}
                 </h3>
-                <p className="text-xs text-slate-500 font-medium">
-                  {realActiveTrip.destination} • {realActiveTrip.daysCount || realActiveTrip.days?.length || 3} Days • Budget: ₹{realActiveTrip.budget?.toLocaleString('en-IN')}
+                <p className="text-xs text-slate-600">
+                  {realActiveTrip.destination} · {realActiveTrip.daysCount || realActiveTrip.days?.length || 3} days · ₹{realActiveTrip.budget?.toLocaleString('en-IN')} estimated
                 </p>
               </div>
 
               <Button
                 variant="primary"
                 size="md"
-                className="bg-gradient-to-r from-orange-500 to-amber-500 text-white font-extrabold shrink-0 shadow-md shadow-orange-500/20 px-6 hover:scale-105 transition-all text-xs cursor-pointer"
+                className="bg-orange-500 hover:bg-orange-600 text-white font-semibold shrink-0 px-5 py-2.5 rounded-xl transition-colors text-xs"
                 onClick={() => router.push('/trips')}
               >
                 <Luggage className="w-4 h-4 mr-1.5" />
-                Open Trip Workspace →
+                Continue planning in Trip Workspace →
               </Button>
             </div>
           </section>
         ) : (
-          <section className="p-6 sm:p-8 rounded-3xl bg-gradient-to-r from-orange-50 via-white to-amber-50 border border-orange-200/90 shadow-sm space-y-4 relative overflow-hidden">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative z-10">
-              <div className="space-y-1.5">
-                <span className="px-3 py-0.5 rounded-full bg-orange-100 text-orange-800 text-[10px] font-extrabold uppercase border border-orange-200">
-                  Central Trip Workspace
-                </span>
-                <h3 className="text-2xl sm:text-3xl font-serif-editorial font-bold text-slate-900">
-                  No Active Trip Planned Yet
-                </h3>
-                <p className="text-xs text-slate-500 font-medium max-w-xl">
-                  Build and manage your complete vacation in one place. Let DAIna AI architect your multi-day itinerary with hotels, dining, and route pacing.
-                </p>
-              </div>
-
-              <Button
-                variant="primary"
-                size="md"
-                className="bg-gradient-to-r from-orange-500 to-amber-500 text-white font-extrabold shrink-0 shadow-md shadow-orange-500/20 px-6 hover:scale-105 transition-all text-xs cursor-pointer"
-                onClick={() => router.push('/planner')}
-              >
-                <Sparkles className="w-4 h-4 mr-1.5" />
-                Plan a Trip with AI →
-              </Button>
+          <section className="p-6 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Trip Workspace</span>
+              <h3 className="text-lg font-semibold text-slate-900">No active trip right now</h3>
+              <p className="text-xs text-slate-500">Every plan, booking, and daily schedule lives inside your Trip Workspace.</p>
             </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="bg-white border-slate-200 text-slate-800 font-semibold hover:bg-slate-50 text-xs px-4"
+              onClick={() => router.push('/planner')}
+            >
+              Plan your first trip →
+            </Button>
           </section>
         )}
 
-        {/* Curated Sanctuaries Section */}
+        {/* EXPLORE FOR YOU — Curated Destinations */}
         <section className="space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 border-b border-slate-200/80 pb-4">
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 border-b border-slate-200 pb-4">
             <div>
-              <span className="text-xs uppercase font-extrabold text-orange-600 tracking-widest flex items-center gap-1.5">
-                <Flame className="w-4 h-4 text-orange-500" /> Curated Sanctuaries
+              <span className="text-xs uppercase font-bold text-orange-600 tracking-wider">
+                Explore For You
               </span>
-              <h2 className="text-3xl sm:text-4xl font-serif-editorial font-bold text-slate-900 mt-1">
-                Explore Popular Sanctuaries
+              <h2 className="text-2xl sm:text-3xl font-serif-editorial font-bold text-slate-900 mt-0.5">
+                Destinations you'll love
               </h2>
             </div>
-            <span className="text-xs text-slate-500 font-medium">Ranked weekly · DAIna-curated from 28K+ getaway seekers</span>
+
+            {/* Travel Vibes filter */}
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+              {travelVibes.map((vibe) => {
+                const isActive = activeVibe === vibe.id;
+                return (
+                  <button
+                    key={vibe.id}
+                    onClick={() => setActiveVibe(vibe.id)}
+                    className={`px-3 py-1.5 rounded-full text-xs font-medium shrink-0 transition-colors ${
+                      isActive
+                        ? 'bg-orange-500 text-white font-semibold'
+                        : 'bg-white text-slate-600 hover:text-slate-900 border border-slate-200'
+                    }`}
+                  >
+                    {vibe.label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
-          <div className="flex items-center gap-2.5 overflow-x-auto pb-2 no-scrollbar">
-            {travelVibes.map((vibe) => {
-              const isActive = activeVibe === vibe.id;
-              const Icon = vibe.icon;
-              return (
-                <button
-                  key={vibe.id}
-                  onClick={() => setActiveVibe(vibe.id)}
-                  className={`flex items-center gap-2 px-5 py-3 rounded-2xl text-xs font-bold tracking-wide shrink-0 transition-all ${
-                    isActive
-                      ? 'bg-gradient-to-r from-orange-500 via-orange-500 to-amber-500 text-white shadow-md shadow-orange-500/20 font-extrabold scale-105'
-                      : 'bg-white text-slate-700 hover:text-slate-900 hover:bg-slate-50 border border-slate-200/90 shadow-2xs'
-                  }`}
-                >
-                  <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-sky-600'}`} />
-                  {vibe.label}
-                </button>
-              );
-            })}
-          </div>
-        </section>
-
-        {/* High-End Destination Cards Grid */}
-        <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {filteredDestinations.map((dest) => (
-            <Card key={dest.id} interactive className="editorial-card overflow-hidden flex flex-col justify-between group rounded-3xl p-6 bg-white border border-slate-200/90 shadow-sm hover:shadow-xl hover:border-orange-300 transition-all">
-              <div className="space-y-4">
-                <div className="relative h-64 -mx-6 -mt-6 overflow-hidden">
-                  <Image
-                    src={dest.image}
-                    alt={dest.title}
-                    fill
-                    className="object-cover group-hover:scale-105 transition-transform duration-1000 ease-out brightness-95"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-black/30" />
-
-                  <div className="absolute top-4 left-4 right-4 flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5 overflow-hidden">
-                      <span className="px-3 py-1 rounded-full bg-white/95 text-orange-700 text-[10px] font-extrabold tracking-widest uppercase truncate max-w-[140px] shadow-sm" title={dest.tag}>
-                        {dest.tag}
-                      </span>
-                      <span className="px-2.5 py-1 rounded-full bg-emerald-500 text-white text-[9px] font-extrabold tracking-wider uppercase shrink-0 shadow-md">
-                        ✦ DAIna Pick
-                      </span>
-                    </div>
-                    <button
-                      onClick={() => toggleFavorite(dest.id, dest.title)}
-                      className="p-2.5 rounded-full bg-white/90 text-slate-700 hover:text-rose-500 transition-colors border border-slate-200 shrink-0 shadow-md hover:scale-110"
-                    >
-                      <Heart className={`w-4 h-4 ${savedFavorites[dest.id] ? 'fill-rose-500 text-rose-500' : ''}`} />
-                    </button>
-                  </div>
-
-                  <div className="absolute bottom-4 left-4 right-4 space-y-1">
-                    <div className="flex items-center justify-between gap-2">
-                      <h3 className="text-2xl font-serif-editorial font-bold text-white group-hover:text-amber-200 transition-colors drop-shadow-md">
-                        {dest.title}
-                      </h3>
-                      <span className="px-2.5 py-1 rounded-full bg-black/60 backdrop-blur-md text-amber-300 text-xs font-bold flex items-center gap-1 border border-white/20 shrink-0">
-                        <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
-                        <span>{dest.rating}</span>
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-200 flex items-center gap-1 font-medium drop-shadow">
-                      <MapPin className="w-3.5 h-3.5 text-amber-300" />
-                      {dest.location}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="space-y-3 pt-2">
-                  <div className="flex items-center justify-between text-xs text-slate-600">
-                    <span className="font-semibold text-orange-600 font-serif-editorial">{dest.duration}</span>
-                    <button
-                      onClick={() => setSelectedGuide(dest)}
-                      className="text-xs text-sky-600 font-bold hover:underline flex items-center gap-1"
-                    >
-                      <BookOpen className="w-3.5 h-3.5" /> Getaway Secrets
-                    </button>
-                  </div>
-                  <div className="space-y-2">
-                    {dest.highlights.map((h, idx) => (
-                      <div key={idx} className="flex items-center gap-2 text-xs text-slate-700 font-medium">
-                        <span className="w-1.5 h-1.5 rounded-full bg-orange-500 shrink-0" />
-                        <span>{h}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <div className="pt-4 mt-6 border-t border-slate-100 flex items-center justify-between gap-3">
+          {/* Simplified, Scannable Destination Cards Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredDestinations.map((dest) => (
+              <div
+                key={dest.id}
+                className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-2xs hover:shadow-md hover:border-slate-300 transition-all flex flex-col justify-between"
+              >
                 <div>
-                  <span className="text-[10px] text-slate-400 block uppercase font-bold tracking-widest">Est. Cost</span>
-                  <span className="text-2xl font-serif-editorial font-extrabold text-orange-600">{dest.price}</span>
+                  <div className="relative h-48 w-full overflow-hidden">
+                    <Image
+                      src={dest.image}
+                      alt={dest.title}
+                      fill
+                      className="object-cover"
+                    />
+                    <div className="absolute top-3 left-3 right-3 flex items-center justify-between">
+                      <span className="px-2.5 py-0.5 rounded-full bg-white/95 text-slate-800 text-[10px] font-semibold border border-slate-200 shadow-2xs">
+                        Curated guide
+                      </span>
+                      <button
+                        onClick={() => toggleFavorite(dest.id, dest.title)}
+                        className="p-1.5 rounded-full bg-white/90 text-slate-700 hover:text-rose-500 transition-colors shadow-2xs"
+                        aria-label="Save destination"
+                      >
+                        <Heart className={`w-3.5 h-3.5 ${savedFavorites[dest.id] ? 'fill-rose-500 text-rose-500' : ''}`} />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="p-4 space-y-2">
+                    <div className="space-y-0.5">
+                      <h3 className="text-lg font-semibold text-slate-900">{dest.title}</h3>
+                      <p className="text-xs text-slate-500 flex items-center gap-1">
+                        <MapPin className="w-3.5 h-3.5 text-slate-400" />
+                        {dest.location}
+                      </p>
+                    </div>
+
+                    <p className="text-xs text-slate-600">
+                      {dest.duration} · <span className="font-semibold text-slate-900">{dest.price} est.</span>
+                    </p>
+
+                    <div className="flex flex-wrap gap-1 pt-1">
+                      {dest.highlights.slice(0, 2).map((h, i) => (
+                        <span key={i} className="text-[11px] px-2 py-0.5 rounded-md bg-slate-50 text-slate-600 border border-slate-200/80">
+                          {h}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
                 </div>
 
-                <Button
-                  variant="primary"
-                  size="sm"
-                  className="bg-orange-50 hover:bg-orange-100 text-orange-700 border border-orange-200 text-xs font-extrabold px-4 py-2 rounded-xl hover:scale-105 transition-all"
-                  onClick={() => router.push(`/planner?query=${encodeURIComponent(`Plan getaway to ${dest.title}`)}`)}>
-                  <Bot className="w-3.5 h-3.5 mr-1 text-orange-600" />
-                  <span>Curate Escape</span>
-                  <ArrowRight className="w-3.5 h-3.5 ml-1" />
-                </Button>
+                <div className="p-4 pt-2 border-t border-slate-100 flex items-center justify-between">
+                  <button
+                    onClick={() => setSelectedGuide(dest)}
+                    className="text-xs text-slate-500 hover:text-slate-800 font-medium cursor-pointer"
+                  >
+                    View tips
+                  </button>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    className="bg-orange-500 hover:bg-orange-600 text-white text-xs font-semibold px-3.5 py-1.5 rounded-lg"
+                    onClick={() => router.push(`/planner?query=${encodeURIComponent(`Plan getaway to ${dest.title}`)}`)}
+                  >
+                    Plan this →
+                  </Button>
+                </div>
               </div>
-            </Card>
-          ))}
+            ))}
+          </div>
         </section>
 
         {/* Provider Aggregation Hub */}

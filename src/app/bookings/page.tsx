@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import {
   Plane,
@@ -10,18 +10,14 @@ import {
   Bus,
   Car,
   Sparkles,
-  Filter,
   CheckCircle2,
   ArrowRight,
   Star,
   MapPin,
-  Award,
   Ticket,
-  Luggage,
   ShieldCheck,
   ExternalLink,
   Search,
-  Compass,
   Briefcase
 } from 'lucide-react';
 import { TopNavbar } from '@/components/layout/TopNavbar';
@@ -34,11 +30,14 @@ import { useAuthStore } from '@/store/useAuthStore';
 
 type BookingCategory = 'flights' | 'hotels' | 'trains' | 'buses' | 'cabs' | 'my_bookings';
 
-export default function BookingsPage() {
+function BookingsContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const paramTripId = searchParams.get('tripId');
+
   const { updateCoins } = useAuthStore();
   const [activeCategory, setActiveCategory] = useState<BookingCategory>('flights');
-  const [bookingConfirmed, setBookingConfirmed] = useState<{ title: string; pnr: string; tripId?: string } | null>(null);
+  const [bookingConfirmed, setBookingConfirmed] = useState<{ title: string; pnr: string; provider: string; tripId?: string } | null>(null);
   const [bookingError, setBookingError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [userBookings, setUserBookings] = useState<any[]>([]);
@@ -70,7 +69,11 @@ export default function BookingsPage() {
 
         if (tripsData && tripsData.length > 0) {
           setActiveTrips(tripsData);
-          setSelectedTripId(tripsData[0].id);
+          if (paramTripId && tripsData.some((t: any) => t.id === paramTripId)) {
+            setSelectedTripId(paramTripId);
+          } else {
+            setSelectedTripId(tripsData[0].id);
+          }
         }
         if (bookingsData && bookingsData.length > 0) {
           setUserBookings(bookingsData);
@@ -80,7 +83,7 @@ export default function BookingsPage() {
       }
     }
     initData();
-  }, [bookingConfirmed]);
+  }, [bookingConfirmed, paramTripId]);
 
   // Load Flights from Backend Aggregator
   const loadFlights = async (orig = flightOrigin, dest = flightDest) => {
@@ -91,7 +94,7 @@ export default function BookingsPage() {
       setFlightsList(results || []);
     } catch (err) {
       console.error('Failed to search flights:', err);
-      setFlightError('Unable to connect to DashTiny services. Retry');
+      setFlightError('Unable to connect to DashTiny flight search. Please try again.');
       setFlightsList([]);
     } finally {
       setIsSearchingFlights(false);
@@ -107,7 +110,7 @@ export default function BookingsPage() {
       setHotelsList(results || []);
     } catch (err) {
       console.error('Failed to search hotels:', err);
-      setHotelError('Unable to connect to DashTiny services. Retry');
+      setHotelError('Unable to connect to DashTiny stay search. Please try again.');
       setHotelsList([]);
     } finally {
       setIsSearchingHotels(false);
@@ -120,11 +123,11 @@ export default function BookingsPage() {
   }, []);
 
   const categories = [
-    { id: 'flights' as BookingCategory, label: 'First Class Flights', icon: Plane },
-    { id: 'hotels' as BookingCategory, label: 'Luxury Stays & Villas', icon: Hotel },
-    { id: 'trains' as BookingCategory, label: 'Royal Express Trains', icon: Train },
-    { id: 'buses' as BookingCategory, label: 'Executive Coaches', icon: Bus },
-    { id: 'cabs' as BookingCategory, label: 'Private Chauffeurs', icon: Car },
+    { id: 'flights' as BookingCategory, label: 'Flights', icon: Plane },
+    { id: 'hotels' as BookingCategory, label: 'Stays & Hotels', icon: Hotel },
+    { id: 'trains' as BookingCategory, label: 'Trains', icon: Train },
+    { id: 'buses' as BookingCategory, label: 'Buses', icon: Bus },
+    { id: 'cabs' as BookingCategory, label: 'Cabs', icon: Car },
     { id: 'my_bookings' as BookingCategory, label: `Saved Bookings (${userBookings.length})`, icon: Ticket },
   ];
 
@@ -138,6 +141,7 @@ export default function BookingsPage() {
     setLoading(true);
     setBookingError(null);
     setBookingConfirmed(null);
+
     try {
       const res = await apiService.saveBookingReference({
         category,
@@ -149,7 +153,12 @@ export default function BookingsPage() {
       });
 
       if (res && res.pnr_ref) {
-        setBookingConfirmed({ title: res.title, pnr: res.pnr_ref, tripId: selectedTripId });
+        setBookingConfirmed({
+          title: res.title,
+          pnr: res.pnr_ref,
+          provider: res.provider || provider,
+          tripId: selectedTripId,
+        });
         updateCoins(50);
       } else {
         setBookingError("Booking reference could not be saved.");
@@ -166,28 +175,24 @@ export default function BookingsPage() {
     <div className="min-h-screen pb-24 md:pb-12 flex flex-col bg-[#FAFAF9] text-slate-900 font-sans selection:bg-orange-500 selection:text-white">
       <TopNavbar />
 
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 md:px-8 py-8 space-y-8">
-        {/* Page Header & Active Trip Attachment Bar */}
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 md:px-8 py-6 space-y-6">
+        {/* Page Header */}
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-slate-200/90 pb-6">
-          <div className="space-y-2">
-            <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-orange-100 border border-orange-200 text-orange-800 text-xs font-extrabold tracking-wider uppercase">
-              <Award className="w-3.5 h-3.5 text-orange-600" />
-              <span>SEARCH & COMPARE • NORMALIZED INVENTORY</span>
-            </div>
-            <h1 className="text-3xl sm:text-4xl font-serif-editorial font-bold text-slate-900 tracking-tight">
-              Flights, Luxury Stays & Escapes
+          <div className="space-y-1.5">
+            <h1 className="text-2xl sm:text-3xl font-serif-editorial font-bold text-slate-900 tracking-tight">
+              Compare Flights & Stays
             </h1>
-            <p className="text-slate-600 text-sm font-medium max-w-2xl">
-              Normalized provider schemas across Skyscanner, Booking.com, IndiGo, and Airbnb. All reservations attach directly to your central Trip Workspace.
+            <p className="text-slate-600 text-xs sm:text-sm font-medium max-w-2xl">
+              Compare prices across Skyscanner, Booking.com, IndiGo, and Airbnb. Once booked, attach your confirmed reference to your trip workspace.
             </p>
           </div>
 
           {/* Trip Attachment Dropdown Selector */}
           {activeTrips.length > 0 && (
-            <div className="p-3.5 rounded-2xl bg-white border border-slate-200 shadow-sm space-y-1.5 shrink-0 min-w-[280px]">
-              <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700">
+            <div className="p-3.5 rounded-2xl bg-white border border-slate-200 shadow-2xs space-y-1.5 shrink-0 min-w-[280px]">
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-700">
                 <Briefcase className="w-3.5 h-3.5 text-orange-500" />
-                <span>Attach Reservation to Trip:</span>
+                <span>Attach to Active Trip:</span>
               </div>
               <select
                 value={selectedTripId}
@@ -196,7 +201,7 @@ export default function BookingsPage() {
               >
                 {activeTrips.map((t) => (
                   <option key={t.id} value={t.id}>
-                    {t.title} ({t.destination})
+                    {t.destination} ({t.startDate})
                   </option>
                 ))}
               </select>
@@ -204,35 +209,57 @@ export default function BookingsPage() {
           )}
         </div>
 
-        {/* Confirmation Toast with real reference & Direct Link to Trip Workspace */}
+        {/* 4-Step Booking Mental Model Banner */}
+        <div className="p-4 rounded-2xl bg-white border border-slate-200 text-xs text-slate-600 flex flex-wrap items-center justify-between gap-3 shadow-2xs">
+          <div className="flex items-center gap-2">
+            <span className="w-5 h-5 rounded-full bg-orange-100 text-orange-700 font-bold flex items-center justify-center text-[11px]">1</span>
+            <span className="font-semibold text-slate-800">Compare options</span>
+          </div>
+          <ArrowRight className="w-3.5 h-3.5 text-slate-300 hidden sm:inline" />
+          <div className="flex items-center gap-2">
+            <span className="w-5 h-5 rounded-full bg-slate-100 text-slate-700 font-bold flex items-center justify-center text-[11px]">2</span>
+            <span>Book directly on provider</span>
+          </div>
+          <ArrowRight className="w-3.5 h-3.5 text-slate-300 hidden sm:inline" />
+          <div className="flex items-center gap-2">
+            <span className="w-5 h-5 rounded-full bg-slate-100 text-slate-700 font-bold flex items-center justify-center text-[11px]">3</span>
+            <span>Save confirmation reference</span>
+          </div>
+          <ArrowRight className="w-3.5 h-3.5 text-slate-300 hidden sm:inline" />
+          <div className="flex items-center gap-2">
+            <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-800 font-bold flex items-center justify-center text-[11px]">4</span>
+            <span className="font-semibold text-emerald-900">Manage in Trip Workspace</span>
+          </div>
+        </div>
+
+        {/* Confirmation Banner */}
         {bookingConfirmed && (
-          <div className="p-6 rounded-3xl bg-gradient-to-r from-emerald-500 to-teal-600 text-white text-xs font-bold flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xl animate-in fade-in slide-in-from-top-4">
+          <div className="p-5 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-950 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm animate-in fade-in">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center shrink-0">
-                <CheckCircle2 className="w-6 h-6 text-white" />
+              <div className="w-8 h-8 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-700 shrink-0">
+                <CheckCircle2 className="w-5 h-5" />
               </div>
-              <div>
-                <span className="text-sm font-serif-editorial font-bold block">
-                  Booking Reference Saved for {bookingConfirmed.title}!
+              <div className="space-y-0.5">
+                <span className="text-sm font-semibold text-emerald-950 block">
+                  ✓ Booking added to your trip
                 </span>
-                <p className="text-emerald-100 font-mono text-xs mt-0.5">
-                  Reference Code: <span className="bg-white/20 px-2 py-0.5 rounded text-white font-extrabold">{bookingConfirmed.pnr}</span> • Saved to Trip Workspace
+                <p className="text-emerald-800 font-medium text-xs">
+                  Booked with: <strong>{bookingConfirmed.provider}</strong> • Reference: <span className="font-mono font-bold bg-white px-1.5 py-0.5 rounded border border-emerald-200">{bookingConfirmed.pnr}</span>
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-3">
-              <span className="text-amber-300 font-extrabold bg-black/20 px-3 py-1.5 rounded-full text-xs">+50 Gold Coins Added</span>
+            <div className="flex items-center gap-2.5">
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => router.push('/trips')}
-                className="bg-white text-emerald-900 hover:bg-emerald-50 font-extrabold border-0 text-xs shadow-md"
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs border-0 shadow-2xs cursor-pointer"
               >
-                Open in Trip Workspace ➔
+                Open in Trip Workspace →
               </Button>
               <button
                 onClick={() => setBookingConfirmed(null)}
-                className="text-emerald-200 hover:text-white text-xs underline font-bold px-1"
+                className="text-emerald-700 hover:text-emerald-900 text-xs font-semibold px-2 cursor-pointer"
               >
                 Dismiss
               </button>
@@ -242,23 +269,17 @@ export default function BookingsPage() {
 
         {/* Booking Failure Alert */}
         {bookingError && (
-          <div className="p-6 rounded-3xl bg-amber-50 border border-amber-200 text-amber-950 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-md animate-in fade-in">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-amber-100 flex items-center justify-center shrink-0 text-amber-800 font-bold text-lg">
-                ⚠️
-              </div>
+          <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-950 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-2.5">
+              <span className="text-amber-800 font-bold">⚠️</span>
               <div>
-                <span className="text-sm font-serif-editorial font-bold block text-amber-900">
-                  {bookingError}
-                </span>
-                <p className="text-xs text-amber-800 font-medium mt-0.5">
-                  Unable to connect to DashTiny booking services. No charges were made.
-                </p>
+                <span className="text-xs font-semibold text-amber-900 block">{bookingError}</span>
+                <p className="text-[11px] text-amber-700">No charges were made.</p>
               </div>
             </div>
             <button
               onClick={() => setBookingError(null)}
-              className="text-amber-800 hover:text-amber-950 text-xs font-bold px-3 py-1.5 rounded-xl border border-amber-300 hover:bg-amber-100 cursor-pointer"
+              className="text-amber-800 hover:text-amber-950 text-xs font-semibold px-2.5 py-1 rounded-lg border border-amber-300 hover:bg-amber-100 cursor-pointer"
             >
               Dismiss
             </button>
@@ -266,7 +287,7 @@ export default function BookingsPage() {
         )}
 
         {/* Category Switcher Tabs */}
-        <div className="flex items-center gap-2.5 overflow-x-auto pb-2 no-scrollbar">
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
           {categories.map((cat) => {
             const Icon = cat.icon;
             const isActive = activeCategory === cat.id;
@@ -274,13 +295,13 @@ export default function BookingsPage() {
               <button
                 key={cat.id}
                 onClick={() => setActiveCategory(cat.id)}
-                className={`flex items-center gap-2 px-5 py-3 rounded-2xl text-xs font-bold tracking-wide shrink-0 transition-all ${
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold shrink-0 transition-all cursor-pointer ${
                   isActive
-                    ? 'bg-gradient-to-r from-orange-500 via-orange-500 to-amber-500 text-white shadow-md shadow-orange-500/20 font-extrabold scale-105'
-                    : 'bg-white text-slate-700 hover:text-slate-900 hover:bg-slate-50 border border-slate-200 shadow-2xs'
+                    ? 'bg-orange-600 text-white shadow-2xs font-bold'
+                    : 'bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-50 border border-slate-200'
                 }`}
               >
-                <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-orange-500'}`} />
+                <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-white' : 'text-slate-500'}`} />
                 <span>{cat.label}</span>
               </button>
             );
@@ -289,19 +310,19 @@ export default function BookingsPage() {
 
         {/* FLIGHTS TAB */}
         {activeCategory === 'flights' && (
-          <section className="space-y-6">
-            {/* Live Filter Controls */}
-            <Card className="p-5 rounded-3xl bg-white border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <section className="space-y-4">
+            {/* Airport Filter Controls */}
+            <Card className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div className="flex flex-wrap items-center gap-3">
                 <div className="space-y-1">
-                  <label className="text-[10px] font-extrabold uppercase text-slate-400">Origin Airport</label>
+                  <label className="text-[10px] font-semibold uppercase text-slate-400">Origin</label>
                   <select
                     value={flightOrigin}
                     onChange={(e) => {
                       setFlightOrigin(e.target.value);
                       loadFlights(e.target.value, flightDest);
                     }}
-                    className="text-xs font-bold bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    className="text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500"
                   >
                     <option value="BLR">BLR — Bengaluru Kempegowda</option>
                     <option value="DEL">DEL — New Delhi Indira Gandhi</option>
@@ -309,17 +330,17 @@ export default function BookingsPage() {
                   </select>
                 </div>
 
-                <ArrowRight className="w-4 h-4 text-orange-500 hidden md:block mt-4" />
+                <ArrowRight className="w-3.5 h-3.5 text-slate-400 hidden md:block mt-4" />
 
                 <div className="space-y-1">
-                  <label className="text-[10px] font-extrabold uppercase text-slate-400">Destination Airport</label>
+                  <label className="text-[10px] font-semibold uppercase text-slate-400">Destination</label>
                   <select
                     value={flightDest}
                     onChange={(e) => {
                       setFlightDest(e.target.value);
                       loadFlights(flightOrigin, e.target.value);
                     }}
-                    className="text-xs font-bold bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    className="text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500"
                   >
                     <option value="GOI">GOI — Goa Dabolim / Mopa</option>
                     <option value="JAI">JAI — Jaipur Sanganer</option>
@@ -329,99 +350,82 @@ export default function BookingsPage() {
               </div>
 
               <div className="flex items-center gap-3">
-                <span className="text-xs text-slate-500 font-medium">
-                  {isSearchingFlights ? 'Querying airline schedules...' : `${flightsList.length} curated flight offers loaded`}
+                <span className="text-xs text-slate-500">
+                  {isSearchingFlights ? 'Querying airline schedules...' : `${flightsList.length} offers compared`}
                 </span>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => loadFlights()}
                   disabled={isSearchingFlights}
-                  className="border-slate-200 text-xs font-bold hover:bg-slate-50"
+                  className="border-slate-200 text-xs font-semibold hover:bg-slate-50 cursor-pointer"
                 >
                   <Search className="w-3.5 h-3.5 mr-1 text-orange-500" />
-                  Refresh Matrix
+                  Refresh
                 </Button>
               </div>
             </Card>
 
-            {/* Flight Offers List */}
-            {flightError && (
-              <div className="p-8 rounded-3xl bg-amber-50/90 border border-amber-200 text-center space-y-3">
-                <p className="text-xs text-amber-800 font-semibold">{flightError}</p>
-                <Button variant="outline" size="sm" onClick={() => loadFlights()} className="border-amber-300 text-amber-900 font-bold text-xs cursor-pointer">
-                  Retry Search
-                </Button>
-              </div>
-            )}
-
-            {!isSearchingFlights && !flightError && flightsList.length === 0 && (
-              <div className="p-8 rounded-3xl bg-white border border-slate-200 text-center space-y-2">
-                <p className="text-xs text-slate-500 font-medium">No verified flight offers available for {flightOrigin} → {flightDest}.</p>
-              </div>
-            )}
-
-            <div className="space-y-4">
-              {flightsList.map((fl) => (
+            {/* Flight Offers List with Decision Support */}
+            <div className="space-y-3">
+              {flightsList.map((fl, idx) => (
                 <Card
-                  key={fl.id}
-                  className="editorial-card p-6 rounded-3xl bg-white border border-slate-200/90 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6 hover:border-orange-300 transition-all"
+                  key={fl.id || idx}
+                  className="p-5 rounded-2xl bg-white border border-slate-200 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-5 hover:border-slate-300 transition-all"
                 >
-                  <div className="space-y-2.5">
-                    <div className="flex items-center gap-2.5">
-                      <span className="font-serif-editorial font-bold text-slate-900 text-lg">{fl.provider}</span>
-                      <span className="px-2.5 py-0.5 rounded bg-orange-100 text-orange-700 font-mono text-[10px] font-extrabold border border-orange-200">
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <span className="font-serif-editorial font-bold text-slate-900 text-base">{fl.provider}</span>
+                      <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-mono text-[10px] font-semibold">
                         {fl.flight_number}
                       </span>
-                      {/* Trust Provenance Badge */}
-                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-800 text-[10px] font-extrabold border border-indigo-200">
-                        {fl.provenance === 'PROVIDER_VERIFIED' ? (
-                          <>
-                            <ShieldCheck className="w-3 h-3 text-emerald-600" />
-                            PROVIDER VERIFIED
-                          </>
-                        ) : (
-                          <>
-                            <CheckCircle2 className="w-3 h-3 text-indigo-600" />
-                            {fl.provenance || 'CURATED'}
-                          </>
-                        )}
+                      {idx === 0 && (
+                        <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10px] font-bold uppercase tracking-wide">
+                          BEST VALUE
+                        </span>
+                      )}
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-50 text-slate-600 text-[10px] font-medium border border-slate-200">
+                        <ShieldCheck className="w-3 h-3 text-emerald-600" />
+                        Live Inventory
                       </span>
                     </div>
 
-                    <div className="flex items-center gap-4 text-sm font-bold text-slate-800">
+                    <div className="flex items-center gap-3 text-sm font-semibold text-slate-800">
                       <span>{fl.origin} ({fl.departure_time})</span>
-                      <ArrowRight className="w-4 h-4 text-orange-500" />
+                      <ArrowRight className="w-3.5 h-3.5 text-orange-500" />
                       <span>{fl.destination} ({fl.arrival_time})</span>
                     </div>
 
-                    <p className="text-xs text-slate-500 font-medium">
-                      {fl.duration} • {fl.baggage} • {fl.cancellation}
+                    <p className="text-xs text-slate-500">
+                      Non-stop • {fl.duration} • {fl.baggage || '15kg check-in'} • {fl.cancellation || 'Standard cancellation'}
                     </p>
 
-                    {/* Why Recommended AI Rationale */}
-                    {fl.why_recommended && (
-                      <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-orange-50/80 border border-orange-200/60 text-orange-950 text-xs font-semibold">
-                        <Sparkles className="w-3.5 h-3.5 text-orange-600 shrink-0" />
-                        <span>Why recommended: {fl.why_recommended}</span>
-                      </div>
-                    )}
+                    {/* Decision Support Rationale */}
+                    <div className="flex flex-wrap items-center gap-2 pt-1 text-xs text-slate-600">
+                      <span className="inline-flex items-center gap-1 text-emerald-700 font-medium">
+                        ✓ Fits your trip timeline
+                      </span>
+                      <span>•</span>
+                      <span className="inline-flex items-center gap-1 text-slate-600">
+                        ✓ Direct transit matches your pacing
+                      </span>
+                    </div>
                   </div>
 
-                  <div className="flex items-center justify-between md:justify-end gap-6 pt-4 md:pt-0 border-t md:border-t-0 border-slate-100">
+                  <div className="flex items-center justify-between md:justify-end gap-5 pt-3 md:pt-0 border-t md:border-t-0 border-slate-100">
                     <div className="text-right">
-                      <span className="text-2xl font-serif-editorial font-extrabold text-orange-600">
+                      <span className="text-xl font-serif-editorial font-bold text-slate-900">
                         ₹{fl.price?.toLocaleString('en-IN')}
                       </span>
-                      <span className="text-[10px] text-emerald-600 block font-extrabold">Earn +50 Gold Coins</span>
+                      <span className="text-[11px] text-slate-400 block font-normal">per passenger</span>
                     </div>
 
-                    <div className="flex flex-col gap-2">
+                    <div className="flex flex-col gap-1.5">
                       <Button
                         variant="primary"
-                        size="md"
+                        size="sm"
                         isLoading={loading}
-                        className="bg-gradient-to-r from-orange-500 to-amber-500 text-white font-extrabold shadow-md shadow-orange-500/20 hover:scale-105 transition-all text-xs"
+                        className="bg-orange-600 hover:bg-orange-700 text-white font-semibold text-xs shadow-2xs cursor-pointer"
                         onClick={() =>
                           handleSaveBookingReference(
                             'flight',
@@ -432,7 +436,7 @@ export default function BookingsPage() {
                           )
                         }
                       >
-                        Save Reference & Attach ➔
+                        Attach Reference ➔
                       </Button>
 
                       {fl.deep_link && (
@@ -440,9 +444,9 @@ export default function BookingsPage() {
                           href={fl.deep_link}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-flex items-center justify-center gap-1 text-[11px] font-bold text-slate-500 hover:text-slate-900 transition-colors"
+                          className="inline-flex items-center justify-center gap-1 text-[11px] font-semibold text-slate-500 hover:text-slate-800 transition-colors"
                         >
-                          <span>Partner Deep-link</span>
+                          <span>Book on {fl.provider}</span>
                           <ExternalLink className="w-3 h-3 text-slate-400" />
                         </a>
                       )}
@@ -454,86 +458,71 @@ export default function BookingsPage() {
           </section>
         )}
 
-        {/* HOTELS & VILLAS TAB */}
+        {/* HOTELS & STAYS TAB */}
         {activeCategory === 'hotels' && (
-          <section className="space-y-6">
+          <section className="space-y-4">
             {/* Filter Controls */}
-            <Card className="p-5 rounded-3xl bg-white border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <Card className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div className="flex flex-wrap items-center gap-3">
                 <div className="space-y-1">
-                  <label className="text-[10px] font-extrabold uppercase text-slate-400">Destination Region</label>
+                  <label className="text-[10px] font-semibold uppercase text-slate-400">Destination</label>
                   <select
                     value={hotelDest}
                     onChange={(e) => {
                       setHotelDest(e.target.value);
                       loadHotels(e.target.value, hotelGuests);
                     }}
-                    className="text-xs font-bold bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    className="text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500"
                   >
-                    <option value="Goa">Goa (Coastal & Sanctuaries)</option>
-                    <option value="Manali">Manali (Alpine & Pine Valley)</option>
-                    <option value="Jaipur">Jaipur (Royal Heritage Haveli)</option>
+                    <option value="Goa">Goa</option>
+                    <option value="Manali">Manali</option>
+                    <option value="Jaipur">Jaipur</option>
                   </select>
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[10px] font-extrabold uppercase text-slate-400">Travelers</label>
+                  <label className="text-[10px] font-semibold uppercase text-slate-400">Travelers</label>
                   <select
                     value={hotelGuests}
                     onChange={(e) => {
                       setHotelGuests(Number(e.target.value));
                       loadHotels(hotelDest, Number(e.target.value));
                     }}
-                    className="text-xs font-bold bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    className="text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500"
                   >
-                    <option value={1}>1 Solo Explorer</option>
+                    <option value={1}>1 Solo</option>
                     <option value={2}>2 Couple / Duo</option>
-                    <option value={4}>4 Squad / Family</option>
+                    <option value={4}>4 Group</option>
                   </select>
                 </div>
               </div>
 
               <div className="flex items-center gap-3">
-                <span className="text-xs text-slate-500 font-medium">
-                  {isSearchingHotels ? 'Querying Booking.com & Airbnb...' : `${hotelsList.length} verified stays ready`}
+                <span className="text-xs text-slate-500">
+                  {isSearchingHotels ? 'Querying stays...' : `${hotelsList.length} verified stays ready`}
                 </span>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => loadHotels()}
                   disabled={isSearchingHotels}
-                  className="border-slate-200 text-xs font-bold hover:bg-slate-50"
+                  className="border-slate-200 text-xs font-semibold hover:bg-slate-50 cursor-pointer"
                 >
                   <Search className="w-3.5 h-3.5 mr-1 text-orange-500" />
-                  Refresh Stays
+                  Refresh
                 </Button>
               </div>
             </Card>
 
             {/* Hotel Cards Grid */}
-            {hotelError && (
-              <div className="p-8 rounded-3xl bg-amber-50/90 border border-amber-200 text-center space-y-3">
-                <p className="text-xs text-amber-800 font-semibold">{hotelError}</p>
-                <Button variant="outline" size="sm" onClick={() => loadHotels()} className="border-amber-300 text-amber-900 font-bold text-xs cursor-pointer">
-                  Retry Stays
-                </Button>
-              </div>
-            )}
-
-            {!isSearchingHotels && !hotelError && hotelsList.length === 0 && (
-              <div className="p-8 rounded-3xl bg-white border border-slate-200 text-center space-y-2">
-                <p className="text-xs text-slate-500 font-medium">No verified stays available for {hotelDest} with {hotelGuests} guests.</p>
-              </div>
-            )}
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               {hotelsList.map((ht) => (
                 <Card
                   key={ht.id}
-                  className="editorial-card overflow-hidden rounded-3xl bg-white border border-slate-200/90 shadow-sm hover:border-orange-300 transition-all flex flex-col justify-between"
+                  className="overflow-hidden rounded-2xl bg-white border border-slate-200 shadow-2xs hover:border-slate-300 transition-all flex flex-col justify-between"
                 >
                   <div>
-                    <div className="relative h-56 -mx-6 -mt-6">
+                    <div className="relative h-48 -mx-6 -mt-6">
                       <Image
                         src={
                           ht.name.includes('Manali') || ht.name.includes('Himalayan')
@@ -544,63 +533,40 @@ export default function BookingsPage() {
                         fill
                         className="object-cover"
                       />
-                      <span className="absolute top-4 right-4 px-2.5 py-1 rounded-full bg-black/60 backdrop-blur-md text-amber-300 text-xs font-bold flex items-center gap-1 border border-white/20">
-                        <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                      <span className="absolute top-3 right-3 px-2 py-0.5 rounded-md bg-black/60 backdrop-blur-md text-amber-300 text-xs font-semibold flex items-center gap-1">
+                        <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
                         <span>{ht.star_rating}</span>
                       </span>
 
-                      {/* Source & Provenance Badge */}
-                      <span className="absolute bottom-4 left-4 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-950/80 backdrop-blur-md text-indigo-200 text-[10px] font-extrabold border border-indigo-500/40">
-                        {ht.provenance === 'PROVIDER_VERIFIED' ? (
-                          <>
-                            <ShieldCheck className="w-3 h-3 text-emerald-400" />
-                            PROVIDER VERIFIED
-                          </>
-                        ) : (
-                          <>
-                            <CheckCircle2 className="w-3 h-3 text-indigo-400" />
-                            {ht.provenance || 'CURATED'} • {ht.source || 'Boutique Registry'}
-                          </>
-                        )}
+                      <span className="absolute bottom-3 left-3 px-2.5 py-0.5 rounded-md bg-slate-900/80 backdrop-blur-md text-white text-[10px] font-medium border border-white/20">
+                        {ht.source || 'Boutique Registry'}
                       </span>
                     </div>
 
-                    <div className="pt-5 space-y-3">
+                    <div className="pt-4 space-y-2.5">
                       <div>
-                        <h4 className="text-xl font-serif-editorial font-bold text-slate-900">{ht.name}</h4>
+                        <h4 className="text-lg font-serif-editorial font-bold text-slate-900">{ht.name}</h4>
                         <p className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
-                          <MapPin className="w-3.5 h-3.5 text-orange-500" />
+                          <MapPin className="w-3 h-3 text-orange-500" />
                           <span>{ht.address}</span>
                         </p>
                       </div>
 
-                      <div className="text-xs font-semibold text-slate-700 bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                        Room: <span className="font-bold text-slate-900">{ht.room_type}</span>
-                      </div>
-
-                      <div className="flex flex-wrap gap-1.5">
-                        {ht.amenities?.map((a: string, i: number) => (
-                          <span
-                            key={i}
-                            className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700"
-                          >
-                            {a}
-                          </span>
-                        ))}
+                      <div className="text-xs text-slate-700 bg-slate-50 p-2 rounded-xl border border-slate-100">
+                        Room: <span className="font-semibold text-slate-900">{ht.room_type}</span>
                       </div>
 
                       {ht.why_recommended && (
-                        <div className="p-3 rounded-xl bg-orange-50/70 border border-orange-200/50 text-xs text-slate-800">
-                          <span className="font-bold text-orange-600 block mb-0.5">Why DashTiny recommends:</span>
-                          <p className="text-slate-600">{ht.why_recommended}</p>
-                        </div>
+                        <p className="text-xs text-slate-600 bg-orange-50/50 p-2.5 rounded-xl border border-orange-100 leading-relaxed">
+                          <span className="font-semibold text-orange-800">Why recommended:</span> {ht.why_recommended}
+                        </p>
                       )}
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between pt-5 mt-4 border-t border-slate-100">
+                  <div className="flex items-center justify-between pt-4 mt-3 border-t border-slate-100">
                     <div>
-                      <span className="text-2xl font-serif-editorial font-extrabold text-orange-600">
+                      <span className="text-xl font-serif-editorial font-bold text-slate-900">
                         ₹{ht.price_per_night?.toLocaleString('en-IN')}
                       </span>
                       <span className="text-xs text-slate-400 block">/ night</span>
@@ -612,28 +578,28 @@ export default function BookingsPage() {
                           href={ht.deep_link}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="p-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-600"
-                          title="Direct partner link"
+                          className="p-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-600"
+                          title="Open provider"
                         >
-                          <ExternalLink className="w-4 h-4" />
+                          <ExternalLink className="w-3.5 h-3.5" />
                         </a>
                       )}
                       <Button
                         variant="primary"
-                        size="md"
+                        size="sm"
                         isLoading={loading}
-                        className="bg-gradient-to-r from-orange-500 to-amber-500 text-white font-extrabold shadow-md shadow-orange-500/20 hover:scale-105 transition-all text-xs"
+                        className="bg-orange-600 hover:bg-orange-700 text-white font-semibold text-xs shadow-2xs cursor-pointer"
                         onClick={() =>
                           handleSaveBookingReference(
                             'hotel',
-                            ht.source || 'Luxury Stay',
+                            ht.source || 'Stay Provider',
                             `${ht.name} (${ht.room_type})`,
                             ht.price_per_night,
                             ht
                           )
                         }
                       >
-                        Save Reference & Attach ➔
+                        Attach Reference ➔
                       </Button>
                     </div>
                   </div>
@@ -643,24 +609,24 @@ export default function BookingsPage() {
           </section>
         )}
 
-        {/* MY RESERVATIONS TAB */}
+        {/* MY SAVED RESERVATIONS TAB */}
         {activeCategory === 'my_bookings' && (
           <section className="space-y-4">
-            <h3 className="text-xl font-serif-editorial font-bold text-slate-900">Your Saved Booking References</h3>
+            <h3 className="text-lg font-serif-editorial font-bold text-slate-900">Saved Booking References</h3>
             {userBookings.length === 0 ? (
-              <Card className="p-8 text-center space-y-3 rounded-3xl bg-white border border-slate-200 shadow-sm">
-                <Ticket className="w-10 h-10 text-orange-400 mx-auto" />
-                <h4 className="text-base font-bold text-slate-800">No Saved Bookings Yet</h4>
+              <Card className="p-8 text-center space-y-3 rounded-2xl bg-white border border-slate-200 shadow-2xs">
+                <Ticket className="w-8 h-8 text-orange-400 mx-auto" />
+                <h4 className="text-sm font-semibold text-slate-800">No Saved Bookings Yet</h4>
                 <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                  Search live flight and hotel offers across partner providers, then save your reservation reference codes directly into your trip workspace.
+                  Compare flight and hotel offers across partner providers, then attach your confirmed reservation reference codes directly into your trip workspace.
                 </p>
                 <Button
                   variant="primary"
                   size="sm"
                   onClick={() => setActiveCategory('flights')}
-                  className="bg-orange-500 text-white font-extrabold mt-2"
+                  className="bg-orange-600 text-white font-semibold text-xs mt-2"
                 >
-                  Browse Flights & Stays
+                  Compare Flights & Stays
                 </Button>
               </Card>
             ) : (
@@ -668,22 +634,18 @@ export default function BookingsPage() {
                 {userBookings.map((b: any) => (
                   <Card
                     key={b.id}
-                    className="editorial-card p-6 rounded-3xl bg-white border border-slate-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                    className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4"
                   >
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
-                        <span className="px-2.5 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10px] font-extrabold uppercase border border-emerald-200">
-                          {b.status === 'saved_reference' ? 'SAVED REFERENCE' : b.status}
+                        <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 text-[10px] font-semibold uppercase border border-emerald-200">
+                          {b.status === 'saved_reference' ? 'CONFIRMED REF' : b.status}
                         </span>
-                        <span className="font-mono text-xs font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded border border-orange-200">
+                        <span className="font-mono text-xs font-semibold text-orange-600 bg-orange-50 px-2 py-0.5 rounded border border-orange-200">
                           REF: {b.pnr_ref}
                         </span>
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[10px] font-bold">
-                          <ShieldCheck className="w-3 h-3 text-emerald-600" />
-                          PROVIDER INVENTORY
-                        </span>
                       </div>
-                      <h4 className="text-lg font-bold font-serif-editorial text-slate-900">{b.title}</h4>
+                      <h4 className="text-base font-semibold text-slate-900">{b.title}</h4>
                       <p className="text-xs text-slate-500 font-medium">
                         Provider: {b.provider} • Category: {b.category?.toUpperCase()}
                       </p>
@@ -691,18 +653,18 @@ export default function BookingsPage() {
 
                     <div className="flex items-center gap-4">
                       <div className="text-right">
-                        <span className="text-2xl font-serif-editorial font-extrabold text-orange-600">
+                        <span className="text-xl font-serif-editorial font-bold text-slate-900">
                           ₹{b.amount?.toLocaleString('en-IN')}
                         </span>
-                        <span className="text-[10px] text-emerald-600 block font-bold">Captured Reference</span>
+                        <span className="text-[10px] text-slate-400 block">Captured Reference</span>
                       </div>
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={() => router.push('/trips')}
-                        className="border-slate-200 text-xs font-bold hover:bg-slate-50 shrink-0"
+                        className="border-slate-200 text-xs font-semibold hover:bg-slate-50 shrink-0 cursor-pointer"
                       >
-                        Trip View ➔
+                        View in Trip ➔
                       </Button>
                     </div>
                   </Card>
@@ -716,5 +678,13 @@ export default function BookingsPage() {
       <DAInaChatWidget />
       <BottomNav />
     </div>
+  );
+}
+
+export default function BookingsPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-[#FAFAF9]" />}>
+      <BookingsContent />
+    </Suspense>
   );
 }

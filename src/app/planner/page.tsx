@@ -124,271 +124,273 @@ function PlannerContent() {
 
   const activeItinerary = currentItinerary;
 
+  // Live parsed intent from user prompt
+  const parsedIntent = promptText.trim() ? parseTravelPrompt(promptText) : null;
+
   return (
     <div className="min-h-screen pb-24 md:pb-12 flex flex-col bg-[#FAFAF9] text-slate-900 font-sans selection:bg-orange-500 selection:text-white">
       <TopNavbar />
 
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 md:px-8 py-8 space-y-10">
-        {/* Page Title & Persona Selector Header */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 border-b border-slate-200/90 pb-6">
-          <div className="space-y-1.5">
-            <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-orange-100 border border-orange-200 text-orange-800 text-xs font-extrabold tracking-wider uppercase">
-              <Award className="w-3.5 h-3.5 text-orange-600" />
-              <span>DASHTINY DAINA GETAWAY ARCHITECT</span>
-            </div>
-            <h1 className="text-3xl sm:text-5xl font-serif-editorial font-bold text-slate-900 tracking-tight">
-              {activeItinerary ? activeItinerary.title : 'Architect Your Bespoke Getaway'}
-            </h1>
-            <p className="text-slate-600 text-xs sm:text-sm font-medium">
-              {activeItinerary ? (
-                <>
-                  Curated for {activeItinerary.destination} · Squad Budget:{' '}
-                  <span className="text-orange-600 font-extrabold">₹{activeItinerary.budget.toLocaleString('en-IN')}</span>
-                </>
-              ) : (
-                'Curated travel intelligence and multi-day passages saved directly to PostgreSQL'
-              )}
-            </p>
+      <main className="flex-1 max-w-4xl w-full mx-auto px-4 sm:px-6 md:px-8 py-8 sm:py-12 space-y-8">
+        {/* Page Title — Clean and direct */}
+        <div className="space-y-1 text-center sm:text-left">
+          <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-orange-50 text-orange-700 text-xs font-semibold border border-orange-200">
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>AI Travel Planner</span>
           </div>
-
-          {/* Action Toolbar */}
-          <div className="flex flex-wrap items-center gap-2.5">
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={() => setShowArchitect(true)}
-              className="bg-gradient-to-r from-orange-500 to-amber-500 text-white font-extrabold shadow-md shadow-orange-500/20"
-            >
-              <BrainCircuit className="w-4 h-4 mr-1.5 text-white" />
-              10-Step AI Architect
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => router.push('/trips')}
-              className="bg-white border-slate-200 text-slate-800 font-bold hover:bg-slate-50"
-            >
-              <Luggage className="w-4 h-4 mr-1.5 text-orange-500" />
-              <span>Manage in My Trips →</span>
-            </Button>
-            {activeItinerary && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowMapView(!showMapView)}
-                className="bg-white border-slate-200 text-slate-700 hover:text-slate-900 hover:bg-slate-50"
-              >
-                <Map className="w-4 h-4 mr-1 text-sky-600" />
-                <span>{showMapView ? 'Hide Route Map' : 'Show Route Map'}</span>
-              </Button>
-            )}
-          </div>
+          <h1 className="text-3xl sm:text-4xl font-serif-editorial font-bold text-slate-900 tracking-tight">
+            Plan a trip
+          </h1>
+          <p className="text-slate-600 text-sm">
+            Tell DAIna what you're looking for. We'll build a personalized day-by-day plan with stays, dining, and activities.
+          </p>
         </div>
 
-        {/* Error Alert Banner (Explicit failure states rule) */}
+        {/* Error Alert Banner */}
         {errorMsg && (
-          <div className="p-4 rounded-2xl bg-rose-50 border border-rose-300 text-rose-900 text-xs font-bold flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md animate-in fade-in">
-            <div className="flex items-center gap-2.5">
-              <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0" />
+          <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-900 text-xs font-semibold flex items-center justify-between gap-3 animate-in fade-in">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
               <span>{errorMsg}</span>
             </div>
             <button
               onClick={() => handleBuildPlan()}
-              className="px-3 py-1.5 rounded-xl bg-rose-600 text-white font-bold hover:bg-rose-700 flex items-center justify-center gap-1.5 shrink-0 transition-colors"
+              className="px-3 py-1 rounded-lg bg-rose-600 text-white font-medium hover:bg-rose-700 flex items-center gap-1 text-xs shrink-0 cursor-pointer"
             >
-              <RefreshCw className="w-3.5 h-3.5" />
+              <RefreshCw className="w-3 h-3" />
               <span>Retry</span>
             </button>
           </div>
         )}
 
-        {/* Success Alert Banner when Itinerary is Saved in DB */}
+        {/* Success Alert Banner */}
         {saveSuccessMsg && (
-          <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-300 text-emerald-900 text-xs font-bold flex items-center justify-between shadow-md">
-            <div className="flex items-center gap-2.5">
-              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
-              <span>{saveSuccessMsg}</span>
+          <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-semibold flex items-center justify-between shadow-2xs">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span>Itinerary created and saved automatically!</span>
             </div>
             <button
               onClick={() => router.push('/trips')}
-              className="px-3 py-1 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 flex items-center gap-1"
+              className="px-3.5 py-1.5 rounded-lg bg-emerald-600 text-white font-semibold hover:bg-emerald-700 flex items-center gap-1.5 text-xs cursor-pointer"
             >
-              <span>View in My Trips</span>
+              <span>Open in Trip Workspace</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>
         )}
 
-        {/* Conversational AI Planner Input Box */}
-        <section className="p-6 rounded-3xl bg-white border border-slate-200/90 shadow-md space-y-4">
+        {/* Primary Conversational Input Card */}
+        <section className="p-6 rounded-2xl bg-white border border-slate-200 shadow-sm space-y-4">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-xl bg-orange-100 text-orange-700 flex items-center justify-center font-bold">
-                ✨
-              </div>
-              <div>
-                <h3 className="text-base font-extrabold text-slate-900">Conversational Getaway Architect</h3>
-                <p className="text-xs text-slate-500 font-medium">Type any destination, duration, and budget to synthesize and save directly to PostgreSQL</p>
-              </div>
-            </div>
-            <span className="text-[10px] font-extrabold text-orange-600 bg-orange-50 border border-orange-200 px-2 py-0.5 rounded-full uppercase">
-              PostgreSQL Persistence Active
+            <label htmlFor="trip-prompt" className="text-xs font-bold uppercase tracking-wider text-slate-700">
+              Tell DAIna about your trip
+            </label>
+            <span className="text-[11px] text-slate-500 font-medium">
+              Saved automatically
             </span>
           </div>
 
-          {/* Prompt Bar Form */}
           <form
             onSubmit={(e) => {
               e.preventDefault();
               handleBuildPlan();
             }}
-            className="flex flex-col sm:flex-row gap-3"
+            className="space-y-4"
           >
-            <input
-              type="text"
+            <textarea
+              id="trip-prompt"
+              rows={3}
               value={promptText}
               onChange={(e) => setPromptText(e.target.value)}
-              placeholder="e.g. I want a 7-day Japan trip under ₹1.5 lakh with my partner..."
-              className="flex-1 bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500/40"
+              placeholder="e.g. I want to spend 7 days in Japan with my partner. Budget ₹1.5L. We love food, photography and quiet places. Leaving from Delhi."
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3.5 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-orange-500 focus:bg-white font-medium resize-none transition-colors"
             />
-            <Button
-              type="submit"
-              variant="primary"
-              size="md"
-              isLoading={isGenerating}
-              className="shrink-0 bg-gradient-to-r from-orange-500 to-amber-500 text-white font-extrabold px-6 hover:scale-105 transition-all"
-            >
-              <BrainCircuit className="w-4 h-4 mr-1.5" />
-              Build & Save Itinerary
-            </Button>
+
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowArchitect(true)}
+                  className="text-xs text-slate-600 hover:text-slate-900 font-medium underline underline-offset-2 cursor-pointer"
+                >
+                  Help me refine details
+                </button>
+              </div>
+
+              <Button
+                type="submit"
+                variant="primary"
+                size="md"
+                isLoading={isGenerating}
+                disabled={!promptText.trim()}
+                className="bg-orange-500 hover:bg-orange-600 text-white font-semibold px-6 py-2.5 rounded-xl transition-colors cursor-pointer text-xs"
+              >
+                <Sparkles className="w-4 h-4 mr-1.5" />
+                {isGenerating ? 'Building your trip...' : 'Create my trip'}
+              </Button>
+            </div>
           </form>
 
-          {/* Proactive AI Intelligence Banner */}
-          <div className="p-3.5 rounded-2xl bg-gradient-to-r from-orange-50 via-amber-50/60 to-sky-50 border border-orange-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex items-center gap-2.5">
-              <span className="text-base">💡</span>
-              <p className="text-xs text-slate-800 font-bold">
-                <strong className="text-orange-700 font-extrabold">Natural Language:</strong> Supports any destination worldwide with realistic budget parsing (e.g. &quot;1.5 lakh&quot;, &quot;80k&quot;) and squad sync.
-              </p>
+          {/* DAIna Understood — Immediate Structured Interpretation Card */}
+          {parsedIntent && parsedIntent.destination && (
+            <div className="mt-4 p-4 rounded-xl bg-orange-50/60 border border-orange-200/80 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-orange-900 uppercase tracking-wide flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-orange-600" />
+                  DAIna Understood
+                </span>
+                <span className="text-[11px] text-orange-700 font-medium">Ready to structure</span>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-xs">
+                <div className="p-2.5 rounded-lg bg-white border border-orange-100 space-y-0.5">
+                  <span className="text-[10px] text-slate-400 uppercase font-semibold block">Destination</span>
+                  <span className="font-bold text-slate-900">📍 {parsedIntent.destination}</span>
+                </div>
+                <div className="p-2.5 rounded-lg bg-white border border-orange-100 space-y-0.5">
+                  <span className="text-[10px] text-slate-400 uppercase font-semibold block">Duration</span>
+                  <span className="font-bold text-slate-900">⏱️ {parsedIntent.days_count} Days</span>
+                </div>
+                <div className="p-2.5 rounded-lg bg-white border border-orange-100 space-y-0.5">
+                  <span className="text-[10px] text-slate-400 uppercase font-semibold block">Travelers</span>
+                  <span className="font-bold text-slate-900">👥 {parsedIntent.travellers} {parsedIntent.travellers === 1 ? 'traveler' : 'travelers'}</span>
+                </div>
+                <div className="p-2.5 rounded-lg bg-white border border-orange-100 space-y-0.5">
+                  <span className="text-[10px] text-slate-400 uppercase font-semibold block">Estimated Budget</span>
+                  <span className="font-bold text-slate-900">💰 ₹{parsedIntent.budget.toLocaleString('en-IN')}</span>
+                </div>
+                <div className="p-2.5 rounded-lg bg-white border border-orange-100 space-y-0.5">
+                  <span className="text-[10px] text-slate-400 uppercase font-semibold block">Origin</span>
+                  <span className="font-bold text-slate-900">🛫 {parsedIntent.origin || 'Flexible'}</span>
+                </div>
+                <div className="p-2.5 rounded-lg bg-white border border-orange-100 space-y-0.5">
+                  <span className="text-[10px] text-slate-400 uppercase font-semibold block">Style & Interests</span>
+                  <span className="font-bold text-slate-900 truncate block">📷 {parsedIntent.vibe}</span>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowArchitect(true)}
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:text-slate-900 hover:bg-white transition-colors"
+                >
+                  Edit details
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleBuildPlan()}
+                  disabled={isGenerating}
+                  className="px-4 py-1.5 rounded-lg text-xs font-semibold bg-orange-600 hover:bg-orange-700 text-white transition-colors cursor-pointer flex items-center gap-1.5"
+                >
+                  <span>Looks right →</span>
+                </button>
+              </div>
             </div>
-            <span className="text-[11px] text-slate-500 font-mono font-bold shrink-0">AI-Assisted Planning Engine</span>
+          )}
+
+          {/* Calm, Human Loading Indicator Sequence */}
+          {isGenerating && (
+            <div className="p-6 rounded-xl bg-slate-50 border border-slate-200 text-center space-y-3 animate-in fade-in">
+              <div className="w-8 h-8 rounded-full border-2 border-orange-500 border-t-transparent animate-spin mx-auto" />
+              <div className="space-y-1">
+                <p className="text-sm font-semibold text-slate-900">Generating your trip with DAIna...</p>
+                <div className="text-xs text-slate-500 space-y-0.5">
+                  <p>• Finding the best flow for your budget</p>
+                  <p>• Checking travel context and local pacing</p>
+                  <p>• Balancing your food, photography and culture interests</p>
+                </div>
+              </div>
+            </div>
+          )}
+        </section>
+
+        {/* Quick Inspiration Prompts */}
+        <section className="space-y-3">
+          <span className="text-xs font-semibold text-slate-500 block">
+            Or try an example getaway prompt:
+          </span>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            {[
+              'I want a 7-day Japan trip under ₹1.5 lakh with my partner, quiet places and food',
+              '4-day Manali cedarwood chalet escape under ₹40,000 for solo explorer',
+              '3-day weekend escape to Coorg from Bengaluru with squad under ₹40k',
+              '5-day Andaman white sands & scuba under ₹75,000',
+            ].map((samplePrompt, idx) => (
+              <button
+                key={idx}
+                onClick={() => {
+                  setPromptText(samplePrompt);
+                  handleBuildPlan(samplePrompt);
+                }}
+                className="text-xs font-medium text-slate-700 hover:text-orange-600 bg-white hover:bg-orange-50/40 border border-slate-200 rounded-xl p-3 text-left transition-colors cursor-pointer shadow-2xs"
+              >
+                ✦ {samplePrompt}
+              </button>
+            ))}
           </div>
         </section>
 
-        {/* 4 Explorer Personas Selector Bar */}
-        <PersonaSelector activePersona={selectedPersona} onSelectPersona={setSelectedPersona} />
-
-        {/* Content View: Empty Inspiration Canvas OR Generated Itinerary */}
-        {!activeItinerary ? (
-          <div className="p-8 sm:p-12 rounded-3xl bg-white border border-slate-200/90 text-center space-y-6 shadow-sm">
-            <div className="w-16 h-16 rounded-2xl bg-orange-100 border border-orange-200 text-orange-600 flex items-center justify-center text-3xl mx-auto shadow-inner">
-              ✨
-            </div>
-            <div className="max-w-xl mx-auto space-y-2">
-              <h2 className="text-2xl sm:text-3xl font-serif-editorial font-bold text-slate-900">
-                Where does your squad want to escape?
-              </h2>
-              <p className="text-xs sm:text-sm text-slate-600 font-medium">
-                Type your dream destination, dates, and budget. DAIna structures a multi-day passage with curated boutique stays, regional dining, and golden hour routes.
-              </p>
-            </div>
-
-            <div className="pt-2">
-              <span className="text-xs font-extrabold uppercase text-slate-400 tracking-wider">Try one-click real getaway prompts</span>
-              <div className="flex flex-wrap justify-center gap-2.5 mt-3 max-w-3xl mx-auto">
-                {[
-                  'I want a 7-day Japan trip under ₹1.5 lakh with my partner',
-                  '4-day Manali cedarwood chalet escape under ₹40,000 for solo explorer',
-                  '3-day weekend escape to Coorg from Bengaluru with squad under ₹40k',
-                  '5-day Andaman white sands & scuba under ₹75,000',
-                  '5-day Switzerland alpine scenic rail & mountain chalets under ₹2.5 lakh',
-                ].map((samplePrompt, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => {
-                      setPromptText(samplePrompt);
-                      handleBuildPlan(samplePrompt);
-                    }}
-                    className="text-xs font-bold text-slate-700 hover:text-orange-700 bg-slate-50 hover:bg-orange-50 border border-slate-200/80 hover:border-orange-200 rounded-full px-4 py-2 transition-all shadow-2xs text-left"
-                  >
-                    ✦ {samplePrompt}
-                  </button>
-                ))}
+        {/* Active Generated Itinerary Preview */}
+        {activeItinerary && (
+          <section className="space-y-6 pt-6 border-t border-slate-200">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <span className="text-xs uppercase font-bold text-orange-600 tracking-wider">
+                  Generated Itinerary
+                </span>
+                <h2 className="text-2xl font-serif-editorial font-bold text-slate-900">
+                  {activeItinerary.title}
+                </h2>
+                <p className="text-xs text-slate-500 font-medium">
+                  {activeItinerary.destination} · {activeItinerary.days.length} days · ₹{activeItinerary.budget.toLocaleString('en-IN')} estimated
+                </p>
               </div>
+
+              <Button
+                variant="primary"
+                size="md"
+                className="bg-orange-500 hover:bg-orange-600 text-white font-semibold text-xs px-5 py-2.5 rounded-xl shrink-0 cursor-pointer"
+                onClick={() => router.push('/trips')}
+              >
+                <Luggage className="w-4 h-4 mr-1.5" />
+                Manage in Trip Workspace →
+              </Button>
             </div>
-          </div>
-        ) : (
-          /* Main 2-column layout: Timeline + Budget Manager */
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Timeline — takes 2/3 width on desktop */}
-            <div className="lg:col-span-2 space-y-8">
-              {/* Interactive GPS Route Drawer */}
-              {showMapView && (
-                <Card className="p-6 bg-white border border-slate-200/90 space-y-4 rounded-3xl shadow-md animate-in fade-in slide-in-from-top-4">
+
+            <div className="space-y-4">
+              {activeItinerary.days.map((day: any) => (
+                <div key={day.dayNumber} className="p-5 rounded-2xl bg-white border border-slate-200 space-y-4 shadow-2xs">
                   <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                    <h3 className="text-lg font-serif-editorial font-bold text-slate-900 flex items-center gap-2">
-                      <MapPin className="w-5 h-5 text-orange-500" />
-                      Interactive Route & Coordinates
-                    </h3>
-                    <span className="text-xs text-orange-600 font-extrabold">GPS Active</span>
-                  </div>
-                  <div className="relative h-64 rounded-2xl overflow-hidden bg-slate-100 border border-slate-200 flex items-center justify-center">
-                    <Image
-                      src="https://images.unsplash.com/photo-1524661135-423995f22d0b?w=1200&auto=format&fit=crop&q=80"
-                      alt="Interactive Map Preview"
-                      fill
-                      className="object-cover opacity-80"
-                    />
-                    <div className="relative z-10 text-center p-6 bg-white/95 backdrop-blur-md rounded-2xl border border-orange-200 shadow-xl max-w-md">
-                      <p className="text-sm font-extrabold text-slate-900">{activeItinerary.destination} Route Pins Active</p>
-                      <p className="text-xs text-slate-600 font-medium mt-1">Sanctuary Stays [H] → Local Dining [R] → Panoramic Highlights [TA]</p>
+                    <div className="space-y-0.5">
+                      <span className="text-[11px] font-bold text-orange-600 uppercase tracking-wider">Day {day.dayNumber}</span>
+                      <h3 className="text-lg font-semibold text-slate-900">{day.title}</h3>
                     </div>
+                    <span className="text-xs text-slate-500 font-medium">{day.weather || 'Pleasant 🌤️'}</span>
                   </div>
-                </Card>
-              )}
 
-              {/* Itinerary Timeline Days */}
-              <section className="space-y-6">
-                {activeItinerary.days.map((day: any) => (
-                  <Card key={day.dayNumber} className="editorial-card p-6 sm:p-8 space-y-6 rounded-3xl bg-white border border-slate-200/90 shadow-sm hover:border-orange-300 transition-all">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
-                      <div className="space-y-1">
-                        <span className="text-xs uppercase font-extrabold text-orange-600 tracking-widest">
-                          DAY 0{day.dayNumber}
-                        </span>
-                        <h3 className="text-2xl font-serif-editorial font-bold text-slate-900">
-                          {day.title}
-                        </h3>
-                      </div>
-                      <span className="px-3.5 py-1.5 rounded-full bg-slate-100 text-slate-700 text-xs font-bold border border-slate-200">
-                        {day.weather || '28°C Sunny ☀️'}
-                      </span>
-                    </div>
-
-                    <div className="space-y-4">
-                      {day.activities?.map((act: any, aIdx: number) => (
-                        <div key={aIdx} className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 flex items-start justify-between gap-4">
-                          <div className="space-y-1">
-                            <span className="font-mono text-xs font-bold text-orange-600">{act.time}</span>
-                            <h4 className="text-sm font-bold text-slate-900">{act.description}</h4>
-                            <p className="text-xs text-slate-500 font-medium">{act.location} • {act.estimatedTransit}</p>
+                  <div className="space-y-2.5">
+                    {day.activities?.map((act: any, aIdx: number) => {
+                      const tagLabel = act.placeType === 'H' ? 'Hotel' : act.placeType === 'R' ? 'Dining' : 'Activity';
+                      return (
+                        <div key={aIdx} className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 flex items-start justify-between gap-3 text-xs">
+                          <div className="space-y-0.5">
+                            <span className="font-mono text-[11px] font-semibold text-orange-600">{act.time}</span>
+                            <p className="font-semibold text-slate-900">{act.description}</p>
+                            <p className="text-[11px] text-slate-500">{act.location}</p>
                           </div>
-                          <span className="text-[10px] font-extrabold px-2.5 py-1 rounded-full bg-white border border-slate-200 text-slate-800 shadow-2xs">
-                            {act.placeType === 'H' ? '🏨 Stay' : act.placeType === 'R' ? '🍽️ Dining' : '📍 Spot'}
+                          <span className="px-2 py-0.5 rounded-md bg-white border border-slate-200 text-slate-700 text-[10px] font-medium shrink-0">
+                            {tagLabel}
                           </span>
                         </div>
-                      ))}
-                    </div>
-                  </Card>
-                ))}
-              </section>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
             </div>
-
-            {/* Right column: Budget Manager Widget */}
-            <div className="space-y-6">
-              <BudgetManagerWidget />
-            </div>
-          </div>
+          </section>
         )}
       </main>
 
