@@ -98,6 +98,7 @@ class ItineraryActivity(Base):
     lng = Column(Float, nullable=True)
     provenance = Column(String(50), default="AI GENERATED")  # VERIFIED, AI GENERATED, USER GENERATED
     source_citation = Column(String(255), nullable=True)
+    why_recommended = Column(Text, nullable=True)
 
     day = relationship("ItineraryDay", back_populates="activities")
 

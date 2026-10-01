@@ -39,19 +39,29 @@ def generate_itinerary(
     Generate dynamic getaway itinerary tailored to any destination via Planner Agent and persist in PostgreSQL.
     Consumes complete PlannerRequest, validating date consistency and threading travellers to tools.
     """
-    if request.start_date and request.end_date:
+    if request.start_date:
         try:
             sd = datetime.strptime(request.start_date.split("T")[0], "%Y-%m-%d").date()
-            ed = datetime.strptime(request.end_date.split("T")[0], "%Y-%m-%d").date()
-            if ed < sd:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Inconsistent dates: end_date cannot be earlier than start_date"
-                )
-        except ValueError:
+        except (ValueError, TypeError, AttributeError):
             raise HTTPException(
-                status_code=400,
-                detail="Invalid date format. Expected YYYY-MM-DD"
+                status_code=422,
+                detail=f"Invalid start_date '{request.start_date}'. Expected format: YYYY-MM-DD"
+            )
+
+    if request.end_date:
+        try:
+            ed = datetime.strptime(request.end_date.split("T")[0], "%Y-%m-%d").date()
+        except (ValueError, TypeError, AttributeError):
+            raise HTTPException(
+                status_code=422,
+                detail=f"Invalid end_date '{request.end_date}'. Expected format: YYYY-MM-DD"
+            )
+
+    if request.start_date and request.end_date:
+        if ed < sd:
+            raise HTTPException(
+                status_code=422,
+                detail="Inconsistent dates: end_date cannot be earlier than start_date"
             )
 
     return build_itinerary_with_planner_agent(

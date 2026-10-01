@@ -60,7 +60,7 @@ def test_planner_generate_success_and_activity_id_consistency(client, db_session
 
 def test_planner_inconsistent_dates_validation(client):
     """
-    Test that when end_date < start_date, the endpoint rejects with 400 Bad Request.
+    Test that when end_date < start_date, the endpoint rejects with 422 Unprocessable Entity.
     """
     payload = {
         "destination": "Goa",
@@ -71,8 +71,76 @@ def test_planner_inconsistent_dates_validation(client):
     }
 
     response = client.post("/api/v1/planner/generate", json=payload)
-    assert response.status_code == 400
+    assert response.status_code == 422
     assert "end_date cannot be earlier than start_date" in response.json()["detail"]
+
+def test_planner_malformed_date_rejected(client):
+    """
+    Test that malformed/non-ISO dates reject with 422 Unprocessable Entity (no silent date rewriting).
+    """
+    payload = {
+        "destination": "Manali",
+        "start_date": "invalid-date-string"
+    }
+    response = client.post("/api/v1/planner/generate", json=payload)
+    assert response.status_code == 422
+    assert "Invalid start_date" in response.json()["detail"]
+
+def test_planner_vibe_interests_and_origin_differentiation(client):
+    """
+    Test that differing vibes, interests, and origins produce meaningfully differentiated itineraries
+    satisfying the constraint satisfaction contract (e.g. romantic/seafood/photography vs adventure/scuba/nightlife).
+    """
+    # Trip A: Romantic, Seafood, Photography departing from Mumbai
+    payload_a = {
+        "destination": "Goa",
+        "days_count": 3,
+        "travellers": 2,
+        "origin": "Mumbai",
+        "vibe": "romantic",
+        "interests": ["seafood", "photography"],
+        "start_date": "2026-11-01",
+        "end_date": "2026-11-03"
+    }
+    res_a = client.post("/api/v1/planner/generate", json=payload_a)
+    assert res_a.status_code == 200
+    data_a = res_a.json()
+
+    # Day 1 Arrival should cite Mumbai origin
+    d1_acts_a = data_a["days"][0]["activities"]
+    assert "Mumbai" in d1_acts_a[0]["description"]
+    # Lunch should cite Seafood
+    assert any("seafood" in act["description"].lower() or "catch" in act["description"].lower() for act in d1_acts_a)
+    # Evening should cite Photography / Golden Hour
+    assert any("photography" in act["description"].lower() or "golden hour" in act["description"].lower() for act in d1_acts_a)
+
+    # Trip B: Adventure, Scuba, Nightlife departing from Delhi
+    payload_b = {
+        "destination": "Goa",
+        "days_count": 3,
+        "travellers": 4,
+        "origin": "Delhi",
+        "vibe": "adventure",
+        "interests": ["scuba", "nightlife"],
+        "start_date": "2026-11-01",
+        "end_date": "2026-11-03"
+    }
+    res_b = client.post("/api/v1/planner/generate", json=payload_b)
+    assert res_b.status_code == 200
+    data_b = res_b.json()
+
+    # Day 1 Arrival should cite Delhi origin
+    d1_acts_b = data_b["days"][0]["activities"]
+    assert "Delhi" in d1_acts_b[0]["description"]
+    # Evening should cite Nightlife / Social Lounge
+    assert any("nightlife" in act["description"].lower() or "lounge" in act["description"].lower() for act in d1_acts_b)
+    # Day 2 should incorporate Scuba Diving expedition
+    d2_acts_b = data_b["days"][1]["activities"]
+    assert any("scuba" in act["description"].lower() or "reef" in act["description"].lower() for act in d2_acts_b)
+
+    # Assert that the two plans are fundamentally differentiated
+    assert data_a["days"][0]["title"] != data_b["days"][0]["title"]
+    assert d1_acts_a[1]["description"] != d1_acts_b[1]["description"]
 
 def test_planner_unauthenticated_rejected(db_session):
     """

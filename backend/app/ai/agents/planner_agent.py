@@ -13,6 +13,7 @@ import json
 import logging
 from datetime import date, datetime, timedelta
 from typing import List, Dict, Any, Optional
+from fastapi import HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -214,11 +215,13 @@ def generate_algorithmic_plan(
     hotels_info: List[Dict[str, Any]],
     coords: Dict[str, Any],
     travellers: int = 2,
-    vibe: Optional[str] = None
+    vibe: Optional[str] = None,
+    interests: Optional[List[str]] = None,
+    origin: Optional[str] = None
 ) -> List[DayPlan]:
     """
     Deterministic synthesis coordinating verified tool outputs (Weather, Hotels, Geocoding)
-    into a structured, paced multi-day itinerary.
+    with traveler preferences (vibe, interests, origin, party size) into a structured, paced multi-day itinerary.
     Rule: Never fabricate geographic coordinates. If genuine coordinates are not found in
     the spatial registry, lat and lng are set to None.
     """
@@ -227,6 +230,21 @@ def generate_algorithmic_plan(
     category = get_theme_category(destination)
     daily_budget = total_budget / max(1, days_count)
     party_label = f"party of {travellers}" if travellers > 1 else "solo explorer"
+
+    # Extract active preferences & constraints from vibe and interests
+    raw_tags = list(interests or [])
+    if vibe:
+        raw_tags.extend(vibe.replace(",", " ").replace("&", " ").split())
+    active_tags = set(t.strip().lower() for t in raw_tags if t and t.strip())
+
+    has_scuba = any(w in t for t in active_tags for w in ["scuba", "snorkel", "water", "dive", "reef", "marine"])
+    has_seafood = any(w in t for t in active_tags for w in ["seafood", "fish", "crab", "lobster", "coastal food", "catch"])
+    has_romantic = any(w in t for t in active_tags for w in ["romantic", "couple", "honeymoon", "candlelight", "intimate"])
+    has_photography = any(w in t for t in active_tags for w in ["photo", "camera", "view", "panoramic", "golden hour", "sunset"])
+    has_nightlife = any(w in t for t in active_tags for w in ["nightlife", "party", "club", "bar", "cocktail", "music", "dj", "pub"])
+    has_adventure = any(w in t for t in active_tags for w in ["adventure", "trek", "hike", "rafting", "paragliding", "climb", "atv"])
+    has_culture = any(w in t for t in active_tags for w in ["culture", "heritage", "temple", "monument", "history", "museum", "artisan"])
+    has_wellness = any(w in t for t in active_tags for w in ["wellness", "spa", "yoga", "meditation", "relaxed", "peaceful", "quiet", "retreat"])
 
     # Generic narrative templates if destination is not in curated pool
     generic_narratives = [
@@ -239,7 +257,6 @@ def generate_algorithmic_plan(
         ("Farewell Stroll & Souvenir Collection", "Departure Brunch", "Scenic Transit to Terminal")
     ]
 
-    # Find curated activities if destination is known
     matched_curated = None
     for k, v in CURATED_DESTINATION_ACTIVITIES.items():
         if k in dest_lower:
@@ -256,22 +273,214 @@ def generate_algorithmic_plan(
     for day_idx in range(1, days_count + 1):
         cover_image = get_curated_cover_image(category, day_idx)
 
-        if matched_curated:
-            curated_day = matched_curated[(day_idx - 1) % len(matched_curated)]
-            day_title = f"{clean_dest}: {curated_day['lunch_name'].split(' ')[0]} & Scenic Highlights"
+        if day_idx == 1:
+            # Day 1: Arrival, Check-in (incorporating origin), and Orientation
+            if has_romantic:
+                day_title = f"{clean_dest}: Coastal Arrival & Sunset Solitude (Romantic)"
+            elif has_adventure:
+                day_title = f"{clean_dest}: Arrival & Adventure Basecamp (Adventure)"
+            elif has_nightlife:
+                day_title = f"{clean_dest}: Arrival & Twilight Social Scene (Nightlife)"
+            elif vibe:
+                day_title = f"{clean_dest}: Arrival & Orientation ({vibe.title()})"
+            else:
+                day_title = f"{clean_dest}: Arrival & Orientation Walk"
 
-            lunch_desc = f"Authentic regional gastronomy for {party_label}: {curated_day['lunch_name']}"
-            lunch_loc = curated_day["lunch_loc"]
-            evening_desc = f"Golden hour experience: {curated_day['evening_name']}"
-            evening_loc = curated_day["evening_loc"]
+            # Check-in Activity (Day 1)
+            if origin:
+                clean_orig = origin.title().strip()
+                checkin_desc = f"Arrival from {clean_orig}, orientation & check-in at {hotel_name} ({party_label})"
+                checkin_transit = f"⏱️ Non-stop transit from {clean_orig} arrival hub, 25m to sanctuary"
+                why_checkin = f"Optimized arrival logistics tailored for departure from {clean_orig} to {clean_dest}."
+            else:
+                checkin_desc = f"Morning orientation & check-in at {hotel_name} ({party_label})"
+                checkin_transit = "⏱️ 25m from arrival terminal"
+                why_checkin = f"Selected for top traveler ratings and peaceful setting in {clean_dest}."
+
+            morn_time = "09:30 AM"
+            morn_loc = hotel.get("address", f"Central District, {clean_dest}") if hotel else f"Central District, {clean_dest}"
+            morn_type = "H"
+            morn_lat = hotel_lat
+            morn_lng = hotel_lng
+            morn_prov = hotel_prov
+
+            # Midday Culinary Activity (Day 1)
+            if has_seafood:
+                lunch_desc = f"Coastal Fresh Catch & Seafood Gastronomy Tasting for {party_label}"
+                lunch_loc = f"{clean_dest} Coastal Seafood Bistro"
+                why_lunch = "Curated specifically for your fresh seafood interest and maritime gastronomy."
+            elif has_culture:
+                lunch_desc = f"Authentic Heritage Multi-Course Culinary Tasting for {party_label}"
+                lunch_loc = f"{clean_dest} Historic Quarter Dining"
+                why_lunch = "Curated for authentic heritage cuisine and traditional regional recipes."
+            elif has_wellness:
+                lunch_desc = f"Organic Garden Farm-to-Table Lunch for {party_label}"
+                lunch_loc = f"{clean_dest} Organic Green Sanctuary"
+                why_lunch = "Curated for clean organic ingredients and relaxed wellness pacing."
+            elif matched_curated:
+                curated_day = matched_curated[0]
+                lunch_desc = f"Authentic regional gastronomy for {party_label}: {curated_day['lunch_name']}"
+                lunch_loc = curated_day["lunch_loc"]
+                why_lunch = "Celebrated local culinary hotspot featuring seasonal regional dishes."
+            else:
+                lunch_desc = f"Authentic {clean_dest} regional lunch tasting for {party_label}"
+                lunch_loc = f"Central Promenade, {clean_dest}"
+                why_lunch = "Selected for high traveler culinary reviews and seasonal specialties."
+
+            # Evening Experience (Day 1)
+            if has_nightlife:
+                eve_time = "07:30 PM"
+                eve_desc = f"Sunset Sundowner & Live Music Beach Lounge for {party_label}"
+                eve_loc = f"{clean_dest} Waterfront Strip"
+                why_eve = "Selected for energetic evening social atmosphere, craft cocktails, and live music."
+            elif has_photography:
+                eve_time = "05:30 PM"
+                eve_desc = f"Golden Hour Panoramic Observation Deck & Twilight Landscape Photography for {party_label}"
+                eve_loc = f"{clean_dest} Lookout Point"
+                why_eve = "Curated for unobstructed golden-hour composition and twilight photography."
+            elif has_romantic:
+                eve_time = "06:00 PM"
+                eve_desc = f"Private Sunset Water Passage & Candlelight Evening Promenade for {party_label}"
+                eve_loc = f"{clean_dest} Secluded Bay Deck"
+                why_eve = "Curated for an intimate, secluded atmosphere tailored for couples."
+            elif matched_curated:
+                curated_day = matched_curated[0]
+                eve_time = "05:30 PM"
+                eve_desc = f"Golden hour experience: {curated_day['evening_name']}"
+                eve_loc = curated_day["evening_loc"]
+                why_eve = "Prime vantage point for unobstructed twilight panorama."
+            else:
+                eve_time = "05:30 PM"
+                eve_desc = f"Golden hour sunset stroll & twilight reflections at {clean_dest} Lookout Point"
+                eve_loc = f"{clean_dest} Lookout Point"
+                why_eve = "Celebrated sunset vantage point with sweeping skyline views."
+
         else:
-            theme_tup = generic_narratives[(day_idx - 1) % len(generic_narratives)]
-            day_title = f"{clean_dest}: {theme_tup[0]}"
+            # Day 2+: Full Activity Days tailored directly to constraints & preferences
+            if has_scuba or (has_adventure and category == "beach"):
+                day_title = f"{clean_dest}: Marine Scuba Expedition & Coastal Passage"
+                morn_time = "09:00 AM"
+                checkin_desc = f"Guided Marine Scuba & Coral Reef Expedition for {party_label}"
+                morn_loc = f"{clean_dest} Marine Sanctuary Reef"
+                morn_type = "TA"
+                checkin_transit = "⏱️ 20m coastal boat transfer"
+                why_checkin = "Curated specifically for your scuba diving and marine adventure interests."
+            elif has_adventure:
+                day_title = f"{clean_dest}: Mountain Trailhead & High Ridge Trek"
+                morn_time = "08:30 AM"
+                checkin_desc = f"Alpine Pass Trek & High Ridge Adventure for {party_label}"
+                morn_loc = f"{clean_dest} Mountain Trailhead"
+                morn_type = "TA"
+                checkin_transit = "⏱️ 30m mountain drive"
+                why_checkin = "Curated for high-energy adventure and panoramic mountain trekking."
+            elif has_romantic:
+                day_title = f"{clean_dest}: Secluded Waterways & Romantic Evening Solitude"
+                morn_time = "09:30 AM"
+                checkin_desc = f"Private Scenic Promenade & Peaceful Harbor Garden Walk for {party_label}"
+                morn_loc = f"{clean_dest} Botanical Gardens"
+                morn_type = "TA"
+                checkin_transit = "⏱️ 15m tranquil stroll"
+                why_checkin = "Curated for private, unhurried couple discovery in serene gardens."
+            elif has_nightlife:
+                day_title = f"{clean_dest}: Coastal Social Vibe & Nightlife Strip"
+                morn_time = "10:30 AM"
+                checkin_desc = f"Late Morning Artisanal Coffee & Promenade Stroll for {party_label}"
+                morn_loc = f"{clean_dest} Beachfront Promenade"
+                morn_type = "TA"
+                checkin_transit = "⏱️ 10m walk"
+                why_checkin = "Relaxed morning pacing after evening nightlife."
+            elif has_culture:
+                day_title = f"{clean_dest}: Heritage Sanctuaries & Living Traditions"
+                morn_time = "09:00 AM"
+                checkin_desc = f"Historical Monuments & Ancient Artisan Quarter Stroll for {party_label}"
+                morn_loc = f"{clean_dest} Heritage Enclave"
+                morn_type = "TA"
+                checkin_transit = "⏱️ 15m heritage walk"
+                why_checkin = "Curated for deep historical immersion and artisan craft discovery."
+            elif has_wellness:
+                day_title = f"{clean_dest}: Thermal Mineral Springs & Restorative Pacing"
+                morn_time = "09:30 AM"
+                checkin_desc = f"Morning Thermal Springs & Mindfulness Garden Session for {party_label}"
+                morn_loc = f"{clean_dest} Thermal Baths"
+                morn_type = "H"
+                checkin_transit = "⏱️ 10m peaceful walk"
+                why_checkin = "Curated for mindful relaxation and restorative hot springs pacing."
+            elif matched_curated:
+                curated_day = matched_curated[(day_idx - 1) % len(matched_curated)]
+                day_title = f"{clean_dest}: {curated_day['lunch_name'].split(' ')[0]} & Scenic Highlights"
+                morn_time = "09:30 AM"
+                checkin_desc = f"Morning scenic nature trail & discovery stroll for {party_label}"
+                morn_loc = f"Central District, {clean_dest}"
+                morn_type = "TA"
+                checkin_transit = "⏱️ 15m walk"
+                why_checkin = "Paced morning exploration through prime local landmarks."
+            else:
+                theme_tup = generic_narratives[(day_idx - 1) % len(generic_narratives)]
+                day_title = f"{clean_dest}: {theme_tup[0]}"
+                morn_time = "09:30 AM"
+                checkin_desc = f"Morning scenic nature trail & discovery stroll for {party_label}"
+                morn_loc = f"Central District, {clean_dest}"
+                morn_type = "TA"
+                checkin_transit = "⏱️ 15m walk"
+                why_checkin = "Paced morning exploration through prime local landmarks."
 
-            lunch_desc = f"Authentic {clean_dest} regional lunch tasting for {party_label} at {theme_tup[1]}"
-            lunch_loc = f"{theme_tup[1]}, {clean_dest}"
-            evening_desc = f"Golden hour sunset stroll & photography at {theme_tup[2]}"
-            evening_loc = f"{clean_dest} Lookout Point"
+            morn_geo = get_coordinates(morn_loc)
+            morn_lat = morn_geo["lat"] if morn_geo.get("found") else None
+            morn_lng = morn_geo["lng"] if morn_geo.get("found") else None
+            morn_prov = morn_geo.get("provenance", "AI GENERATED") if morn_geo.get("found") else "AI GENERATED"
+
+            # Midday Culinary (Day 2+)
+            if has_seafood:
+                lunch_desc = f"Artisanal Grilled Seafood & Harbor Catch Tasting for {party_label}"
+                lunch_loc = f"{clean_dest} Seaside Harbor Tavern"
+                why_lunch = "Curated to experience authentic harbor seafood recipes."
+            elif has_culture:
+                lunch_desc = f"Historic Courtyard Traditional Dining for {party_label}"
+                lunch_loc = f"{clean_dest} Old Town Strip"
+                why_lunch = "Curated for rich cultural atmosphere and regional dishes."
+            elif has_wellness:
+                lunch_desc = f"Ayurvedic Botanical Nourishment & Infused Elixirs for {party_label}"
+                lunch_loc = f"{clean_dest} Wellness Retreat Pantry"
+                why_lunch = "Curated for revitalizing holistic nutrition."
+            elif matched_curated:
+                curated_day = matched_curated[(day_idx - 1) % len(matched_curated)]
+                lunch_desc = f"Authentic regional gastronomy for {party_label}: {curated_day['lunch_name']}"
+                lunch_loc = curated_day["lunch_loc"]
+                why_lunch = "Celebrated local culinary hotspot featuring seasonal recipes."
+            else:
+                theme_tup = generic_narratives[(day_idx - 1) % len(generic_narratives)]
+                lunch_desc = f"Authentic {clean_dest} regional lunch tasting for {party_label} at {theme_tup[1]}"
+                lunch_loc = f"{theme_tup[1]}, {clean_dest}"
+                why_lunch = "Selected for authentic regional recipes and welcoming atmosphere."
+
+            # Evening Experience (Day 2+)
+            if has_nightlife:
+                eve_time = "08:00 PM"
+                eve_desc = f"Acoustic Nightclub & Craft Mixology Social for {party_label}"
+                eve_loc = f"{clean_dest} Night Entertainment Quarter"
+                why_eve = "Curated for premier nightlife and evening entertainment."
+            elif has_photography:
+                eve_time = "05:30 PM"
+                eve_desc = f"Twilight Long-Exposure Ridge Vista & Landscape Sunset for {party_label}"
+                eve_loc = f"{clean_dest} Sunset Ridge Point"
+                why_eve = "Prime location for panoramic landscape photography and dusk colors."
+            elif has_romantic:
+                eve_time = "06:30 PM"
+                eve_desc = f"Secluded Stargazing & Candlelight Dinner for {party_label}"
+                eve_loc = f"{clean_dest} Intimate Waterside Pavilion"
+                why_eve = "Curated for private romantic dining under the evening stars."
+            elif matched_curated:
+                curated_day = matched_curated[(day_idx - 1) % len(matched_curated)]
+                eve_time = "05:30 PM"
+                eve_desc = f"Golden hour experience: {curated_day['evening_name']}"
+                eve_loc = curated_day["evening_loc"]
+                why_eve = "Prime vantage point for unobstructed twilight panorama."
+            else:
+                theme_tup = generic_narratives[(day_idx - 1) % len(generic_narratives)]
+                eve_time = "05:30 PM"
+                eve_desc = f"Golden hour sunset stroll & photography at {theme_tup[2]}"
+                eve_loc = f"{clean_dest} Lookout Point"
+                why_eve = "Prime vantage point for evening sunset colors."
 
         # Geocode activities via genuine spatial registry (NO fabricated offsets)
         lunch_geo = get_coordinates(lunch_loc)
@@ -279,25 +488,24 @@ def generate_algorithmic_plan(
         lunch_lng = lunch_geo["lng"] if lunch_geo.get("found") else None
         lunch_prov = lunch_geo.get("provenance", "AI GENERATED") if lunch_geo.get("found") else "AI GENERATED"
 
-        evening_geo = get_coordinates(evening_loc)
+        evening_geo = get_coordinates(eve_loc)
         evening_lat = evening_geo["lat"] if evening_geo.get("found") else None
         evening_lng = evening_geo["lng"] if evening_geo.get("found") else None
         evening_prov = evening_geo.get("provenance", "AI GENERATED") if evening_geo.get("found") else "AI GENERATED"
 
-        checkin_desc = f"Morning orientation & check-in at {hotel_name} ({party_label})"
         activities: List[ActivityItem] = [
             ActivityItem(
-                time_slot="09:30 AM",
+                time_slot=morn_time,
                 description=checkin_desc,
-                location=hotel.get("address", f"Central District, {clean_dest}") if hotel else f"Central District, {clean_dest}",
-                place_type="H",
-                estimated_transit="⏱️ 25m from arrival terminal",
+                location=morn_loc,
+                place_type=morn_type,
+                estimated_transit=checkin_transit,
                 crowd_warning="🟢 Low Morning Traffic",
                 cost_estimate=float(round(daily_budget * 0.40)),
-                lat=hotel_lat,
-                lng=hotel_lng,
-                provenance=hotel_prov,
-                why_recommended=f"Selected for top traveler ratings and peaceful setting in {clean_dest}"
+                lat=morn_lat,
+                lng=morn_lng,
+                provenance=morn_prov,
+                why_recommended=why_checkin
             ),
             ActivityItem(
                 time_slot="01:00 PM",
@@ -310,12 +518,12 @@ def generate_algorithmic_plan(
                 lat=lunch_lat,
                 lng=lunch_lng,
                 provenance=lunch_prov,
-                why_recommended="Celebrated local culinary hotspot featuring seasonal recipes"
+                why_recommended=why_lunch
             ),
             ActivityItem(
-                time_slot="05:30 PM",
-                description=evening_desc,
-                location=evening_loc,
+                time_slot=eve_time,
+                description=eve_desc,
+                location=eve_loc,
                 place_type="TA",
                 estimated_transit="⏱️ 20m scenic transit",
                 crowd_warning="🔥 Peak Golden Hour (Arrive 30 min before sunset)",
@@ -323,7 +531,7 @@ def generate_algorithmic_plan(
                 lat=evening_lat,
                 lng=evening_lng,
                 provenance=evening_prov,
-                why_recommended="Prime vantage point for unobstructed twilight photography"
+                why_recommended=why_eve
             )
         ]
 
@@ -359,8 +567,8 @@ def build_itinerary_with_planner_agent(
     """
     Primary Entry Point for AI Planner Architect.
     1. Coordinates Tools: Weather, Hotels (scaled to travellers), Geocoding
-    2. Builds Structured Day Plans (with honest provenance)
-    3. Persists directly to PostgreSQL attached strictly to authenticated user
+    2. Builds Structured Day Plans (tailored to vibe, interests, origin)
+    3. Persists directly to PostgreSQL attached strictly to authenticated user inside an atomic transaction
     4. Fixes Activity ID consistency: returns persisted it_act.id after db.flush()
     5. Records honest AI Observability telemetry (deterministic-planner-v1, 0 tokens)
     6. Creates squad room code
@@ -378,30 +586,36 @@ def build_itinerary_with_planner_agent(
     hotels_info = search_hotels(clean_dest, guests=clean_travellers)
     coords = get_coordinates(clean_dest)
 
-    # 2. Date calculation & strict validation from canonical input
+    # 2. Date calculation & strict 422 validation from canonical input (NO silent date rewriting)
     if start_date_str:
         try:
             start_d = datetime.strptime(start_date_str.split("T")[0], "%Y-%m-%d").date()
-        except Exception:
-            start_d = date.today() + timedelta(days=14)
+        except (ValueError, TypeError, AttributeError):
+            raise HTTPException(
+                status_code=422,
+                detail=f"Invalid start_date '{start_date_str}'. Expected format: YYYY-MM-DD"
+            )
     else:
         start_d = date.today() + timedelta(days=14)
 
     if end_date_str:
         try:
             end_d = datetime.strptime(end_date_str.split("T")[0], "%Y-%m-%d").date()
-            if end_d < start_d:
-                # Inconsistent dates: end_date cannot be earlier than start_date
-                end_d = start_d + timedelta(days=max(0, clean_days - 1))
-            else:
-                # Recalculate clean_days if both dates explicitly provided
-                clean_days = min(14, max(1, (end_d - start_d).days + 1))
-        except Exception:
-            end_d = start_d + timedelta(days=max(0, clean_days - 1))
+        except (ValueError, TypeError, AttributeError):
+            raise HTTPException(
+                status_code=422,
+                detail=f"Invalid end_date '{end_date_str}'. Expected format: YYYY-MM-DD"
+            )
+        if end_d < start_d:
+            raise HTTPException(
+                status_code=422,
+                detail="Inconsistent dates: end_date cannot be earlier than start_date"
+            )
+        clean_days = min(14, max(1, (end_d - start_d).days + 1))
     else:
         end_d = start_d + timedelta(days=max(0, clean_days - 1))
 
-    # 3. Generate Structured Days (Tools + Validation)
+    # 3. Generate Structured Days consuming full preference contract (vibe, interests, origin)
     structured_days = generate_algorithmic_plan(
         destination=clean_dest,
         days_count=clean_days,
@@ -412,111 +626,123 @@ def build_itinerary_with_planner_agent(
         hotels_info=hotels_info,
         coords=coords,
         travellers=clean_travellers,
-        vibe=vibe
-    )
-
-    # 4. Persist to PostgreSQL (Strict User Ownership with canonical fields)
-    new_itinerary = Itinerary(
-        owner_id=user.id,
-        title=f"Bespoke {clean_days}-Day {clean_dest} Sanctuary Passage",
-        destination=clean_dest,
-        origin=origin,
-        start_date=start_d,
-        end_date=end_d,
-        total_budget=clean_budget,
-        currency=currency or "INR",
-        persona=persona,
-        travellers=clean_travellers,
         vibe=vibe,
-        raw_prompt=effective_prompt,
-        status="active"
+        interests=interests,
+        origin=origin
     )
-    db.add(new_itinerary)
-    db.commit()
-    db.refresh(new_itinerary)
 
-    # 5. Persist Days & Activities (Fix Data Consistency: Persisted IDs match client response)
-    formatted_days = []
-    for dp in structured_days:
-        it_day = ItineraryDay(
-            itinerary_id=new_itinerary.id,
-            day_number=dp.day_number,
-            title=dp.title,
-            cover_image_url=dp.cover_image_url,
-            weather_summary=dp.weather_summary
+    # 4. Atomic PostgreSQL Persistence: Entire trip graph commits together or rolls back
+    try:
+        new_itinerary = Itinerary(
+            owner_id=user.id,
+            title=f"Bespoke {clean_days}-Day {clean_dest} Sanctuary Passage",
+            destination=clean_dest,
+            origin=origin,
+            start_date=start_d,
+            end_date=end_d,
+            total_budget=clean_budget,
+            currency=currency or "INR",
+            persona=persona,
+            travellers=clean_travellers,
+            vibe=vibe,
+            raw_prompt=effective_prompt,
+            status="active"
         )
-        db.add(it_day)
-        db.commit()
-        db.refresh(it_day)
+        db.add(new_itinerary)
+        db.flush()
 
-        day_acts = []
-        for a_idx, act in enumerate(dp.activities):
-            it_act = ItineraryActivity(
-                day_id=it_day.id,
-                time_slot=act.time_slot,
-                description=act.description,
-                location=act.location,
-                place_type=act.place_type,
-                estimated_transit=act.estimated_transit,
-                crowd_warning=act.crowd_warning,
-                cost_estimate=act.cost_estimate,
-                lat=act.lat,
-                lng=act.lng,
-                sort_order=a_idx,
-                provenance=act.provenance
+        formatted_days = []
+        for dp in structured_days:
+            it_day = ItineraryDay(
+                itinerary_id=new_itinerary.id,
+                day_number=dp.day_number,
+                title=dp.title,
+                cover_image_url=dp.cover_image_url,
+                weather_summary=dp.weather_summary
             )
-            db.add(it_act)
-            db.flush()  # Populates it_act.id from database default
-            day_acts.append({
-                "id": it_act.id,  # Pure database ID
-                "time": act.time_slot,
-                "description": act.description,
-                "location": act.location,
-                "placeType": act.place_type,
-                "estimatedTransit": act.estimated_transit,
-                "crowdWarning": act.crowd_warning,
-                "costEstimate": act.cost_estimate,
-                "lat": act.lat,
-                "lng": act.lng,
-                "provenance": act.provenance
+            db.add(it_day)
+            db.flush()
+
+            day_acts = []
+            for a_idx, act in enumerate(dp.activities):
+                it_act = ItineraryActivity(
+                    day_id=it_day.id,
+                    time_slot=act.time_slot,
+                    description=act.description,
+                    location=act.location,
+                    place_type=act.place_type,
+                    estimated_transit=act.estimated_transit,
+                    crowd_warning=act.crowd_warning,
+                    cost_estimate=act.cost_estimate,
+                    lat=act.lat,
+                    lng=act.lng,
+                    sort_order=a_idx,
+                    provenance=act.provenance,
+                    why_recommended=act.why_recommended
+                )
+                db.add(it_act)
+                db.flush()  # Populates it_act.id from database default
+                day_acts.append({
+                    "id": it_act.id,  # Pure database ID
+                    "time": act.time_slot,
+                    "description": act.description,
+                    "location": act.location,
+                    "placeType": act.place_type,
+                    "estimatedTransit": act.estimated_transit,
+                    "crowdWarning": act.crowd_warning,
+                    "costEstimate": act.cost_estimate,
+                    "lat": act.lat,
+                    "lng": act.lng,
+                    "provenance": act.provenance,
+                    "whyRecommended": act.why_recommended
+                })
+
+            formatted_days.append({
+                "id": it_day.id,
+                "dayNumber": dp.day_number,
+                "title": it_day.title,
+                "coverImage": it_day.cover_image_url,
+                "weather": it_day.weather_summary,
+                "activities": day_acts
             })
+
+        # Squad Room Code
+        clean_prefix = re.sub(r'[^A-Z]', '', clean_dest.upper())[:3]
+        if len(clean_prefix) < 3:
+            clean_prefix = "TRP"
+        room_code = f"{clean_prefix}-{start_d.year}-X{str(uuid.uuid4())[:4].upper()}"
+
+        squad_room = SquadRoom(
+            itinerary_id=new_itinerary.id,
+            room_code=room_code
+        )
+        db.add(squad_room)
+        db.flush()
+
+        # AI Observability: Honest Telemetry (No fake LLM tokens)
+        latency_ms = int((time.time() - start_time) * 1000)
+        ai_run = AIRun(
+            user_id=user.id,
+            trip_id=new_itinerary.id,
+            prompt=effective_prompt or f"Generate itinerary for {clean_dest}",
+            model="deterministic-planner-v1",
+            latency_ms=latency_ms,
+            tokens_used=0,
+            status="success"
+        )
+        db.add(ai_run)
+
+        # Single atomic commit for the entire trip graph
         db.commit()
+        db.refresh(new_itinerary)
 
-        formatted_days.append({
-            "id": it_day.id,
-            "dayNumber": dp.day_number,
-            "title": it_day.title,
-            "coverImage": it_day.cover_image_url,
-            "weather": it_day.weather_summary,
-            "activities": day_acts
-        })
-
-    # 6. Create Associated Squad Room Code
-    clean_prefix = re.sub(r'[^A-Z]', '', clean_dest.upper())[:3]
-    if len(clean_prefix) < 3:
-        clean_prefix = "TRP"
-    room_code = f"{clean_prefix}-{start_d.year}-X{str(uuid.uuid4())[:4].upper()}"
-
-    squad_room = SquadRoom(
-        itinerary_id=new_itinerary.id,
-        room_code=room_code
-    )
-    db.add(squad_room)
-    db.commit()
-
-    # 7. AI Observability: Honest Telemetry (No fake LLM tokens)
-    latency_ms = int((time.time() - start_time) * 1000)
-    ai_run = AIRun(
-        user_id=user.id,
-        trip_id=new_itinerary.id,
-        prompt=effective_prompt or f"Generate itinerary for {clean_dest}",
-        model="deterministic-planner-v1",
-        latency_ms=latency_ms,
-        tokens_used=0,
-        status="success"
-    )
-    db.add(ai_run)
-    db.commit()
+    except Exception as exc:
+        db.rollback()
+        logger.error(f"Failed to persist trip graph atomically: {exc}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to persist itinerary atomically: {str(exc)}"
+        )
 
     return {
         "id": new_itinerary.id,
