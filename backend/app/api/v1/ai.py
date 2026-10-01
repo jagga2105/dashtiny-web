@@ -12,7 +12,7 @@ from jose import jwt
 
 from app.config import settings
 from app.db.database import get_db
-from app.models.models import Itinerary, ItineraryDay, ItineraryActivity, User, AIRun, AIToolCall, SquadRoom
+from app.models.models import Itinerary, ItineraryDay, ItineraryActivity, User, AIRun, AIToolCall, SquadRoom, SquadMember
 from app.ai.tools.itinerary import apply_itinerary_action
 from app.ai.tools.weather import get_destination_weather
 from app.ai.tools.hotel_search import search_hotels
@@ -54,11 +54,11 @@ def ai_query(
     is_owner = (trip.owner_id == user.id)
     squad = db.query(SquadRoom).filter(SquadRoom.itinerary_id == trip.id).first()
     is_member = False
-    if squad and squad.members:
-        is_member = any(
-            (isinstance(m, dict) and (m.get("email") == user.email or m.get("user_id") == user.id))
-            for m in squad.members
-        )
+    if squad:
+        is_member = db.query(SquadMember).filter(
+            SquadMember.squad_id == squad.id,
+            SquadMember.user_id == user.id
+        ).first() is not None
     if not is_owner and not is_member:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -138,7 +138,7 @@ def ai_query(
         tool_name="itinerary.apply_itinerary_action",
         input_payload={"instruction": request.instruction, "trip_id": trip.id},
         output_payload={"changes_count": len(action_result["changes"])},
-        provenance="VERIFIED",
+        provenance="AI_GENERATED",
         latency_ms=latency_ms
     )
     db.add(tool_call)

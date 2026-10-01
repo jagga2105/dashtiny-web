@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.db.database import get_db
-from app.models.models import Itinerary, ItineraryDay, ItineraryActivity, SquadRoom, Booking, User
+from app.models.models import Itinerary, ItineraryDay, ItineraryActivity, SquadRoom, SquadMember, Booking, User
 from app.api.deps import get_current_user
 
 router = APIRouter(prefix="/trips", tags=["My Trips & Active Passages"])
@@ -60,7 +60,7 @@ def get_my_trips(user: User = Depends(get_current_user), db: Session = Depends(g
                 "currency": b.currency,
                 "status": b.status,
                 "pnr_ref": b.pnr_ref,
-                "provenance": b.provenance or "VERIFIED",
+                "provenance": b.provenance or "PROVIDER_VERIFIED",
                 "created_at": str(b.created_at),
                 "details": b.details
             }
@@ -103,15 +103,15 @@ def get_trip_details(
     is_owner = (it.owner_id == user.id)
     squad = db.query(SquadRoom).filter(SquadRoom.itinerary_id == it.id).first()
     is_member = False
-    if squad and squad.members:
-        is_member = any(
-            (isinstance(m, dict) and (m.get("email") == user.email or m.get("user_id") == user.id))
-            for m in squad.members
-        )
+    if squad:
+        is_member = db.query(SquadMember).filter(
+            SquadMember.squad_id == squad.id,
+            SquadMember.user_id == user.id
+        ).first() is not None
     if not is_owner and not is_member:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied. You do not own this itinerary."
+            detail="Access denied. You do not have access to this itinerary."
         )
 
     days = db.query(ItineraryDay).filter(ItineraryDay.itinerary_id == it.id).order_by(ItineraryDay.day_number.asc()).all()
@@ -138,7 +138,7 @@ def get_trip_details(
                 "currency": b.currency,
                 "status": b.status,
                 "pnr_ref": b.pnr_ref,
-                "provenance": b.provenance or "VERIFIED",
+                "provenance": b.provenance or "PROVIDER_VERIFIED",
                 "created_at": str(b.created_at),
                 "details": b.details
             }

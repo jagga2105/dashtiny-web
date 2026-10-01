@@ -20,7 +20,7 @@ def search_restaurants(destination: str, meal_type: str = "dinner", dietary: str
                 "lng": 77.183,
                 "price_level": "₹₹",
                 "avg_cost_for_two": 1400,
-                "provenance": "VERIFIED",
+                "provenance": "CURATED",
                 "why_recommended": "Riverside stone patio with bubbling Beas river waters and live acoustic sets"
             },
             {
@@ -31,7 +31,7 @@ def search_restaurants(destination: str, meal_type: str = "dinner", dietary: str
                 "lng": 77.187,
                 "price_level": "₹₹₹",
                 "avg_cost_for_two": 1800,
-                "provenance": "VERIFIED",
+                "provenance": "CURATED",
                 "why_recommended": "Legendary fresh Himalayan trout recipes in an emerald garden lawn"
             }
         ]
@@ -45,7 +45,7 @@ def search_restaurants(destination: str, meal_type: str = "dinner", dietary: str
             "lng": 73.948,
             "price_level": "₹₹₹",
             "avg_cost_for_two": 2200,
-            "provenance": "VERIFIED",
+            "provenance": "CURATED",
             "why_recommended": "Scenic riverfront deck serving crab xec-xec and kingfish peri-peri"
         },
         {
@@ -56,7 +56,7 @@ def search_restaurants(destination: str, meal_type: str = "dinner", dietary: str
             "lng": 73.782,
             "price_level": "₹₹",
             "avg_cost_for_two": 1600,
-            "provenance": "VERIFIED",
+            "provenance": "CURATED",
             "why_recommended": "Atmospheric courtyard dining inside an ancient Portuguese heritage home"
         },
         {
@@ -67,7 +67,7 @@ def search_restaurants(destination: str, meal_type: str = "dinner", dietary: str
             "lng": 73.737,
             "price_level": "₹₹₹₹",
             "avg_cost_for_two": 3200,
-            "provenance": "VERIFIED",
+            "provenance": "CURATED",
             "why_recommended": "Premier sunset cliff panorama with Aegean white-stone arches and chill house music"
         }
     ]

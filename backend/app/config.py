@@ -26,8 +26,8 @@ class Settings(BaseSettings):
     REDIS_HOST: str = "localhost"
     REDIS_PORT: int = 6379
 
-    # Security & Auth (MUST be set in .env in production)
-    SECRET_KEY: str = "SrZCeCYmpOFmLR-SauULuGyM0QokcROSmyzfFcnLXZ8"
+    # Security & Auth (MUST be set in environment / .env file)
+    SECRET_KEY: str
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
 

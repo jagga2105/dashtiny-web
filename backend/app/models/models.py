@@ -173,7 +173,7 @@ class Booking(Base):
     currency = Column(String(10), default="INR")
     status = Column(String(50), default="confirmed")  # confirmed, pending, cancelled
     pnr_ref = Column(String(50), unique=True, nullable=False)
-    provenance = Column(String(50), default="VERIFIED")  # Provider Inventory
+    provenance = Column(String(50), default="PROVIDER_VERIFIED")  # Provider Inventory
     details = Column(JSON, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
@@ -204,7 +204,7 @@ class AIToolCall(Base):
     tool_name = Column(String(100), nullable=False)  # flight_search, hotel_search, etc.
     input_payload = Column(JSON, nullable=True)
     output_payload = Column(JSON, nullable=True)
-    provenance = Column(String(50), default="VERIFIED")
+    provenance = Column(String(50), default="CURATED")
     latency_ms = Column(Integer, default=0)
     error = Column(Text, nullable=True)
 

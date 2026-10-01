@@ -109,6 +109,100 @@ def get_curated_cover_image(category: str, day_idx: int) -> str:
     pool = image_pool.get(category, image_pool["metropolitan"])
     return pool[(day_idx - 1) % len(pool)]
 
+# Destination-specific curated landmarks mapping 1:1 to spatial registry
+CURATED_DESTINATION_ACTIVITIES: Dict[str, List[Dict[str, Any]]] = {
+    "goa": [
+        {
+            "lunch_name": "Fontainhas Latin Quarter Regional Tasting",
+            "lunch_loc": "Fontainhas Latin Quarter, Panjim",
+            "evening_name": "Vagator Coastal Sunset Deck",
+            "evening_loc": "Vagator Beach, North Goa"
+        },
+        {
+            "lunch_name": "Anjuna Coastal Culinary Belt",
+            "lunch_loc": "Anjuna Coastal Belt, Goa",
+            "evening_name": "Chapora Fort Ridge Twilight Walk",
+            "evening_loc": "Chapora Fort Ridge, Goa"
+        },
+        {
+            "lunch_name": "Sahakari Spice Farm Traditional Feast",
+            "lunch_loc": "Sahakari Spice Plantation, Ponda",
+            "evening_name": "Morjim Turtle Beach Sundowner",
+            "evening_loc": "Morjim Turtle Beach, Goa"
+        },
+        {
+            "lunch_name": "Benaulim White Sands Seafood Experience",
+            "lunch_loc": "Benaulim White Sands, South Goa",
+            "evening_name": "Grande Island Coral Catamaran Excursion",
+            "evening_loc": "Grande Island Reef, Goa"
+        }
+    ],
+    "manali": [
+        {
+            "lunch_name": "Old Manali Riverside Alpine Lunch",
+            "lunch_loc": "Old Manali Village, Himachal",
+            "evening_name": "Hadimba Temple Pine Forest Stroll",
+            "evening_loc": "Hadimba Temple Forest, Manali"
+        },
+        {
+            "lunch_name": "Solang Valley High Meadow Lunch",
+            "lunch_loc": "Solang Valley, Manali",
+            "evening_name": "Rohtang Alpine Pass Golden Vista",
+            "evening_loc": "Rohtang Alpine Pass, Himachal"
+        },
+        {
+            "lunch_name": "Himachali Traditional Trout Tasting",
+            "lunch_loc": "Old Manali Village, Himachal",
+            "evening_name": "Manali Ridge Twilight Walk",
+            "evening_loc": "Manali, Himachal Pradesh"
+        }
+    ],
+    "jaipur": [
+        {
+            "lunch_name": "City Palace Heritage Courtyard Lunch",
+            "lunch_loc": "City Palace, Jaipur",
+            "evening_name": "Hawa Mahal Sunset Architecture Promenade",
+            "evening_loc": "Hawa Mahal, Jaipur"
+        },
+        {
+            "lunch_name": "Amer Fort Royal Pavilion Experience",
+            "lunch_loc": "Amer Fort, Jaipur",
+            "evening_name": "Old City Twilight Artisan Walk",
+            "evening_loc": "Jaipur, Rajasthan"
+        }
+    ],
+    "kashmir": [
+        {
+            "lunch_name": "Srinagar Dal Lake Floating Wazwan Tasting",
+            "lunch_loc": "Srinagar, Kashmir",
+            "evening_name": "Gulmarg Alpine Meadow Sunset",
+            "evening_loc": "Gulmarg, Kashmir"
+        },
+        {
+            "lunch_name": "Pine Cottage Mountain Lunch",
+            "lunch_loc": "Gulmarg, Kashmir",
+            "evening_name": "Apharwat Ridge Mountain Vista",
+            "evening_loc": "Gulmarg, Kashmir"
+        }
+    ],
+    "gulmarg": [
+        {
+            "lunch_name": "Pine Cottage Mountain Lunch",
+            "lunch_loc": "Gulmarg, Kashmir",
+            "evening_name": "Gulmarg Alpine Meadow Sunset",
+            "evening_loc": "Gulmarg, Kashmir"
+        }
+    ],
+    "kyoto": [
+        {
+            "lunch_name": "Gion Historic Quarter Kaiseki Experience",
+            "lunch_loc": "Kyoto, Japan",
+            "evening_name": "Arashiyama Bamboo Grove Twilight Stroll",
+            "evening_loc": "Kyoto, Japan"
+        }
+    ]
+}
+
 def generate_algorithmic_plan(
     destination: str,
     days_count: int,
@@ -117,18 +211,21 @@ def generate_algorithmic_plan(
     start_date: date,
     weather_info: Dict[str, Any],
     hotels_info: List[Dict[str, Any]],
-    coords: Dict[str, float]
+    coords: Dict[str, Any]
 ) -> List[DayPlan]:
     """
-    Deterministic synthesis coordinating live tool outputs (Weather, Hotels, Geocoding)
+    Deterministic synthesis coordinating verified tool outputs (Weather, Hotels, Geocoding)
     into a structured, paced multi-day itinerary.
+    Rule: Never fabricate geographic coordinates. If genuine coordinates are not found in
+    the spatial registry, lat and lng are set to None.
     """
     clean_dest = destination.title().strip()
+    dest_lower = destination.lower().strip()
     category = get_theme_category(destination)
     daily_budget = total_budget / max(1, days_count)
 
-    # Activity templates customized by day index & category
-    theme_narratives = [
+    # Generic narrative templates if destination is not in curated pool
+    generic_narratives = [
         ("Arrival, Check-in & Orientation Twilight Walk", "Old Town & Historic Quarter", "Evening Sundowner Vista"),
         ("Iconic Landmarks & Cultural Highlights", "Artisan Quarter & Local Gastronomy", "Panoramic Sunset Overlook"),
         ("Scenic Nature Passage & Coastal/Alpine Trails", "Regional Cuisine Tasting", "Acoustic Lounge & Stargazing"),
@@ -138,56 +235,89 @@ def generate_algorithmic_plan(
         ("Farewell Stroll & Souvenir Collection", "Departure Brunch", "Scenic Transit to Terminal")
     ]
 
-    base_lat = coords.get("lat", 15.299)
-    base_lng = coords.get("lng", 74.124)
+    # Find curated activities if destination is known
+    matched_curated = None
+    for k, v in CURATED_DESTINATION_ACTIVITIES.items():
+        if k in dest_lower:
+            matched_curated = v
+            break
 
     days: List[DayPlan] = []
-    hotel_name = hotels_info[0]["name"] if hotels_info else f"{clean_dest} Boutique Sanctuary"
+    hotel = hotels_info[0] if hotels_info else None
+    hotel_name = hotel["name"] if hotel else f"{clean_dest} Boutique Sanctuary"
+    hotel_lat = hotel.get("lat") if hotel else None
+    hotel_lng = hotel.get("lng") if hotel else None
+    hotel_prov = hotel.get("provenance", "CURATED") if (hotel and hotel_lat is not None) else "AI GENERATED"
 
     for day_idx in range(1, days_count + 1):
-        theme_tup = theme_narratives[(day_idx - 1) % len(theme_narratives)]
-        day_title = f"{clean_dest}: {theme_tup[0]}"
         cover_image = get_curated_cover_image(category, day_idx)
 
-        # 3 Structured Activities per day (H = Stay/Check-in, R = Dining, TA = Tour/Activity)
+        if matched_curated:
+            curated_day = matched_curated[(day_idx - 1) % len(matched_curated)]
+            day_title = f"{clean_dest}: {curated_day['lunch_name'].split(' ')[0]} & Scenic Highlights"
+
+            lunch_desc = f"Authentic regional gastronomy: {curated_day['lunch_name']}"
+            lunch_loc = curated_day["lunch_loc"]
+            evening_desc = f"Golden hour experience: {curated_day['evening_name']}"
+            evening_loc = curated_day["evening_loc"]
+        else:
+            theme_tup = generic_narratives[(day_idx - 1) % len(generic_narratives)]
+            day_title = f"{clean_dest}: {theme_tup[0]}"
+
+            lunch_desc = f"Authentic {clean_dest} regional lunch tasting at {theme_tup[1]}"
+            lunch_loc = f"{theme_tup[1]}, {clean_dest}"
+            evening_desc = f"Golden hour sunset stroll & photography at {theme_tup[2]}"
+            evening_loc = f"{clean_dest} Lookout Point"
+
+        # Geocode activities via genuine spatial registry (NO fabricated offsets)
+        lunch_geo = get_coordinates(lunch_loc)
+        lunch_lat = lunch_geo["lat"] if lunch_geo.get("found") else None
+        lunch_lng = lunch_geo["lng"] if lunch_geo.get("found") else None
+        lunch_prov = lunch_geo.get("provenance", "AI GENERATED") if lunch_geo.get("found") else "AI GENERATED"
+
+        evening_geo = get_coordinates(evening_loc)
+        evening_lat = evening_geo["lat"] if evening_geo.get("found") else None
+        evening_lng = evening_geo["lng"] if evening_geo.get("found") else None
+        evening_prov = evening_geo.get("provenance", "AI GENERATED") if evening_geo.get("found") else "AI GENERATED"
+
         activities: List[ActivityItem] = [
             ActivityItem(
                 time_slot="09:30 AM",
                 description=f"Morning orientation & check-in at {hotel_name}",
-                location=f"Central Sanctuary, {clean_dest}",
+                location=hotel.get("address", f"Central District, {clean_dest}") if hotel else f"Central District, {clean_dest}",
                 place_type="H",
                 estimated_transit="⏱️ 25m from arrival terminal",
                 crowd_warning="🟢 Low Morning Traffic",
                 cost_estimate=float(round(daily_budget * 0.40)),
-                lat=base_lat + (day_idx * 0.005),
-                lng=base_lng + (day_idx * 0.005),
-                provenance="VERIFIED",
+                lat=hotel_lat,
+                lng=hotel_lng,
+                provenance=hotel_prov,
                 why_recommended=f"Selected for top traveler ratings and peaceful setting in {clean_dest}"
             ),
             ActivityItem(
                 time_slot="01:00 PM",
-                description=f"Authentic {clean_dest} regional lunch tasting at {theme_tup[1]}",
-                location=f"{theme_tup[1]}, {clean_dest}",
+                description=lunch_desc,
+                location=lunch_loc,
                 place_type="R",
                 estimated_transit="⏱️ 15m walk",
                 crowd_warning="🟡 Moderate Lunch Crowd",
                 cost_estimate=float(round(daily_budget * 0.20)),
-                lat=base_lat + (day_idx * 0.008),
-                lng=base_lng + (day_idx * 0.003),
-                provenance="AI GENERATED",
+                lat=lunch_lat,
+                lng=lunch_lng,
+                provenance=lunch_prov,
                 why_recommended="Celebrated local culinary hotspot featuring seasonal recipes"
             ),
             ActivityItem(
                 time_slot="05:30 PM",
-                description=f"Golden hour sunset stroll & photography at {theme_tup[2]}",
-                location=f"{clean_dest} Lookout Point",
+                description=evening_desc,
+                location=evening_loc,
                 place_type="TA",
                 estimated_transit="⏱️ 20m scenic transit",
                 crowd_warning="🔥 Peak Golden Hour (Arrive 30 min before sunset)",
                 cost_estimate=float(round(daily_budget * 0.15)),
-                lat=base_lat + (day_idx * 0.012),
-                lng=base_lng - (day_idx * 0.004),
-                provenance="AI GENERATED",
+                lat=evening_lat,
+                lng=evening_lng,
+                provenance=evening_prov,
                 why_recommended="Prime vantage point for unobstructed twilight photography"
             )
         ]
@@ -240,7 +370,8 @@ def build_itinerary_with_planner_agent(
     else:
         start_d = date.today() + timedelta(days=14)
 
-    end_d = start_d + timedelta(days=clean_days)
+    # End date is inclusive: for a 4-day trip starting Oct 10, end date is Oct 13
+    end_d = start_d + timedelta(days=max(0, clean_days - 1))
 
     # 3. Generate Structured Days (Tools + Validation)
     structured_days = generate_algorithmic_plan(

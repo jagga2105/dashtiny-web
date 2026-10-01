@@ -83,7 +83,7 @@ def create_booking(
         currency=request.currency or "INR",
         status="saved_reference",
         pnr_ref=pnr_code,
-        provenance="VERIFIED",
+        provenance="PROVIDER_VERIFIED",
         details=request.details or {}
     )
     db.add(new_booking)

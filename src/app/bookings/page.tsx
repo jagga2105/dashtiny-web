@@ -374,9 +374,18 @@ export default function BookingsPage() {
                         {fl.flight_number}
                       </span>
                       {/* Trust Provenance Badge */}
-                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-extrabold border border-emerald-200">
-                        <ShieldCheck className="w-3 h-3 text-emerald-600" />
-                        VERIFIED PROVIDER
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-800 text-[10px] font-extrabold border border-indigo-200">
+                        {fl.provenance === 'PROVIDER_VERIFIED' ? (
+                          <>
+                            <ShieldCheck className="w-3 h-3 text-emerald-600" />
+                            PROVIDER VERIFIED
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircle2 className="w-3 h-3 text-indigo-600" />
+                            {fl.provenance || 'CURATED'}
+                          </>
+                        )}
                       </span>
                     </div>
 
@@ -540,10 +549,19 @@ export default function BookingsPage() {
                         <span>{ht.star_rating}</span>
                       </span>
 
-                      {/* Source & Verified Badge */}
-                      <span className="absolute bottom-4 left-4 inline-flex items-center gap-1 px-3 py-1 rounded-full bg-emerald-950/80 backdrop-blur-md text-emerald-200 text-[10px] font-extrabold border border-emerald-500/40">
-                        <ShieldCheck className="w-3 h-3 text-emerald-400" />
-                        {ht.source || 'Verified Inventory'}
+                      {/* Source & Provenance Badge */}
+                      <span className="absolute bottom-4 left-4 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-950/80 backdrop-blur-md text-indigo-200 text-[10px] font-extrabold border border-indigo-500/40">
+                        {ht.provenance === 'PROVIDER_VERIFIED' ? (
+                          <>
+                            <ShieldCheck className="w-3 h-3 text-emerald-400" />
+                            PROVIDER VERIFIED
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircle2 className="w-3 h-3 text-indigo-400" />
+                            {ht.provenance || 'CURATED'} • {ht.source || 'Boutique Registry'}
+                          </>
+                        )}
                       </span>
                     </div>
 

@@ -510,17 +510,46 @@ export default function ActiveTripsPage() {
                         <div className="flex items-center gap-2">
                           <span className="font-mono text-xs font-bold text-orange-600">{a.time}</span>
                           {/* Provenance Badge */}
-                          {a.provenance === 'VERIFIED' ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 border border-emerald-200 text-[10px] font-extrabold">
-                              <ShieldCheck className="w-3 h-3 text-emerald-600" />
-                              VERIFIED
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-orange-100 text-orange-800 border border-orange-200 text-[10px] font-extrabold">
-                              <Sparkles className="w-3 h-3 text-orange-600" />
-                              AI GENERATED
-                            </span>
-                          )}
+                          {(() => {
+                            const prov = (a.provenance || 'AI_GENERATED').toUpperCase().replace(' ', '_');
+                            if (prov === 'PROVIDER_VERIFIED') {
+                              return (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 border border-emerald-200 text-[10px] font-extrabold">
+                                  <ShieldCheck className="w-3 h-3 text-emerald-600" />
+                                  PROVIDER VERIFIED
+                                </span>
+                              );
+                            }
+                            if (prov === 'CURATED') {
+                              return (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-800 border border-indigo-200 text-[10px] font-extrabold">
+                                  <CheckCircle2 className="w-3 h-3 text-indigo-600" />
+                                  CURATED
+                                </span>
+                              );
+                            }
+                            if (prov === 'USER_GENERATED') {
+                              return (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-sky-100 text-sky-800 border border-sky-200 text-[10px] font-extrabold">
+                                  <Users className="w-3 h-3 text-sky-600" />
+                                  USER GENERATED
+                                </span>
+                              );
+                            }
+                            if (prov === 'DEMO') {
+                              return (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200 text-[10px] font-extrabold">
+                                  DEMO
+                                </span>
+                              );
+                            }
+                            return (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-orange-100 text-orange-800 border border-orange-200 text-[10px] font-extrabold">
+                                <Sparkles className="w-3 h-3 text-orange-600" />
+                                AI GENERATED
+                              </span>
+                            );
+                          })()}
                           <span className="text-[10px] font-extrabold px-1.5 py-0.5 rounded bg-slate-200 text-slate-700">
                             [{a.placeType || 'TA'}]
                           </span>
@@ -585,7 +614,7 @@ export default function ActiveTripsPage() {
                       <div className="flex items-center justify-between">
                         <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10px] font-extrabold uppercase border border-emerald-200">
                           <ShieldCheck className="w-3 h-3 text-emerald-600" />
-                          {b.status || 'CONFIRMED'} • VERIFIED PROVIDER
+                          {b.status || 'CONFIRMED'} • {b.provenance === 'PROVIDER_VERIFIED' ? 'PROVIDER VERIFIED' : (b.provenance || 'SAVED REFERENCE')}
                         </span>
                         <span className="font-mono text-xs font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded border border-orange-200">
                           PNR: {b.pnr_ref}
@@ -640,18 +669,20 @@ export default function ActiveTripsPage() {
             : currentTrip.days?.find((d: any) => d.dayNumber === selectedMapDay)?.activities?.map((a: any, idx: number) => ({ ...a, dayNumber: selectedMapDay, seqNum: idx + 1 }))
           ) || [];
 
-          const validPoints = mapActivities.filter((a: any) => a.lat && a.lng);
-          const minLat = validPoints.length ? Math.min(...validPoints.map((a: any) => a.lat)) : 15.2;
-          const maxLat = validPoints.length ? Math.max(...validPoints.map((a: any) => a.lat)) : 15.7;
-          const minLng = validPoints.length ? Math.min(...validPoints.map((a: any) => a.lng)) : 73.7;
-          const maxLng = validPoints.length ? Math.max(...validPoints.map((a: any) => a.lng)) : 74.1;
+          const validPoints = mapActivities.filter((a: any) => a.lat != null && a.lng != null);
+          const hasCoordinates = validPoints.length > 0;
+
+          const minLat = hasCoordinates ? Math.min(...validPoints.map((a: any) => Number(a.lat))) : 0;
+          const maxLat = hasCoordinates ? Math.max(...validPoints.map((a: any) => Number(a.lat))) : 1;
+          const minLng = hasCoordinates ? Math.min(...validPoints.map((a: any) => Number(a.lng))) : 0;
+          const maxLng = hasCoordinates ? Math.max(...validPoints.map((a: any) => Number(a.lng))) : 1;
 
           const getX = (lng: number) => {
-            const span = (maxLng - minLng) || 0.1;
+            const span = (maxLng - minLng) || 0.04;
             return Math.min(88, Math.max(12, 15 + ((lng - minLng) / span) * 70));
           };
           const getY = (lat: number) => {
-            const span = (maxLat - minLat) || 0.1;
+            const span = (maxLat - minLat) || 0.04;
             return Math.min(85, Math.max(15, 85 - ((lat - minLat) / span) * 70));
           };
 
@@ -705,101 +736,120 @@ export default function ActiveTripsPage() {
                   <div className="flex items-center gap-2">
                     <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
                     <span className="font-mono text-emerald-400 font-extrabold text-[11px] tracking-wider uppercase">
-                      RADAR ACTIVE • {mapActivities.length} SPOTS TRACKED
+                      RADAR ACTIVE • {validPoints.length} PINS ON MAP ({mapActivities.length} SPOTS FOUND)
                     </span>
                   </div>
                   <div className="flex items-center gap-3 text-slate-400 font-mono text-[11px]">
                     <span>Center: {currentTrip.destination}</span>
                     <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-orange-400 font-bold">
-                      Transit: ~35 mins
+                      Transit: ~25 mins
                     </span>
                   </div>
                 </div>
 
                 {/* Interactive SVG Radar Stage */}
                 <div className="relative h-96 sm:h-[420px] w-full z-10 my-2">
-                  <svg className="absolute inset-0 w-full h-full pointer-events-none">
-                    {mapActivities.map((act: any, idx: number) => {
-                      if (idx === 0) return null;
-                      const prev = mapActivities[idx - 1];
-                      const x1 = `${getX(prev.lng || 73.74)}%`;
-                      const y1 = `${getY(prev.lat || 15.60)}%`;
-                      const x2 = `${getX(act.lng || 73.74)}%`;
-                      const y2 = `${getY(act.lat || 15.60)}%`;
-                      return (
-                        <line
-                          key={`line-${idx}`}
-                          x1={x1}
-                          y1={y1}
-                          x2={x2}
-                          y2={y2}
-                          stroke="#FF5A00"
-                          strokeWidth="2"
-                          strokeDasharray="4 4"
-                          strokeOpacity="0.6"
-                        />
-                      );
-                    })}
-                  </svg>
+                  {hasCoordinates ? (
+                    <>
+                      <svg className="absolute inset-0 w-full h-full pointer-events-none">
+                        {validPoints.map((act: any, idx: number) => {
+                          if (idx === 0) return null;
+                          const prev = validPoints[idx - 1];
+                          const x1 = `${getX(Number(prev.lng))}%`;
+                          const y1 = `${getY(Number(prev.lat))}%`;
+                          const x2 = `${getX(Number(act.lng))}%`;
+                          const y2 = `${getY(Number(act.lat))}%`;
+                          return (
+                            <line
+                              key={`line-${idx}`}
+                              x1={x1}
+                              y1={y1}
+                              x2={x2}
+                              y2={y2}
+                              stroke="#FF5A00"
+                              strokeWidth="2"
+                              strokeDasharray="4 4"
+                              strokeOpacity="0.6"
+                            />
+                          );
+                        })}
+                      </svg>
 
-                  {/* Pulsing Pin Waypoints */}
-                  {mapActivities.map((act: any, idx: number) => {
-                    const posX = getX(act.lng || 73.73 + idx * 0.04);
-                    const posY = getY(act.lat || 15.58 - idx * 0.04);
-                    const isHovered = hoveredWaypoint?.id === act.id;
+                      {/* Pulsing Pin Waypoints - ONLY for verified real coordinates */}
+                      {validPoints.map((act: any, idx: number) => {
+                        const posX = getX(Number(act.lng));
+                        const posY = getY(Number(act.lat));
+                        const isHovered = hoveredWaypoint?.id === act.id;
 
-                    return (
-                      <div
-                        key={act.id || idx}
-                        style={{ left: `${posX}%`, top: `${posY}%` }}
-                        className="absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer group"
-                        onMouseEnter={() => setHoveredWaypoint(act)}
-                        onMouseLeave={() => setHoveredWaypoint(null)}
-                      >
-                        {/* Aura pulse ring */}
-                        <div
-                          className={`absolute -inset-2 rounded-full transition-all duration-300 ${
-                            isHovered
-                              ? 'bg-orange-500/40 animate-ping'
-                              : 'bg-orange-500/10 group-hover:bg-orange-500/30'
-                          }`}
-                        />
+                        return (
+                          <div
+                            key={act.id || idx}
+                            style={{ left: `${posX}%`, top: `${posY}%` }}
+                            className="absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer group"
+                            onMouseEnter={() => setHoveredWaypoint(act)}
+                            onMouseLeave={() => setHoveredWaypoint(null)}
+                          >
+                            {/* Aura pulse ring */}
+                            <div
+                              className={`absolute -inset-2 rounded-full transition-all duration-300 ${
+                                isHovered
+                                  ? 'bg-orange-500/40 animate-ping'
+                                  : 'bg-orange-500/10 group-hover:bg-orange-500/30'
+                              }`}
+                            />
 
-                        {/* Node circle */}
-                        <div
-                          className={`relative w-9 h-9 rounded-2xl flex items-center justify-center font-extrabold text-xs transition-all duration-200 border shadow-lg ${
-                            isHovered
-                              ? 'bg-gradient-to-tr from-orange-500 to-amber-400 text-white scale-125 border-white ring-4 ring-orange-500/30'
-                              : 'bg-slate-900 text-orange-400 border-orange-500/60 hover:scale-110'
-                          }`}
-                        >
-                          {idx + 1}
-                        </div>
+                            {/* Node circle */}
+                            <div
+                              className={`relative w-9 h-9 rounded-2xl flex items-center justify-center font-extrabold text-xs transition-all duration-200 border shadow-lg ${
+                                isHovered
+                                  ? 'bg-gradient-to-tr from-orange-500 to-amber-400 text-white scale-125 border-white ring-4 ring-orange-500/30'
+                                  : 'bg-slate-900 text-orange-400 border-orange-500/60 hover:scale-110'
+                              }`}
+                            >
+                              {act.seqNum || idx + 1}
+                            </div>
 
-                        {/* Hover Tooltip Card */}
-                        <div
-                          className={`absolute left-1/2 -translate-x-1/2 bottom-11 w-56 p-3 rounded-2xl bg-slate-900/95 backdrop-blur-md border border-slate-700 shadow-2xl text-left z-30 transition-all pointer-events-none ${
-                            isHovered ? 'opacity-100 scale-100' : 'opacity-0 scale-95'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between text-[10px] mb-1">
-                            <span className="font-mono text-orange-400 font-bold">{act.time}</span>
-                            <span className="px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 font-extrabold border border-emerald-500/30">
-                              {act.provenance || 'VERIFIED'}
-                            </span>
+                            {/* Hover Tooltip Card */}
+                            <div
+                              className={`absolute left-1/2 -translate-x-1/2 bottom-11 w-56 p-3 rounded-2xl bg-slate-900/95 backdrop-blur-md border border-slate-700 shadow-2xl text-left z-30 transition-all pointer-events-none ${
+                                isHovered ? 'opacity-100 scale-100' : 'opacity-0 scale-95'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between text-[10px] mb-1">
+                                <span className="font-mono text-orange-400 font-bold">{act.time}</span>
+                                <span className="px-1.5 py-0.5 rounded bg-indigo-950 text-indigo-300 font-extrabold border border-indigo-500/30">
+                                  {act.provenance || 'CURATED'}
+                                </span>
+                              </div>
+                              <p className="text-xs font-bold text-white line-clamp-2">{act.description}</p>
+                              <div className="flex items-center justify-between text-[10px] text-slate-400 mt-2 pt-1.5 border-t border-slate-800">
+                                <span className="flex items-center gap-1">
+                                  <MapPin className="w-3 h-3 text-orange-400 shrink-0" />
+                                  <span className="truncate">{act.location}</span>
+                                </span>
+                                <span className="font-mono">{act.estimatedTransit || '15m drive'}</span>
+                              </div>
+                            </div>
                           </div>
-                          <p className="text-xs font-bold text-white line-clamp-2">{act.description}</p>
-                          <div className="flex items-center justify-between text-[10px] text-slate-400 mt-2 pt-1.5 border-t border-slate-800">
-                            <span className="flex items-center gap-1">
-                              <MapPin className="w-3 h-3 text-orange-400" />
-                              {act.location}
-                            </span>
-                            <span className="font-mono">{act.estimatedTransit || '15m drive'}</span>
-                          </div>
-                        </div>
+                        );
+                      })}
+                    </>
+                  ) : (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-6 z-20">
+                      <div className="w-12 h-12 rounded-2xl bg-orange-500/10 border border-orange-500/30 flex items-center justify-center text-orange-400 mb-3">
+                        <Compass className="w-6 h-6 animate-spin text-orange-500" style={{ animationDuration: '12s' }} />
                       </div>
-                    );
-                  })}
+                      <h4 className="text-white font-bold text-sm">Spatial Radar Active</h4>
+                      <p className="text-slate-400 text-xs max-w-sm mt-1">
+                        All {mapActivities.length} locations identified for {currentTrip.destination}.
+                        GPS pins are plotted exclusively when genuine verified venue coordinates are recorded in DashTiny Spatial Engine.
+                      </p>
+                      <div className="mt-3 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-950/80 text-emerald-400 border border-emerald-500/30 text-[11px] font-bold">
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        Location found: All itinerary stops cataloged
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Radar Bottom Bar */}
@@ -807,7 +857,7 @@ export default function ActiveTripsPage() {
                   <div className="flex items-center gap-4">
                     <span className="inline-flex items-center gap-1 text-slate-300">
                       <span className="w-2 h-2 rounded-full bg-orange-500 inline-block" />
-                      Waypoints: {mapActivities.length} Stops
+                      Waypoints: {mapActivities.length} Stops ({validPoints.length} Geocoded Pins)
                     </span>
                     <span className="inline-flex items-center gap-1 text-slate-300">
                       <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" />
@@ -815,7 +865,7 @@ export default function ActiveTripsPage() {
                     </span>
                   </div>
                   <span className="font-mono text-orange-400">
-                    Source: DashTiny Spatial Engine • Verified GeoData
+                    Source: DashTiny Spatial Engine • Truthful GeoData
                   </span>
                 </div>
               </Card>
@@ -832,22 +882,31 @@ export default function ActiveTripsPage() {
                           ? 'border-orange-500 bg-orange-50/50 shadow-md'
                           : 'border-slate-200 bg-white hover:border-slate-300'
                       }`}
-                      onMouseEnter={() => setHoveredWaypoint(act)}
+                      onMouseEnter={() => act.lat && act.lng && setHoveredWaypoint(act)}
                       onMouseLeave={() => setHoveredWaypoint(null)}
                     >
                       <div className="flex items-center justify-between text-xs mb-1.5">
                         <span className="w-6 h-6 rounded-lg bg-orange-100 text-orange-700 font-extrabold flex items-center justify-center text-xs">
-                          {idx + 1}
+                          {act.seqNum || idx + 1}
                         </span>
                         <span className="font-mono text-[10px] text-slate-500 font-bold">{act.time}</span>
                       </div>
                       <h5 className="text-xs font-bold text-slate-900 line-clamp-1">{act.description}</h5>
                       <p className="text-[11px] text-slate-500 flex items-center gap-1 mt-1">
                         <MapPin className="w-3 h-3 text-orange-500 shrink-0" />
-                        <span>{act.location}</span>
+                        <span className="truncate">{act.location}</span>
                       </p>
                       <div className="flex items-center justify-between text-[10px] text-slate-400 pt-2 mt-2 border-t border-slate-100 font-mono">
-                        <span>{act.lat ? `${Number(act.lat).toFixed(4)}°N, ${Number(act.lng).toFixed(4)}°E` : '15.6028°N, 73.7336°E'}</span>
+                        {act.lat != null && act.lng != null ? (
+                          <span className="text-emerald-700 font-bold">
+                            {Number(act.lat).toFixed(4)}°N, {Number(act.lng).toFixed(4)}°E
+                          </span>
+                        ) : (
+                          <span className="text-slate-500 font-semibold flex items-center gap-1">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
+                            Location found (Curated)
+                          </span>
+                        )}
                         <span className="text-orange-600 font-bold">{act.estimatedTransit || '15m drive'}</span>
                       </div>
                     </Card>

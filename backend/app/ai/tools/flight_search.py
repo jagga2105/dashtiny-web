@@ -6,13 +6,13 @@ from typing import List, Dict, Any
 
 def search_flights(origin: str, destination: str, date: str = None) -> List[Dict[str, Any]]:
     """
-    Search and normalize live flight inventory.
-    Returns list of FlightOffer objects with VERIFIED provenance.
+    Search and normalize flight inventory.
+    Returns list of FlightOffer objects with CURATED/DEMO provenance.
     """
     origin_clean = origin.upper() if origin else "BLR"
     dest_clean = destination.upper() if destination else "GOI"
     
-    # Provider inventory matrix
+    # Curated corridor inventory matrix
     offers = [
         {
             "id": f"fl_{origin_clean[:3]}_{dest_clean[:3]}_01",
@@ -28,7 +28,7 @@ def search_flights(origin: str, destination: str, date: str = None) -> List[Dict
             "currency": "INR",
             "baggage": "15kg Checked • 7kg Cabin",
             "cancellation": "Free cancellation within 24 hours",
-            "provenance": "VERIFIED",
+            "provenance": "CURATED",
             "deep_link": "https://www.goindigo.in",
             "why_recommended": "Fastest morning direct flight with high on-time reliability"
         },
@@ -46,7 +46,7 @@ def search_flights(origin: str, destination: str, date: str = None) -> List[Dict
             "currency": "INR",
             "baggage": "20kg Checked • Lounge Access eligible",
             "cancellation": "Partially refundable",
-            "provenance": "VERIFIED",
+            "provenance": "CURATED",
             "deep_link": "https://www.airindia.com",
             "why_recommended": "Generous luggage allowance and comfortable mid-day timing"
         },
@@ -64,7 +64,7 @@ def search_flights(origin: str, destination: str, date: str = None) -> List[Dict
             "currency": "INR",
             "baggage": "15kg Checked • USB port charging",
             "cancellation": "Standard fee applies",
-            "provenance": "VERIFIED",
+            "provenance": "CURATED",
             "deep_link": "https://www.akasaair.com",
             "why_recommended": "Lowest fare on this corridor, arriving right before sunset"
         }

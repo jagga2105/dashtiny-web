@@ -114,7 +114,7 @@ def apply_itinerary_action(instruction: str, current_days: List[Dict[str, Any]])
                 "description": "Fontainhas Latin Quarter Heritage Photography Walk",
                 "location": "Panjim Old City",
                 "place_type": "TA",
-                "provenance": "VERIFIED",
+                "provenance": "CURATED",
                 "cost_estimate": 0
             })
             day_copy = dict(day)
