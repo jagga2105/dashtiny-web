@@ -162,3 +162,84 @@ def test_planner_unauthenticated_rejected(db_session):
             assert response.status_code == 401
     finally:
         app.dependency_overrides.clear()
+
+def test_planner_trust_boundaries_provenance_and_factual_rationales(client):
+    """
+    Test trust boundary compliance:
+    1. Provenance: Deterministic planner never emits 'AI GENERATED'.
+       Geocoded spots are 'CURATED', unresolvable spots are 'CURATED_UNRESOLVED'.
+    2. Routing/Crowd Truth: All transit & crowd claims carry '(Estimated)'.
+       Origin transit does not invent flight/route specifics.
+    3. Factual Rationales: 'why_recommended' does not claim unconsulted ratings/reviews,
+       grounding strictly in user preferences ('Matches your...').
+    """
+    payload = {
+        "destination": "Goa",
+        "days_count": 2,
+        "travellers": 2,
+        "origin": "Delhi",
+        "vibe": "romantic",
+        "interests": ["photography", "seafood"],
+        "start_date": "2026-11-01",
+        "end_date": "2026-11-02"
+    }
+
+    res = client.post("/api/v1/planner/generate", json=payload)
+    assert res.status_code == 200
+    data = res.json()
+
+    valid_tiers = {"CURATED", "PROVIDER_VERIFIED", "DETERMINISTIC", "CURATED_UNRESOLVED", "UNKNOWN", "USER_GENERATED"}
+
+    for day in data["days"]:
+        for act in day["activities"]:
+            prov = act.get("provenance")
+            # 1. Provenance must not falsely claim AI generation
+            assert prov != "AI GENERATED", f"Deterministic activity falsely claimed 'AI GENERATED': {act}"
+            assert prov in valid_tiers, f"Invalid provenance tier '{prov}' in {act}"
+
+            # 2. Transit and crowd warnings must be qualified as Estimated
+            transit = act.get("estimatedTransit", "")
+            crowd = act.get("crowdWarning", "")
+            assert "(Estimated)" in transit, f"Transit claim '{transit}' missing '(Estimated)' label"
+            assert "(Estimated)" in crowd, f"Crowd warning '{crowd}' missing '(Estimated)' label"
+
+            # 3. Rationales must not claim ratings/reviews
+            why = act.get("whyRecommended")
+            if why:
+                assert "top traveler ratings" not in why.lower()
+                assert "traveler culinary reviews" not in why.lower()
+                assert "high traveler reviews" not in why.lower()
+
+    # Day 1 Arrival transit should not invent non-stop flight route claims
+    d1_act0 = data["days"][0]["activities"][0]
+    assert "non-stop" not in d1_act0["estimatedTransit"].lower()
+    assert "Delhi" in d1_act0["estimatedTransit"]
+
+    # Evening activity should ground why_recommended in photography
+    d1_eve = data["days"][0]["activities"][2]
+    assert "photography" in d1_eve["whyRecommended"].lower()
+    assert "matches your photography preference" in d1_eve["whyRecommended"].lower()
+
+    # Verify an unresolved location correctly gets CURATED_UNRESOLVED provenance
+    unresolved_payload = {
+        "destination": "Atlantis Hidden Realm",
+        "days_count": 1,
+        "start_date": "2026-12-01",
+        "end_date": "2026-12-01"
+    }
+    unresolved_res = client.post("/api/v1/planner/generate", json=unresolved_payload)
+    assert unresolved_res.status_code == 200
+    unresolved_data = unresolved_res.json()
+    unresolved_acts = unresolved_data["days"][0]["activities"]
+    assert any(a["provenance"] == "CURATED_UNRESOLVED" for a in unresolved_acts)
+    assert not any(a["provenance"] == "AI GENERATED" for a in unresolved_acts)
+
+    # Verify GET /api/v1/trips/my-trips passes whyRecommended and correct provenance
+    trips_res = client.get("/api/v1/trips/my-trips")
+    assert trips_res.status_code == 200
+    user_trips = trips_res.json()
+    assert len(user_trips) > 0
+    first_trip = user_trips[0]
+    first_act = first_trip["days"][0]["activities"][0]
+    assert "whyRecommended" in first_act
+    assert first_act["provenance"] != "AI GENERATED"

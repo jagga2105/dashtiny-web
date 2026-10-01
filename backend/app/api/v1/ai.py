@@ -82,7 +82,7 @@ def ai_query(
                     "place_type": a.place_type,
                     "estimated_transit": a.estimated_transit,
                     "cost_estimate": float(a.cost_estimate or 0),
-                    "provenance": a.provenance or "AI GENERATED"
+                    "provenance": a.provenance or "DETERMINISTIC"
                 }
                 for a in sorted(d.activities, key=lambda x: x.sort_order)
             ]
@@ -102,6 +102,7 @@ def ai_query(
                 coords = get_coordinates(loc_name)
                 act_lat = act.get("lat") or coords.get("lat")
                 act_lng = act.get("lng") or coords.get("lng")
+                act_prov = act.get("provenance") or (coords.get("provenance") if coords.get("found") else "CURATED_UNRESOLVED")
                 new_act = ItineraryActivity(
                     day_id=db_day.id,
                     time_slot=act.get("time", "10:00 AM"),
@@ -109,7 +110,7 @@ def ai_query(
                     location=loc_name,
                     place_type=act.get("place_type", "TA"),
                     cost_estimate=act.get("cost_estimate", 0),
-                    provenance=act.get("provenance", "AI GENERATED"),
+                    provenance=act_prov,
                     lat=act_lat,
                     lng=act_lng,
                     source_citation=act.get("source_citation") or "DashTiny Spatial Map Engine",
@@ -167,7 +168,7 @@ def ai_query(
                         "location": a.location,
                         "placeType": a.place_type,
                         "costEstimate": float(a.cost_estimate or 0),
-                        "provenance": a.provenance or "AI GENERATED"
+                        "provenance": a.provenance or "DETERMINISTIC"
                     }
                     for a in sorted(d.activities, key=lambda x: x.sort_order)
                 ]

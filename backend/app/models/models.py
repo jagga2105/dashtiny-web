@@ -96,7 +96,7 @@ class ItineraryActivity(Base):
     sort_order = Column(Integer, default=0)
     lat = Column(Float, nullable=True)
     lng = Column(Float, nullable=True)
-    provenance = Column(String(50), default="AI GENERATED")  # VERIFIED, AI GENERATED, USER GENERATED
+    provenance = Column(String(50), default="DETERMINISTIC")  # PROVIDER_VERIFIED, CURATED, DETERMINISTIC, USER_GENERATED, AI_GENERATED, CURATED_UNRESOLVED, UNKNOWN
     source_citation = Column(String(255), nullable=True)
     why_recommended = Column(Text, nullable=True)
 

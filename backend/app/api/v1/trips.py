@@ -39,9 +39,11 @@ def get_my_trips(user: User = Depends(get_current_user), db: Session = Depends(g
                         "placeType": a.place_type,
                         "estimatedTransit": a.estimated_transit,
                         "crowdWarning": a.crowd_warning,
+                        "costEstimate": float(a.cost_estimate or 0),
                         "lat": a.lat,
                         "lng": a.lng,
-                        "provenance": a.provenance or "AI GENERATED",
+                        "provenance": a.provenance or "DETERMINISTIC",
+                        "whyRecommended": a.why_recommended,
                         "source_citation": a.source_citation
                     }
                     for a in acts
@@ -159,9 +161,11 @@ def get_trip_details(
                         "placeType": a.place_type,
                         "estimatedTransit": a.estimated_transit,
                         "crowdWarning": a.crowd_warning,
+                        "costEstimate": float(a.cost_estimate or 0),
                         "lat": a.lat,
                         "lng": a.lng,
-                        "provenance": a.provenance or "AI GENERATED",
+                        "provenance": a.provenance or "DETERMINISTIC",
+                        "whyRecommended": a.why_recommended,
                         "source_citation": a.source_citation
                     }
                     for a in db.query(ItineraryActivity).filter(ItineraryActivity.day_id == d.id).all()

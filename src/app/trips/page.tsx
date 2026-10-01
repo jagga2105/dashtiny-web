@@ -511,7 +511,7 @@ export default function ActiveTripsPage() {
                           <span className="font-mono text-xs font-bold text-orange-600">{a.time}</span>
                           {/* Provenance Badge */}
                           {(() => {
-                            const prov = (a.provenance || 'AI_GENERATED').toUpperCase().replace(' ', '_');
+                            const prov = (a.provenance || 'DETERMINISTIC').toUpperCase().replace(' ', '_');
                             if (prov === 'PROVIDER_VERIFIED') {
                               return (
                                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 border border-emerald-200 text-[10px] font-extrabold">
@@ -528,6 +528,22 @@ export default function ActiveTripsPage() {
                                 </span>
                               );
                             }
+                            if (prov === 'CURATED_UNRESOLVED' || prov === 'UNKNOWN') {
+                              return (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 border border-amber-200 text-[10px] font-extrabold" title="Curated by planner, spatial coordinates unresolved">
+                                  <Compass className="w-3 h-3 text-amber-600" />
+                                  CURATED (UNRESOLVED)
+                                </span>
+                              );
+                            }
+                            if (prov === 'DETERMINISTIC') {
+                              return (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-100 text-blue-800 border border-blue-200 text-[10px] font-extrabold">
+                                  <CheckCircle2 className="w-3 h-3 text-blue-600" />
+                                  DETERMINISTIC
+                                </span>
+                              );
+                            }
                             if (prov === 'USER_GENERATED') {
                               return (
                                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-sky-100 text-sky-800 border border-sky-200 text-[10px] font-extrabold">
@@ -536,17 +552,17 @@ export default function ActiveTripsPage() {
                                 </span>
                               );
                             }
-                            if (prov === 'DEMO') {
+                            if (prov === 'AI_GENERATED') {
                               return (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200 text-[10px] font-extrabold">
-                                  DEMO
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-orange-100 text-orange-800 border border-orange-200 text-[10px] font-extrabold">
+                                  <Sparkles className="w-3 h-3 text-orange-600" />
+                                  AI GENERATED
                                 </span>
                               );
                             }
                             return (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-orange-100 text-orange-800 border border-orange-200 text-[10px] font-extrabold">
-                                <Sparkles className="w-3 h-3 text-orange-600" />
-                                AI GENERATED
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200 text-[10px] font-extrabold">
+                                {prov}
                               </span>
                             );
                           })()}
@@ -559,10 +575,23 @@ export default function ActiveTripsPage() {
                           <MapPin className="w-3 h-3 text-orange-500" />
                           {a.location} {a.costEstimate > 0 ? `• Est: ₹${a.costEstimate}` : ''}
                         </p>
+                        {a.whyRecommended && (
+                          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-50/80 border border-amber-200/60 text-[11px] text-amber-900 mt-1">
+                            <span className="font-bold uppercase tracking-wider text-[10px] text-amber-700">Why</span>
+                            <span>{a.whyRecommended}</span>
+                          </div>
+                        )}
                       </div>
-                      <span className="text-xs text-slate-400 font-mono">
-                        {a.estimatedTransit || '⏱️ 15m transit'}
-                      </span>
+                      <div className="flex flex-col sm:items-end gap-1 shrink-0 text-right">
+                        <span className="text-xs text-slate-500 font-mono">
+                          {a.estimatedTransit || '⏱️ 15m walk (Estimated)'}
+                        </span>
+                        {a.crowdWarning && (
+                          <span className="text-[11px] text-slate-600 font-medium">
+                            {a.crowdWarning}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -822,12 +851,17 @@ export default function ActiveTripsPage() {
                                 </span>
                               </div>
                               <p className="text-xs font-bold text-white line-clamp-2">{act.description}</p>
+                              {act.whyRecommended && (
+                                <p className="text-[10px] text-amber-300/90 mt-1 line-clamp-1 italic">
+                                  Why: {act.whyRecommended}
+                                </p>
+                              )}
                               <div className="flex items-center justify-between text-[10px] text-slate-400 mt-2 pt-1.5 border-t border-slate-800">
                                 <span className="flex items-center gap-1">
                                   <MapPin className="w-3 h-3 text-orange-400 shrink-0" />
                                   <span className="truncate">{act.location}</span>
                                 </span>
-                                <span className="font-mono">{act.estimatedTransit || '15m drive'}</span>
+                                <span className="font-mono">{act.estimatedTransit || '⏱️ 15m transit (Estimated)'}</span>
                               </div>
                             </div>
                           </div>

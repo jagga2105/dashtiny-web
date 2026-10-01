@@ -31,7 +31,7 @@ def apply_itinerary_action(instruction: str, current_days: List[Dict[str, Any]])
                     act_copy = dict(act)
                     act_copy["description"] = "Private Sunset Deck & Tea Tasting at Villa Lounge"
                     act_copy["place_type"] = "TA"
-                    act_copy["provenance"] = "AI GENERATED"
+                    act_copy["provenance"] = "DETERMINISTIC"
                     new_activities.append(act_copy)
                 else:
                     new_activities.append(act)
@@ -47,7 +47,7 @@ def apply_itinerary_action(instruction: str, current_days: List[Dict[str, Any]])
                 "description": "Afternoon Siesta & Spa Hydrotherapy (Villa Pool)",
                 "location": "Boutique Sanctuary",
                 "place_type": "H",
-                "provenance": "AI GENERATED",
+                "provenance": "DETERMINISTIC",
                 "cost_estimate": 0
             })
             day_copy = dict(day)
@@ -70,7 +70,7 @@ def apply_itinerary_action(instruction: str, current_days: List[Dict[str, Any]])
                     act_copy = dict(act)
                     act_copy["time"] = "05:30 PM"
                     act_copy["description"] = f"Golden Hour Sunset: {act_copy['description']}"
-                    act_copy["provenance"] = "AI GENERATED"
+                    act_copy["provenance"] = "DETERMINISTIC"
                     new_activities.append(act_copy)
                 else:
                     new_activities.append(act)

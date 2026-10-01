@@ -30,12 +30,12 @@ class ActivityItem(BaseModel):
     description: str
     location: str
     place_type: str = "TA"  # H = Hotel/Stay, R = Restaurant/Dining, TA = Tour/Activity
-    estimated_transit: str = "⏱️ 15m walk"
-    crowd_warning: str = "🟢 Low Crowd"
+    estimated_transit: str = "⏱️ 15m walk (Estimated)"
+    crowd_warning: str = "🟢 Low Crowd (Estimated)"
     cost_estimate: float = 0.0
     lat: Optional[float] = None
     lng: Optional[float] = None
-    provenance: str = "AI GENERATED"
+    provenance: str = "DETERMINISTIC"
     why_recommended: Optional[str] = None
 
 class DayPlan(BaseModel):
@@ -268,7 +268,7 @@ def generate_algorithmic_plan(
     hotel_name = hotel["name"] if hotel else f"{clean_dest} Boutique Sanctuary"
     hotel_lat = hotel.get("lat") if hotel else None
     hotel_lng = hotel.get("lng") if hotel else None
-    hotel_prov = hotel.get("provenance", "CURATED") if (hotel and hotel_lat is not None) else "AI GENERATED"
+    hotel_prov = hotel.get("provenance", "CURATED") if (hotel and hotel_lat is not None) else "CURATED_UNRESOLVED"
 
     for day_idx in range(1, days_count + 1):
         cover_image = get_curated_cover_image(category, day_idx)
@@ -290,12 +290,12 @@ def generate_algorithmic_plan(
             if origin:
                 clean_orig = origin.title().strip()
                 checkin_desc = f"Arrival from {clean_orig}, orientation & check-in at {hotel_name} ({party_label})"
-                checkin_transit = f"⏱️ Non-stop transit from {clean_orig} arrival hub, 25m to sanctuary"
+                checkin_transit = f"⏱️ Transit from {clean_orig} arrival hub (Estimated)"
                 why_checkin = f"Optimized arrival logistics tailored for departure from {clean_orig} to {clean_dest}."
             else:
                 checkin_desc = f"Morning orientation & check-in at {hotel_name} ({party_label})"
-                checkin_transit = "⏱️ 25m from arrival terminal"
-                why_checkin = f"Selected for top traveler ratings and peaceful setting in {clean_dest}."
+                checkin_transit = "⏱️ 25m from arrival terminal (Estimated)"
+                why_checkin = f"Central orientation base for exploring {clean_dest}."
 
             morn_time = "09:30 AM"
             morn_loc = hotel.get("address", f"Central District, {clean_dest}") if hotel else f"Central District, {clean_dest}"
@@ -308,52 +308,52 @@ def generate_algorithmic_plan(
             if has_seafood:
                 lunch_desc = f"Coastal Fresh Catch & Seafood Gastronomy Tasting for {party_label}"
                 lunch_loc = f"{clean_dest} Coastal Seafood Bistro"
-                why_lunch = "Curated specifically for your fresh seafood interest and maritime gastronomy."
+                why_lunch = "Matches your seafood preference with fresh coastal culinary dining."
             elif has_culture:
                 lunch_desc = f"Authentic Heritage Multi-Course Culinary Tasting for {party_label}"
                 lunch_loc = f"{clean_dest} Historic Quarter Dining"
-                why_lunch = "Curated for authentic heritage cuisine and traditional regional recipes."
+                why_lunch = "Matches your culture interest with traditional regional recipes."
             elif has_wellness:
                 lunch_desc = f"Organic Garden Farm-to-Table Lunch for {party_label}"
                 lunch_loc = f"{clean_dest} Organic Green Sanctuary"
-                why_lunch = "Curated for clean organic ingredients and relaxed wellness pacing."
+                why_lunch = "Matches your wellness preference with clean organic farm-to-table dining."
             elif matched_curated:
                 curated_day = matched_curated[0]
                 lunch_desc = f"Authentic regional gastronomy for {party_label}: {curated_day['lunch_name']}"
                 lunch_loc = curated_day["lunch_loc"]
-                why_lunch = "Celebrated local culinary hotspot featuring seasonal regional dishes."
+                why_lunch = f"Curated destination gastronomy featuring local dishes in {clean_dest}."
             else:
                 lunch_desc = f"Authentic {clean_dest} regional lunch tasting for {party_label}"
                 lunch_loc = f"Central Promenade, {clean_dest}"
-                why_lunch = "Selected for high traveler culinary reviews and seasonal specialties."
+                why_lunch = f"Curated local dining highlighting regional dishes in {clean_dest}."
 
             # Evening Experience (Day 1)
             if has_nightlife:
                 eve_time = "07:30 PM"
                 eve_desc = f"Sunset Sundowner & Live Music Beach Lounge for {party_label}"
                 eve_loc = f"{clean_dest} Waterfront Strip"
-                why_eve = "Selected for energetic evening social atmosphere, craft cocktails, and live music."
+                why_eve = "Matches your nightlife preference with evening social atmosphere and music."
             elif has_photography:
                 eve_time = "05:30 PM"
                 eve_desc = f"Golden Hour Panoramic Observation Deck & Twilight Landscape Photography for {party_label}"
                 eve_loc = f"{clean_dest} Lookout Point"
-                why_eve = "Curated for unobstructed golden-hour composition and twilight photography."
+                why_eve = "Matches your photography preference with unobstructed golden-hour viewpoint."
             elif has_romantic:
                 eve_time = "06:00 PM"
                 eve_desc = f"Private Sunset Water Passage & Candlelight Evening Promenade for {party_label}"
                 eve_loc = f"{clean_dest} Secluded Bay Deck"
-                why_eve = "Curated for an intimate, secluded atmosphere tailored for couples."
+                why_eve = "Matches your romantic preference with an intimate waterside atmosphere."
             elif matched_curated:
                 curated_day = matched_curated[0]
                 eve_time = "05:30 PM"
                 eve_desc = f"Golden hour experience: {curated_day['evening_name']}"
                 eve_loc = curated_day["evening_loc"]
-                why_eve = "Prime vantage point for unobstructed twilight panorama."
+                why_eve = "Curated vantage point for twilight panorama."
             else:
                 eve_time = "05:30 PM"
                 eve_desc = f"Golden hour sunset stroll & twilight reflections at {clean_dest} Lookout Point"
                 eve_loc = f"{clean_dest} Lookout Point"
-                why_eve = "Celebrated sunset vantage point with sweeping skyline views."
+                why_eve = f"Curated sunset viewpoint overlooking {clean_dest}."
 
         else:
             # Day 2+: Full Activity Days tailored directly to constraints & preferences
@@ -363,48 +363,48 @@ def generate_algorithmic_plan(
                 checkin_desc = f"Guided Marine Scuba & Coral Reef Expedition for {party_label}"
                 morn_loc = f"{clean_dest} Marine Sanctuary Reef"
                 morn_type = "TA"
-                checkin_transit = "⏱️ 20m coastal boat transfer"
-                why_checkin = "Curated specifically for your scuba diving and marine adventure interests."
+                checkin_transit = "⏱️ 20m coastal boat transfer (Estimated)"
+                why_checkin = "Matches your scuba diving and marine adventure preference."
             elif has_adventure:
                 day_title = f"{clean_dest}: Mountain Trailhead & High Ridge Trek"
                 morn_time = "08:30 AM"
                 checkin_desc = f"Alpine Pass Trek & High Ridge Adventure for {party_label}"
                 morn_loc = f"{clean_dest} Mountain Trailhead"
                 morn_type = "TA"
-                checkin_transit = "⏱️ 30m mountain drive"
-                why_checkin = "Curated for high-energy adventure and panoramic mountain trekking."
+                checkin_transit = "⏱️ 30m mountain drive (Estimated)"
+                why_checkin = "Matches your adventure preference with high-energy mountain trekking."
             elif has_romantic:
                 day_title = f"{clean_dest}: Secluded Waterways & Romantic Evening Solitude"
                 morn_time = "09:30 AM"
                 checkin_desc = f"Private Scenic Promenade & Peaceful Harbor Garden Walk for {party_label}"
                 morn_loc = f"{clean_dest} Botanical Gardens"
                 morn_type = "TA"
-                checkin_transit = "⏱️ 15m tranquil stroll"
-                why_checkin = "Curated for private, unhurried couple discovery in serene gardens."
+                checkin_transit = "⏱️ 15m tranquil stroll (Estimated)"
+                why_checkin = "Matches your romantic preference with private, unhurried garden stroll."
             elif has_nightlife:
                 day_title = f"{clean_dest}: Coastal Social Vibe & Nightlife Strip"
                 morn_time = "10:30 AM"
                 checkin_desc = f"Late Morning Artisanal Coffee & Promenade Stroll for {party_label}"
                 morn_loc = f"{clean_dest} Beachfront Promenade"
                 morn_type = "TA"
-                checkin_transit = "⏱️ 10m walk"
-                why_checkin = "Relaxed morning pacing after evening nightlife."
+                checkin_transit = "⏱️ 10m walk (Estimated)"
+                why_checkin = "Matches your nightlife pacing with relaxed late morning start."
             elif has_culture:
                 day_title = f"{clean_dest}: Heritage Sanctuaries & Living Traditions"
                 morn_time = "09:00 AM"
                 checkin_desc = f"Historical Monuments & Ancient Artisan Quarter Stroll for {party_label}"
                 morn_loc = f"{clean_dest} Heritage Enclave"
                 morn_type = "TA"
-                checkin_transit = "⏱️ 15m heritage walk"
-                why_checkin = "Curated for deep historical immersion and artisan craft discovery."
+                checkin_transit = "⏱️ 15m heritage walk (Estimated)"
+                why_checkin = "Matches your culture interest with historical monuments and artisan crafts."
             elif has_wellness:
                 day_title = f"{clean_dest}: Thermal Mineral Springs & Restorative Pacing"
                 morn_time = "09:30 AM"
                 checkin_desc = f"Morning Thermal Springs & Mindfulness Garden Session for {party_label}"
                 morn_loc = f"{clean_dest} Thermal Baths"
                 morn_type = "H"
-                checkin_transit = "⏱️ 10m peaceful walk"
-                why_checkin = "Curated for mindful relaxation and restorative hot springs pacing."
+                checkin_transit = "⏱️ 10m peaceful walk (Estimated)"
+                why_checkin = "Matches your wellness preference with restorative hot springs pacing."
             elif matched_curated:
                 curated_day = matched_curated[(day_idx - 1) % len(matched_curated)]
                 day_title = f"{clean_dest}: {curated_day['lunch_name'].split(' ')[0]} & Scenic Highlights"
@@ -412,8 +412,8 @@ def generate_algorithmic_plan(
                 checkin_desc = f"Morning scenic nature trail & discovery stroll for {party_label}"
                 morn_loc = f"Central District, {clean_dest}"
                 morn_type = "TA"
-                checkin_transit = "⏱️ 15m walk"
-                why_checkin = "Paced morning exploration through prime local landmarks."
+                checkin_transit = "⏱️ 15m walk (Estimated)"
+                why_checkin = "Morning exploration through curated local landmarks."
             else:
                 theme_tup = generic_narratives[(day_idx - 1) % len(generic_narratives)]
                 day_title = f"{clean_dest}: {theme_tup[0]}"
@@ -421,77 +421,77 @@ def generate_algorithmic_plan(
                 checkin_desc = f"Morning scenic nature trail & discovery stroll for {party_label}"
                 morn_loc = f"Central District, {clean_dest}"
                 morn_type = "TA"
-                checkin_transit = "⏱️ 15m walk"
-                why_checkin = "Paced morning exploration through prime local landmarks."
+                checkin_transit = "⏱️ 15m walk (Estimated)"
+                why_checkin = "Morning exploration through curated local landmarks."
 
             morn_geo = get_coordinates(morn_loc)
             morn_lat = morn_geo["lat"] if morn_geo.get("found") else None
             morn_lng = morn_geo["lng"] if morn_geo.get("found") else None
-            morn_prov = morn_geo.get("provenance", "AI GENERATED") if morn_geo.get("found") else "AI GENERATED"
+            morn_prov = morn_geo.get("provenance", "CURATED") if morn_geo.get("found") else "CURATED_UNRESOLVED"
 
             # Midday Culinary (Day 2+)
             if has_seafood:
                 lunch_desc = f"Artisanal Grilled Seafood & Harbor Catch Tasting for {party_label}"
                 lunch_loc = f"{clean_dest} Seaside Harbor Tavern"
-                why_lunch = "Curated to experience authentic harbor seafood recipes."
+                why_lunch = "Matches your seafood preference with fresh catch harbor dining."
             elif has_culture:
                 lunch_desc = f"Historic Courtyard Traditional Dining for {party_label}"
                 lunch_loc = f"{clean_dest} Old Town Strip"
-                why_lunch = "Curated for rich cultural atmosphere and regional dishes."
+                why_lunch = "Matches your culture interest with traditional courtyard dining."
             elif has_wellness:
                 lunch_desc = f"Ayurvedic Botanical Nourishment & Infused Elixirs for {party_label}"
                 lunch_loc = f"{clean_dest} Wellness Retreat Pantry"
-                why_lunch = "Curated for revitalizing holistic nutrition."
+                why_lunch = "Matches your wellness preference with holistic botanical nutrition."
             elif matched_curated:
                 curated_day = matched_curated[(day_idx - 1) % len(matched_curated)]
                 lunch_desc = f"Authentic regional gastronomy for {party_label}: {curated_day['lunch_name']}"
                 lunch_loc = curated_day["lunch_loc"]
-                why_lunch = "Celebrated local culinary hotspot featuring seasonal recipes."
+                why_lunch = f"Curated dining highlighting regional recipes in {clean_dest}."
             else:
                 theme_tup = generic_narratives[(day_idx - 1) % len(generic_narratives)]
                 lunch_desc = f"Authentic {clean_dest} regional lunch tasting for {party_label} at {theme_tup[1]}"
                 lunch_loc = f"{theme_tup[1]}, {clean_dest}"
-                why_lunch = "Selected for authentic regional recipes and welcoming atmosphere."
+                why_lunch = f"Curated dining highlighting authentic regional dishes in {clean_dest}."
 
             # Evening Experience (Day 2+)
             if has_nightlife:
                 eve_time = "08:00 PM"
                 eve_desc = f"Acoustic Nightclub & Craft Mixology Social for {party_label}"
                 eve_loc = f"{clean_dest} Night Entertainment Quarter"
-                why_eve = "Curated for premier nightlife and evening entertainment."
+                why_eve = "Matches your nightlife preference with evening social entertainment."
             elif has_photography:
                 eve_time = "05:30 PM"
                 eve_desc = f"Twilight Long-Exposure Ridge Vista & Landscape Sunset for {party_label}"
                 eve_loc = f"{clean_dest} Sunset Ridge Point"
-                why_eve = "Prime location for panoramic landscape photography and dusk colors."
+                why_eve = "Matches your photography preference with panoramic landscape viewpoint."
             elif has_romantic:
                 eve_time = "06:30 PM"
                 eve_desc = f"Secluded Stargazing & Candlelight Dinner for {party_label}"
                 eve_loc = f"{clean_dest} Intimate Waterside Pavilion"
-                why_eve = "Curated for private romantic dining under the evening stars."
+                why_eve = "Matches your romantic preference with private waterside dining."
             elif matched_curated:
                 curated_day = matched_curated[(day_idx - 1) % len(matched_curated)]
                 eve_time = "05:30 PM"
                 eve_desc = f"Golden hour experience: {curated_day['evening_name']}"
                 eve_loc = curated_day["evening_loc"]
-                why_eve = "Prime vantage point for unobstructed twilight panorama."
+                why_eve = "Curated vantage point for twilight panorama."
             else:
                 theme_tup = generic_narratives[(day_idx - 1) % len(generic_narratives)]
                 eve_time = "05:30 PM"
                 eve_desc = f"Golden hour sunset stroll & photography at {theme_tup[2]}"
                 eve_loc = f"{clean_dest} Lookout Point"
-                why_eve = "Prime vantage point for evening sunset colors."
+                why_eve = f"Curated viewpoint for sunset views over {clean_dest}."
 
         # Geocode activities via genuine spatial registry (NO fabricated offsets)
         lunch_geo = get_coordinates(lunch_loc)
         lunch_lat = lunch_geo["lat"] if lunch_geo.get("found") else None
         lunch_lng = lunch_geo["lng"] if lunch_geo.get("found") else None
-        lunch_prov = lunch_geo.get("provenance", "AI GENERATED") if lunch_geo.get("found") else "AI GENERATED"
+        lunch_prov = lunch_geo.get("provenance", "CURATED") if lunch_geo.get("found") else "CURATED_UNRESOLVED"
 
         evening_geo = get_coordinates(eve_loc)
         evening_lat = evening_geo["lat"] if evening_geo.get("found") else None
         evening_lng = evening_geo["lng"] if evening_geo.get("found") else None
-        evening_prov = evening_geo.get("provenance", "AI GENERATED") if evening_geo.get("found") else "AI GENERATED"
+        evening_prov = evening_geo.get("provenance", "CURATED") if evening_geo.get("found") else "CURATED_UNRESOLVED"
 
         activities: List[ActivityItem] = [
             ActivityItem(
@@ -500,7 +500,7 @@ def generate_algorithmic_plan(
                 location=morn_loc,
                 place_type=morn_type,
                 estimated_transit=checkin_transit,
-                crowd_warning="🟢 Low Morning Traffic",
+                crowd_warning="🟢 Low Morning Traffic (Estimated)",
                 cost_estimate=float(round(daily_budget * 0.40)),
                 lat=morn_lat,
                 lng=morn_lng,
@@ -512,8 +512,8 @@ def generate_algorithmic_plan(
                 description=lunch_desc,
                 location=lunch_loc,
                 place_type="R",
-                estimated_transit="⏱️ 15m walk",
-                crowd_warning="🟡 Moderate Lunch Crowd",
+                estimated_transit="⏱️ 15m walk (Estimated)",
+                crowd_warning="🟡 Moderate Lunch Crowd (Estimated)",
                 cost_estimate=float(round(daily_budget * 0.20)),
                 lat=lunch_lat,
                 lng=lunch_lng,
@@ -525,8 +525,8 @@ def generate_algorithmic_plan(
                 description=eve_desc,
                 location=eve_loc,
                 place_type="TA",
-                estimated_transit="⏱️ 20m scenic transit",
-                crowd_warning="🔥 Peak Golden Hour (Arrive 30 min before sunset)",
+                estimated_transit="⏱️ 20m scenic transit (Estimated)",
+                crowd_warning="🔥 Peak Golden Hour (Estimated)",
                 cost_estimate=float(round(daily_budget * 0.15)),
                 lat=evening_lat,
                 lng=evening_lng,

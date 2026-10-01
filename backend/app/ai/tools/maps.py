@@ -86,11 +86,11 @@ def get_coordinates(location_name: str) -> Dict[str, Any]:
         "lng": None,
         "name": location_name,
         "found": False,
-        "provenance": "DEMO"
+        "provenance": "CURATED_UNRESOLVED"
     }
 
 def estimate_transit_time(origin_name: str, dest_name: str, mode: str = "drive") -> str:
     """
     Returns realistic transit duration between spots.
     """
-    return "⏱️ 15-25m transit"
+    return "⏱️ 15-25m transit (Estimated)"

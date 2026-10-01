@@ -30,7 +30,7 @@ def search_flights(origin: str, destination: str, date: str = None) -> List[Dict
             "cancellation": "Free cancellation within 24 hours",
             "provenance": "CURATED",
             "deep_link": "https://www.goindigo.in",
-            "why_recommended": "Fastest morning direct flight with high on-time reliability"
+            "why_recommended": "Morning direct flight with early arrival"
         },
         {
             "id": f"fl_{origin_clean[:3]}_{dest_clean[:3]}_02",
