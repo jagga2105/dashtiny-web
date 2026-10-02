@@ -108,7 +108,7 @@ function PlannerContent() {
         };
         addItinerary(formatted);
         setCurrentItinerary(formatted);
-        setSaveSuccessMsg(`✦ Itinerary saved to PostgreSQL database! Room Code: ${res.squad_room_code}`);
+        setSaveSuccessMsg(`✦ Itinerary saved to your Trip Workspace! Room Code: ${res.squad_room_code}`);
       }
     } catch (err: any) {
       console.error('Failed to generate itinerary:', err);
@@ -187,7 +187,7 @@ function PlannerContent() {
               Tell DAIna about your trip
             </label>
             <span className="text-[11px] text-slate-500 font-medium">
-              Saved automatically
+              {activeItinerary ? 'Trip saved automatically' : 'Nothing to set up — just describe your trip'}
             </span>
           </div>
 
@@ -320,11 +320,12 @@ function PlannerContent() {
             ].map((samplePrompt, idx) => (
               <button
                 key={idx}
+                type="button"
                 onClick={() => {
                   setPromptText(samplePrompt);
-                  handleBuildPlan(samplePrompt);
+                  document.getElementById('trip-prompt')?.focus();
                 }}
-                className="text-xs font-medium text-slate-700 hover:text-orange-600 bg-white hover:bg-orange-50/40 border border-slate-200 rounded-xl p-3 text-left transition-colors cursor-pointer shadow-2xs"
+                className="text-xs font-medium text-slate-700 hover:text-orange-600 bg-white hover:bg-orange-50/40 border border-slate-200 rounded-xl p-3 text-left transition-colors cursor-pointer shadow-2xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500"
               >
                 ✦ {samplePrompt}
               </button>

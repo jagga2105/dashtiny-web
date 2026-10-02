@@ -10,20 +10,20 @@ export interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
 export function Card({
   children,
   className,
-  variant = 'glass',
+  variant = 'default',
   interactive = false,
   ...props
 }: CardProps) {
-  const baseStyles = 'rounded-3xl p-5 md:p-6 transition-all duration-300 relative';
-  
+  const baseStyles = 'rounded-2xl p-5 md:p-6 transition-all duration-150 relative';
+
   const variants = {
-    default: 'bg-white border border-slate-200/90 text-slate-900 shadow-sm',
-    glass: 'bg-white/90 backdrop-blur-xl border border-slate-200/80 text-slate-900 shadow-sm',
-    glow: 'bg-gradient-to-br from-white via-orange-50/30 to-sky-50/30 border border-orange-200/80 text-slate-900 shadow-md',
+    default: 'bg-white border border-slate-200 text-slate-900 shadow-2xs',
+    glass: 'bg-white/80 backdrop-blur-md border border-slate-200/80 text-slate-900 shadow-sm',
+    glow: 'bg-gradient-to-br from-white via-orange-50/20 to-sky-50/20 border border-orange-200/80 text-slate-900 shadow-sm',
   };
 
   const interactiveStyles = interactive
-    ? 'hover:-translate-y-1 hover:shadow-xl hover:shadow-orange-500/10 hover:border-orange-300 cursor-pointer active:scale-[0.99]'
+    ? 'hover:-translate-y-0.5 hover:shadow-md hover:border-slate-300 cursor-pointer active:scale-[0.99]'
     : '';
 
   return (

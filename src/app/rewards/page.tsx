@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Coins, Award, Sparkles, CheckCircle2 } from 'lucide-react';
+import { Award, Sparkles, CheckCircle2, Ticket, Share2, Compass, ArrowRight } from 'lucide-react';
 import { TopNavbar } from '@/components/layout/TopNavbar';
 import { BottomNav } from '@/components/layout/BottomNav';
 import { DAInaChatWidget } from '@/components/layout/DAInaChatWidget';
@@ -33,23 +33,23 @@ export default function RewardsPage() {
       cost: 150,
       description: 'Valid on premier domestic getaways via Taj, Oberoi & Marriott.',
       code: 'TAJ-DASHTINY-3K',
-      badge: 'POPULAR VOUCHER',
+      badge: 'POPULAR PERK',
     },
     {
       id: 'vch_02',
-      title: '15% Cashback on Flights',
+      title: '15% Off Flights',
       cost: 200,
-      description: 'Applicable on IndiGo, Air India & Akasa flight bookings.',
+      description: 'Applicable on IndiGo, Air India & Akasa verified bookings.',
       code: '6E-ESCAPE-15',
-      badge: 'BEST VALUE',
+      badge: 'TOP VALUE',
     },
     {
       id: 'vch_03',
-      title: '₹2,500 Squad Sanctuary Pass',
+      title: '₹2,500 Squad Stay Discount',
       cost: 100,
-      description: 'Unlock luxury Airbnb and boutique villa squad group discounts.',
+      description: 'Unlock boutique villa and homestay squad group discounts.',
       code: 'AIRBNB-SQUAD-25',
-      badge: 'CONCIERGE ACCESS',
+      badge: 'EXPERIENCE PASS',
     },
   ]);
 
@@ -64,9 +64,9 @@ export default function RewardsPage() {
               brand: v.brand,
               title: v.discount || v.title,
               cost: v.coin_cost || 100,
-              description: `Exclusive partner discount voucher with ${v.brand || 'DashTiny Concierge'}.`,
+              description: `Exclusive partner perk with ${v.brand || 'DashTiny'}.`,
               code: v.code,
-              badge: v.category?.toUpperCase() || 'EXCLUSIVE',
+              badge: v.category?.toUpperCase() || 'PERK',
             }))
           );
         }
@@ -80,7 +80,7 @@ export default function RewardsPage() {
   const handleRedeem = async (vouchId: string, cost: number) => {
     setErrorMsg(null);
     if ((user?.coins || 0) < cost) {
-      setErrorMsg(`Insufficient Gold Coins. You have ${user?.coins || 0} coins, but need ${cost} coins.`);
+      setErrorMsg(`You have ${user?.coins || 0} Travel Credits, but need ${cost} credits for this perk.`);
       return;
     }
     if (isRedeeming) return;
@@ -93,45 +93,70 @@ export default function RewardsPage() {
         setRedeemed(vouchId);
         setUnlockedCode(res.voucher_code || 'UNLOCKED');
       } else {
-        setErrorMsg("Unable to connect to DashTiny services. Failed to redeem voucher. Try again.");
+        setErrorMsg("Unable to connect to DashTiny services. Failed to redeem perk. Try again.");
       }
     } catch (err: any) {
       console.error('Redemption error:', err);
-      const detail = err?.data?.detail || "Unable to connect to DashTiny services. Failed to redeem voucher. Try again.";
+      const detail = err?.data?.detail || "Unable to connect to DashTiny services. Failed to redeem perk. Try again.";
       setErrorMsg(detail);
     } finally {
       setIsRedeeming(false);
     }
   };
 
+  const travelCredits = user?.coins ?? 250;
+
   return (
-    <div className="min-h-screen pb-24 md:pb-12 flex flex-col bg-[#F8FAFC] text-slate-900 font-sans selection:bg-orange-500 selection:text-white">
+    <div className="min-h-screen pb-24 md:pb-12 flex flex-col bg-[#FAFAF9] text-slate-900 font-sans selection:bg-orange-500 selection:text-white">
       <TopNavbar />
 
-      <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-8 space-y-10">
-        {/* Wallet Hero Banner */}
-        <section className="rounded-3xl p-8 sm:p-10 bg-gradient-to-r from-orange-50 via-white to-sky-50 border border-orange-200/90 shadow-sm relative overflow-hidden">
+      <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-8 space-y-8">
+        {/* Travel Credits Banner */}
+        <section className="rounded-3xl p-6 sm:p-8 bg-white border border-slate-200 shadow-2xs relative overflow-hidden">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 relative z-10">
             <div className="space-y-2">
-              <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-orange-100 border border-orange-200 text-orange-800 text-xs font-extrabold tracking-wider uppercase">
-                <Award className="w-3.5 h-3.5 text-orange-600" />
-                <span>GOLD EXPLORER VAULT TIER</span>
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-orange-50 border border-orange-200 text-orange-800 text-xs font-semibold">
+                <Sparkles className="w-3.5 h-3.5 text-orange-600" />
+                <span>TRAVEL CREDITS & PERKS</span>
               </div>
-              <h1 className="text-3xl sm:text-5xl font-serif-editorial font-bold text-slate-900 tracking-tight">
-                Gold Rewards Vault
+              <h1 className="text-2xl sm:text-4xl font-serif-editorial font-bold text-slate-900 tracking-tight">
+                Your Travel Credits
               </h1>
               <p className="text-xs sm:text-sm text-slate-600 font-medium max-w-md">
-                Accumulate gold coins through getaway reservations, booking comparisons, and sharing getaway moments.
+                Earn credits as you plan, compare, save bookings, and share itineraries with the community.
               </p>
             </div>
 
-            {/* Big Coins Counter */}
-            <div className="p-6 rounded-2xl bg-white border border-orange-200 text-center space-y-1 shrink-0 shadow-md">
-              <div className="flex items-center justify-center gap-2">
-                <Coins className="w-8 h-8 text-orange-500 animate-bounce" />
-                <span className="text-4xl sm:text-5xl font-serif-editorial font-extrabold text-orange-600">{user?.coins ?? 250}</span>
-              </div>
-              <p className="text-[10px] font-extrabold text-slate-500 uppercase tracking-widest">Available Gold Balance</p>
+            {/* Travel Credits Counter */}
+            <div className="p-5 rounded-2xl bg-slate-50 border border-slate-200 text-center space-y-1 shrink-0 min-w-[200px]">
+              <span className="text-3xl sm:text-4xl font-serif-editorial font-bold text-orange-600">
+                {travelCredits}
+              </span>
+              <p className="text-[11px] font-semibold text-slate-600 uppercase tracking-wide">
+                Available Credits
+              </p>
+            </div>
+          </div>
+
+          {/* How Credits Are Earned on DashTiny */}
+          <div className="mt-6 pt-5 border-t border-slate-100 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs text-slate-700">
+            <div className="flex items-center gap-2.5 p-3 rounded-xl bg-slate-50/80 border border-slate-100">
+              <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 font-bold font-mono text-[11px]">
+                +50
+              </span>
+              <span className="font-medium">Save a verified booking to a trip</span>
+            </div>
+            <div className="flex items-center gap-2.5 p-3 rounded-xl bg-slate-50/80 border border-slate-100">
+              <span className="px-2 py-0.5 rounded-md bg-sky-100 text-sky-800 font-bold font-mono text-[11px]">
+                +20
+              </span>
+              <span className="font-medium">Share an itinerary with travelers</span>
+            </div>
+            <div className="flex items-center gap-2.5 p-3 rounded-xl bg-slate-50/80 border border-slate-100">
+              <span className="px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 font-bold font-mono text-[11px]">
+                +10
+              </span>
+              <span className="font-medium">Help another explorer in Community</span>
             </div>
           </div>
         </section>
@@ -139,69 +164,79 @@ export default function RewardsPage() {
         {/* Error Alert Banner */}
         {errorMsg && (
           <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-950 flex items-center justify-between animate-in fade-in">
-            <span className="text-xs font-bold flex items-center gap-2">
+            <span className="text-xs font-semibold flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-amber-500" />
               {errorMsg}
             </span>
             <button
               onClick={() => setErrorMsg(null)}
-              className="text-xs text-amber-700 hover:text-amber-950 font-bold cursor-pointer"
+              className="text-xs text-amber-700 hover:text-amber-950 font-semibold cursor-pointer"
             >
               ✕
             </button>
           </div>
         )}
 
-        {/* Redeemable Vouchers Store */}
-        <section className="space-y-6">
-          <div className="border-b border-slate-200/90 pb-4">
-            <h2 className="text-2xl sm:text-3xl font-serif-editorial font-bold text-slate-900">Redeemable Rewards Collection</h2>
-            <p className="text-xs text-slate-600 font-medium">Exchange gold coins for flight vouchers & luxury getaway passes</p>
+        {/* Redeemable Perks Collection */}
+        <section className="space-y-4">
+          <div className="border-b border-slate-200 pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+            <div>
+              <h2 className="text-xl font-serif-editorial font-bold text-slate-900">
+                Redeem Credits for Travel Perks
+              </h2>
+              <p className="text-xs text-slate-600 font-medium">
+                Apply unlocked perks toward verified stays, airline bookings, and squad experiences.
+              </p>
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
             {vouchersList.map((vouch) => (
-              <Card key={vouch.id} className="editorial-card p-6 flex flex-col justify-between space-y-4 rounded-3xl bg-white border border-slate-200/90 shadow-sm hover:border-orange-300 transition-all">
-                <div className="space-y-3">
+              <Card
+                key={vouch.id}
+                className="p-5 flex flex-col justify-between space-y-4 rounded-2xl bg-white border border-slate-200 shadow-2xs hover:border-slate-300 transition-all"
+              >
+                <div className="space-y-2.5">
                   <div className="flex items-center justify-between">
-                    <span className="px-2.5 py-0.5 rounded-full bg-orange-100 border border-orange-200 text-orange-700 text-[10px] font-extrabold tracking-widest uppercase">
+                    <span className="px-2 py-0.5 rounded-md bg-orange-50 border border-orange-200 text-orange-700 text-[10px] font-bold tracking-wider uppercase">
                       {vouch.badge}
                     </span>
-                    <span className="text-xs font-serif-editorial font-extrabold text-orange-600 flex items-center gap-1">
-                      <Coins className="w-3.5 h-3.5 text-orange-500" />
-                      {vouch.cost} Coins
+                    <span className="text-xs font-semibold text-slate-700 flex items-center gap-1 font-mono">
+                      {vouch.cost} Credits
                     </span>
                   </div>
 
-                  <h3 className="font-serif-editorial font-bold text-slate-900 text-xl">{vouch.title}</h3>
-                  <p className="text-xs text-slate-600 font-medium leading-relaxed">{vouch.description}</p>
+                  <h3 className="font-serif-editorial font-bold text-slate-900 text-lg">{vouch.title}</h3>
+                  <p className="text-xs text-slate-600 font-normal leading-relaxed">{vouch.description}</p>
                 </div>
 
-                <div className="pt-4 border-t border-slate-100 space-y-2">
+                <div className="pt-3 border-t border-slate-100 space-y-2">
                   {redeemed === vouch.id ? (
-                    <div className="p-3 rounded-2xl bg-emerald-50 border border-emerald-200 text-center animate-in zoom-in-95">
-                      <div className="flex items-center justify-center gap-1 text-emerald-800 text-xs font-extrabold">
+                    <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-center animate-in zoom-in-95">
+                      <div className="flex items-center justify-center gap-1 text-emerald-800 text-xs font-semibold">
                         <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                        <span>Promo Voucher Unlocked!</span>
+                        <span>Perk Unlocked!</span>
                       </div>
-                      <p className="text-base font-mono font-extrabold text-slate-900 mt-1 tracking-wider bg-white py-1 rounded-xl border border-emerald-200">
+                      <p className="text-sm font-mono font-bold text-slate-900 mt-1 tracking-wider bg-white py-1 rounded-lg border border-emerald-200">
                         {unlockedCode || vouch.code}
                       </p>
-                      <p className="text-[10px] text-slate-500 mt-1">Copy and apply during checkout on partner portal</p>
+                      <p className="text-[10px] text-slate-500 mt-1">
+                        Apply during booking on partner portal or attach to your Trip Workspace
+                      </p>
                     </div>
                   ) : (
                     <Button
-                      variant={(user?.coins || 0) >= vouch.cost ? 'primary' : 'secondary'}
+                      variant={travelCredits >= vouch.cost ? 'primary' : 'outline'}
                       size="sm"
-                      className="w-full bg-gradient-to-r from-orange-500 to-amber-500 text-white font-extrabold shadow-sm cursor-pointer"
+                      className="w-full text-xs font-semibold cursor-pointer"
                       onClick={() => handleRedeem(vouch.id, vouch.cost)}
-                      disabled={(user?.coins || 0) < vouch.cost || isRedeeming}
+                      disabled={travelCredits < vouch.cost || isRedeeming}
                     >
                       {isRedeeming && redeemed === vouch.id
-                        ? 'Unlocking Vault...'
-                        : (user?.coins || 0) >= vouch.cost
-                        ? 'Redeem Voucher →'
-                        : 'Insufficient Gold Coins'}
+                        ? 'Unlocking Perk...'
+                        : travelCredits >= vouch.cost
+                        ? `Redeem Perk (${vouch.cost} Credits) →`
+                        : `Need ${vouch.cost - travelCredits} More Credits`}
                     </Button>
                   )}
                 </div>

@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Image from 'next/image';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { X, Send, Sparkles, SlidersHorizontal, Award } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { TravelInputDialogModal, TravelInputResult } from '@/components/planner/TravelInputDialogModal';
@@ -20,6 +20,7 @@ interface ChatMessageItem {
 
 export function DAInaChatWidget() {
   const router = useRouter();
+  const pathname = usePathname();
   const { addItinerary } = usePlannerStore();
   const [isOpen, setIsOpen] = useState(false);
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
@@ -32,6 +33,18 @@ export function DAInaChatWidget() {
       text: "✦ Welcome to your Private Concierge. I am DAIna, your 24/7 AI Travel Butler. How may I assist your itinerary today? Ask me about destinations, packing, price trends, or custom getaway itineraries.",
     },
   ]);
+
+  // On Trip Workspace (/trips), the Trip Copilot is already the embedded, dedicated DAIna experience.
+  // Hiding the global floating button prevents duplicate AI surfaces.
+  if (pathname?.startsWith('/trips')) {
+    return null;
+  }
+
+  const launcherLabel = pathname?.startsWith('/planner')
+    ? '✨ Plan with DAIna'
+    : pathname?.startsWith('/bookings')
+    ? '✨ Compare with DAIna'
+    : '✨ Ask DAIna';
 
   const handleSend = async (customPrompt?: string) => {
     const textToSend = (customPrompt || inputMsg).trim();
@@ -132,7 +145,7 @@ export function DAInaChatWidget() {
           {
             id: `bot_saved_${Date.now()}`,
             sender: 'daina',
-            text: `✦ Confirmed! "${itData.title}" has been saved directly to your PostgreSQL trips vault! You can view and manage it anytime in My Trips.`,
+            text: `✦ Confirmed! "${itData.title}" has been saved directly to your Trip Workspace! You can view and manage it anytime in Trips.`,
           },
         ]);
       }
@@ -142,7 +155,7 @@ export function DAInaChatWidget() {
         {
           id: `bot_err_${Date.now()}`,
           sender: 'daina',
-          text: `✦ Unable to connect to DashTiny services. Failed to save "${itData.title}" to PostgreSQL. Please try again.`,
+          text: `✦ Unable to connect to DashTiny services. Failed to save "${itData.title}". Please try again.`,
         },
       ]);
     }
@@ -198,7 +211,7 @@ export function DAInaChatWidget() {
         {
           id: `bot_${Date.now()}`,
           sender: 'daina',
-          text: `✦ Custom 9-Step Itinerary Created and persisted to your Trips database for ${formResult.destination}!`,
+          text: `✦ Tailored Itinerary created and saved to your Trip Workspace for ${formResult.destination}!`,
           isItinerary: true,
           itineraryData: generatedItinerary,
         },
@@ -228,7 +241,7 @@ export function DAInaChatWidget() {
         <div className="w-6 h-6 rounded-full overflow-hidden shrink-0 border border-slate-600">
           <Image src="/assets/ai/daina.png" alt="DAIna" width={24} height={24} className="w-full h-full object-cover" />
         </div>
-        <span className="text-xs font-semibold tracking-wide">✨ Ask DAIna</span>
+        <span className="text-xs font-semibold tracking-wide">{launcherLabel}</span>
       </button>
 
       {/* Guided Input Modal */}

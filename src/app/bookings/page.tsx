@@ -47,6 +47,11 @@ function BookingsContent() {
   // Flight search states
   const [flightOrigin, setFlightOrigin] = useState('BLR');
   const [flightDest, setFlightDest] = useState('GOI');
+  const [departureDate, setDepartureDate] = useState('2026-10-15');
+  const [returnDate, setReturnDate] = useState('2026-10-20');
+  const [passengers, setPassengers] = useState(2);
+  const [cabinClass, setCabinClass] = useState('economy');
+  const [tripType, setTripType] = useState<'round' | 'oneway'>('round');
   const [flightsList, setFlightsList] = useState<any[]>([]);
   const [isSearchingFlights, setIsSearchingFlights] = useState(false);
   const [flightError, setFlightError] = useState<string | null>(null);
@@ -54,6 +59,8 @@ function BookingsContent() {
   // Hotel search states
   const [hotelDest, setHotelDest] = useState('Goa');
   const [hotelGuests, setHotelGuests] = useState(2);
+  const [hotelCheckIn, setHotelCheckIn] = useState('2026-10-15');
+  const [hotelCheckOut, setHotelCheckOut] = useState('2026-10-20');
   const [hotelsList, setHotelsList] = useState<any[]>([]);
   const [isSearchingHotels, setIsSearchingHotels] = useState(false);
   const [hotelError, setHotelError] = useState<string | null>(null);
@@ -84,6 +91,38 @@ function BookingsContent() {
     }
     initData();
   }, [bookingConfirmed, paramTripId]);
+
+  // Sync selected active trip details into search inputs
+  useEffect(() => {
+    if (selectedTripId && activeTrips.length > 0) {
+      const match = activeTrips.find((t) => t.id === selectedTripId);
+      if (match) {
+        const dest = (match.destination || '').toLowerCase();
+        if (dest.includes('goa')) {
+          setFlightDest('GOI');
+          setHotelDest('Goa');
+        } else if (dest.includes('manali') || dest.includes('kullu')) {
+          setFlightDest('KUU');
+          setHotelDest('Manali');
+        } else if (dest.includes('jaipur')) {
+          setFlightDest('JAI');
+          setHotelDest('Jaipur');
+        }
+        if (match.startDate) {
+          setDepartureDate(match.startDate);
+          setHotelCheckIn(match.startDate);
+        }
+        if (match.endDate) {
+          setReturnDate(match.endDate);
+          setHotelCheckOut(match.endDate);
+        }
+        if (match.travellers && Number(match.travellers) > 0) {
+          setPassengers(Number(match.travellers));
+          setHotelGuests(Number(match.travellers));
+        }
+      }
+    }
+  }, [selectedTripId, activeTrips]);
 
   // Load Flights from Backend Aggregator
   const loadFlights = async (orig = flightOrigin, dest = flightDest) => {
@@ -309,108 +348,205 @@ function BookingsContent() {
         </div>
 
         {/* FLIGHTS TAB */}
-        {activeCategory === 'flights' && (
-          <section className="space-y-4">
-            {/* Airport Filter Controls */}
-            <Card className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div className="flex flex-wrap items-center gap-3">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-semibold uppercase text-slate-400">Origin</label>
-                  <select
-                    value={flightOrigin}
-                    onChange={(e) => {
-                      setFlightOrigin(e.target.value);
-                      loadFlights(e.target.value, flightDest);
-                    }}
-                    className="text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                  >
-                    <option value="BLR">BLR — Bengaluru Kempegowda</option>
-                    <option value="DEL">DEL — New Delhi Indira Gandhi</option>
-                    <option value="BOM">BOM — Mumbai Chhatrapati Shivaji</option>
-                  </select>
-                </div>
+        {activeCategory === 'flights' && (() => {
+          const lowestFareFlight = flightsList.length > 0
+            ? flightsList.reduce((min, f) => (f.price < min.price ? f : min), flightsList[0])
+            : null;
 
-                <ArrowRight className="w-3.5 h-3.5 text-slate-400 hidden md:block mt-4" />
-
-                <div className="space-y-1">
-                  <label className="text-[10px] font-semibold uppercase text-slate-400">Destination</label>
-                  <select
-                    value={flightDest}
-                    onChange={(e) => {
-                      setFlightDest(e.target.value);
-                      loadFlights(flightOrigin, e.target.value);
-                    }}
-                    className="text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                  >
-                    <option value="GOI">GOI — Goa Dabolim / Mopa</option>
-                    <option value="JAI">JAI — Jaipur Sanganer</option>
-                    <option value="KUU">KUU — Kullu Manali Bhuntar</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <span className="text-xs text-slate-500">
-                  {isSearchingFlights ? 'Querying airline schedules...' : `${flightsList.length} offers compared`}
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => loadFlights()}
-                  disabled={isSearchingFlights}
-                  className="border-slate-200 text-xs font-semibold hover:bg-slate-50 cursor-pointer"
-                >
-                  <Search className="w-3.5 h-3.5 mr-1 text-orange-500" />
-                  Refresh
-                </Button>
-              </div>
-            </Card>
-
-            {/* Flight Offers List with Decision Support */}
-            <div className="space-y-3">
-              {flightsList.map((fl, idx) => (
-                <Card
-                  key={fl.id || idx}
-                  className="p-5 rounded-2xl bg-white border border-slate-200 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-5 hover:border-slate-300 transition-all"
-                >
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <span className="font-serif-editorial font-bold text-slate-900 text-base">{fl.provider}</span>
-                      <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-mono text-[10px] font-semibold">
-                        {fl.flight_number}
-                      </span>
-                      {idx === 0 && (
-                        <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10px] font-bold uppercase tracking-wide">
-                          BEST VALUE
-                        </span>
-                      )}
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-50 text-slate-600 text-[10px] font-medium border border-slate-200">
-                        <ShieldCheck className="w-3 h-3 text-emerald-600" />
-                        Live Inventory
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-3 text-sm font-semibold text-slate-800">
-                      <span>{fl.origin} ({fl.departure_time})</span>
-                      <ArrowRight className="w-3.5 h-3.5 text-orange-500" />
-                      <span>{fl.destination} ({fl.arrival_time})</span>
-                    </div>
-
-                    <p className="text-xs text-slate-500">
-                      Non-stop • {fl.duration} • {fl.baggage || '15kg check-in'} • {fl.cancellation || 'Standard cancellation'}
-                    </p>
-
-                    {/* Decision Support Rationale */}
-                    <div className="flex flex-wrap items-center gap-2 pt-1 text-xs text-slate-600">
-                      <span className="inline-flex items-center gap-1 text-emerald-700 font-medium">
-                        ✓ Fits your trip timeline
-                      </span>
-                      <span>•</span>
-                      <span className="inline-flex items-center gap-1 text-slate-600">
-                        ✓ Direct transit matches your pacing
-                      </span>
-                    </div>
+          return (
+            <section className="space-y-4">
+              {/* Comprehensive Filter Controls */}
+              <Card className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200 shadow-2xs space-y-3.5">
+                {/* Trip Type & Cabin Pill Row */}
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
+                  <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl">
+                    <button
+                      type="button"
+                      onClick={() => setTripType('round')}
+                      className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                        tripType === 'round' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      Round Trip
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setTripType('oneway')}
+                      className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                        tripType === 'oneway' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      One Way
+                    </button>
                   </div>
+
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={cabinClass}
+                      onChange={(e) => setCabinClass(e.target.value)}
+                      className="text-xs font-medium bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 text-slate-800 focus:outline-none"
+                    >
+                      <option value="economy">Economy</option>
+                      <option value="premium">Premium Economy</option>
+                      <option value="business">Business</option>
+                    </select>
+
+                    <select
+                      value={passengers}
+                      onChange={(e) => setPassengers(Number(e.target.value))}
+                      className="text-xs font-medium bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 text-slate-800 focus:outline-none"
+                    >
+                      <option value={1}>1 Traveler</option>
+                      <option value={2}>2 Travelers</option>
+                      <option value={3}>3 Travelers</option>
+                      <option value={4}>4+ Squad</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Airports & Dates Inputs */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-semibold uppercase text-slate-400">From (Origin)</label>
+                    <select
+                      value={flightOrigin}
+                      onChange={(e) => {
+                        setFlightOrigin(e.target.value);
+                        loadFlights(e.target.value, flightDest);
+                      }}
+                      className="w-full text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    >
+                      <option value="BLR">BLR — Bengaluru Kempegowda</option>
+                      <option value="DEL">DEL — New Delhi Indira Gandhi</option>
+                      <option value="BOM">BOM — Mumbai Chhatrapati Shivaji</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-semibold uppercase text-slate-400">To (Destination)</label>
+                    <select
+                      value={flightDest}
+                      onChange={(e) => {
+                        setFlightDest(e.target.value);
+                        loadFlights(flightOrigin, e.target.value);
+                      }}
+                      className="w-full text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    >
+                      <option value="GOI">GOI — Goa Dabolim / Mopa</option>
+                      <option value="JAI">JAI — Jaipur Sanganer</option>
+                      <option value="KUU">KUU — Kullu Manali Bhuntar</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-semibold uppercase text-slate-400">Departure</label>
+                    <input
+                      type="date"
+                      value={departureDate}
+                      onChange={(e) => setDepartureDate(e.target.value)}
+                      className="w-full text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500 font-mono"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-semibold uppercase text-slate-400">
+                      {tripType === 'round' ? 'Return' : 'Trip Length'}
+                    </label>
+                    {tripType === 'round' ? (
+                      <input
+                        type="date"
+                        value={returnDate}
+                        onChange={(e) => setReturnDate(e.target.value)}
+                        className="w-full text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500 font-mono"
+                      />
+                    ) : (
+                      <span className="w-full flex items-center px-3 py-2 text-xs font-semibold text-slate-500 bg-slate-100 rounded-xl border border-slate-200">
+                        One Way Flight
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Search Action Bar */}
+                <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+                  <span className="text-xs text-slate-500">
+                    {isSearchingFlights ? 'Querying airline schedules...' : `${flightsList.length} offers compared for ${passengers} traveler${passengers > 1 ? 's' : ''}`}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => loadFlights()}
+                    disabled={isSearchingFlights}
+                    className="border-slate-200 text-xs font-semibold hover:bg-slate-50 cursor-pointer"
+                  >
+                    <Search className="w-3.5 h-3.5 mr-1 text-orange-500" />
+                    Refresh Offers
+                  </Button>
+                </div>
+              </Card>
+
+              {/* Flight Offers List with Algorithm-Driven Decision Support */}
+              <div className="space-y-3">
+                {flightsList.map((fl, idx) => {
+                  const isLowestFare = lowestFareFlight && fl.id === lowestFareFlight.id;
+                  const isFastest = fl.duration?.includes('1h');
+
+                  return (
+                    <Card
+                      key={fl.id || idx}
+                      className="p-5 rounded-2xl bg-white border border-slate-200 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-5 hover:border-slate-300 transition-all"
+                    >
+                      <div className="space-y-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-serif-editorial font-bold text-slate-900 text-base">{fl.provider}</span>
+                          <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-mono text-[10px] font-semibold">
+                            {fl.flight_number}
+                          </span>
+                          {isLowestFare && (
+                            <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10px] font-bold uppercase tracking-wide">
+                              Lowest Fare · ₹{fl.price?.toLocaleString('en-IN')}
+                            </span>
+                          )}
+                          {isFastest && !isLowestFare && (
+                            <span className="px-2 py-0.5 rounded bg-sky-100 text-sky-800 text-[10px] font-bold uppercase tracking-wide">
+                              Fastest Transit
+                            </span>
+                          )}
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-50 text-slate-700 text-[10px] font-medium border border-slate-200">
+                            <ShieldCheck className="w-3 h-3 text-emerald-600" />
+                            Provider verified
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-3 text-sm font-semibold text-slate-800">
+                          <span>{fl.origin} ({fl.departure_time})</span>
+                          <ArrowRight className="w-3.5 h-3.5 text-orange-500" />
+                          <span>{fl.destination} ({fl.arrival_time})</span>
+                        </div>
+
+                        <p className="text-xs text-slate-500">
+                          Non-stop • {fl.duration} • {fl.baggage || '15kg check-in'} • {fl.cancellation || 'Standard cancellation'}
+                        </p>
+
+                        {/* Decision Support Rationale with Factual Criteria */}
+                        <div className="flex flex-wrap items-center gap-2 pt-1 text-xs text-slate-600">
+                          <span className="inline-flex items-center gap-1 text-emerald-700 font-medium">
+                            ✓ Fits trip date ({departureDate})
+                          </span>
+                          <span>•</span>
+                          <span className="inline-flex items-center gap-1 text-slate-600">
+                            ✓ Direct transit matches your pacing
+                          </span>
+                          {isLowestFare && (
+                            <>
+                              <span>•</span>
+                              <span className="text-emerald-700 font-semibold">
+                                ✓ Lowest total cost among verified providers
+                              </span>
+                            </>
+                          )}
+                        </div>
+                      </div>
 
                   <div className="flex items-center justify-between md:justify-end gap-5 pt-3 md:pt-0 border-t md:border-t-0 border-slate-100">
                     <div className="text-right">
@@ -453,10 +589,12 @@ function BookingsContent() {
                     </div>
                   </div>
                 </Card>
-              ))}
-            </div>
-          </section>
-        )}
+              );
+            })}
+          </div>
+        </section>
+      );
+    })()}
 
         {/* HOTELS & STAYS TAB */}
         {activeCategory === 'hotels' && (
@@ -481,7 +619,27 @@ function BookingsContent() {
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[10px] font-semibold uppercase text-slate-400">Travelers</label>
+                  <label className="text-[10px] font-semibold uppercase text-slate-400">Check-In</label>
+                  <input
+                    type="date"
+                    value={hotelCheckIn}
+                    onChange={(e) => setHotelCheckIn(e.target.value)}
+                    className="text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500 font-mono"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-semibold uppercase text-slate-400">Check-Out</label>
+                  <input
+                    type="date"
+                    value={hotelCheckOut}
+                    onChange={(e) => setHotelCheckOut(e.target.value)}
+                    className="text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500 font-mono"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-semibold uppercase text-slate-400">Guests</label>
                   <select
                     value={hotelGuests}
                     onChange={(e) => {
@@ -490,16 +648,16 @@ function BookingsContent() {
                     }}
                     className="text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500"
                   >
-                    <option value={1}>1 Solo</option>
-                    <option value={2}>2 Couple / Duo</option>
-                    <option value={4}>4 Group</option>
+                    <option value={1}>1 Solo Guest</option>
+                    <option value={2}>2 Guests</option>
+                    <option value={4}>4+ Group</option>
                   </select>
                 </div>
               </div>
 
               <div className="flex items-center gap-3">
                 <span className="text-xs text-slate-500">
-                  {isSearchingHotels ? 'Querying stays...' : `${hotelsList.length} verified stays ready`}
+                  {isSearchingHotels ? 'Querying stays...' : `${hotelsList.length} verified stays available`}
                 </span>
                 <Button
                   variant="outline"

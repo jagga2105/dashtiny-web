@@ -70,7 +70,7 @@ export function GoogleAuthModal() {
         <div className="space-y-2 relative z-10 bg-slate-50/80 p-4 rounded-2xl border border-slate-200/80 text-xs">
           {[
             'Instant 30-Second DAIna AI Getaway Architect',
-            'Save & Customize Multi-Day Stays & Routes in PostgreSQL',
+            'Save & Customize Multi-Day Stays & Routes in your Trip Workspace',
             'Squad Split Expense Ledger & Room Checkout',
           ].map((benefit, idx) => (
             <div key={idx} className="flex items-center gap-2 text-slate-700 font-bold">

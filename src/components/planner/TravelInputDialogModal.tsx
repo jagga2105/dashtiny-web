@@ -1,7 +1,19 @@
 'use client';
 
 import { useState } from 'react';
-import { Sparkles, MapPin, Calendar, Compass, Car, DollarSign, Users, Hotel, ShieldAlert, ArrowRight, ArrowLeft, Check } from 'lucide-react';
+import {
+  Sparkles,
+  MapPin,
+  Calendar,
+  Compass,
+  DollarSign,
+  Users,
+  Hotel,
+  ShieldAlert,
+  ArrowRight,
+  ArrowLeft,
+  Check,
+} from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 
@@ -21,25 +33,34 @@ interface TravelInputDialogModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSubmit: (result: TravelInputResult) => void;
+  initialDestination?: string;
+  initialOrigin?: string;
 }
 
-export function TravelInputDialogModal({ isOpen, onClose, onSubmit }: TravelInputDialogModalProps) {
+export function TravelInputDialogModal({
+  isOpen,
+  onClose,
+  onSubmit,
+  initialDestination = '',
+  initialOrigin = '',
+}: TravelInputDialogModalProps) {
   const [currentStep, setCurrentStep] = useState(1);
   const [formData, setFormData] = useState<TravelInputResult>({
-    destination: 'Goa, India',
-    dates: '2026-08-10 to 2026-08-14',
-    purpose: 'Leisure & Beach Getaway',
-    departure: 'Bengaluru',
+    destination: initialDestination,
+    dates: '',
+    purpose: 'Leisure & Exploration',
+    departure: initialOrigin,
     transportationMode: 'Flight',
-    budget: '₹25,000',
+    budget: '',
     groupSize: '2 Travelers',
-    accommodation: '4-Star Beach Resort',
-    specialRequirements: 'Step-free pool access & vegetarian food options',
+    accommodation: 'Boutique Hotel or Resort',
+    specialRequirements: '',
   });
 
   if (!isOpen) return null;
 
-  const totalSteps = 9;
+  // Streamlined 6-step refinement controls per UX specifications
+  const totalSteps = 6;
 
   const updateField = (field: keyof TravelInputResult, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -49,7 +70,12 @@ export function TravelInputDialogModal({ isOpen, onClose, onSubmit }: TravelInpu
     if (currentStep < totalSteps) {
       setCurrentStep((prev) => prev + 1);
     } else {
-      onSubmit(formData);
+      onSubmit({
+        ...formData,
+        destination: formData.destination.trim() || 'Your Destination',
+        dates: formData.dates.trim() || 'Flexible dates',
+        budget: formData.budget.trim() || '₹30,000',
+      });
       onClose();
     }
   };
@@ -61,205 +87,236 @@ export function TravelInputDialogModal({ isOpen, onClose, onSubmit }: TravelInpu
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
-      <Card className="w-full max-w-xl bg-slate-950 border-orange-500/40 shadow-2xl p-6 space-y-6 relative max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-in fade-in">
+      <Card className="w-full max-w-lg bg-white border border-slate-200 shadow-2xl p-6 sm:p-7 space-y-6 relative max-h-[90vh] overflow-y-auto rounded-3xl">
         {/* Modal Header */}
-        <div className="flex items-center justify-between border-b border-white/10 pb-4">
+        <div className="flex items-center justify-between border-b border-slate-100 pb-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-orange-500/20 text-orange-400 flex items-center justify-center border border-orange-500/30">
-              <Sparkles className="w-5 h-5 animate-pulse text-amber-400" />
+            <div className="w-9 h-9 rounded-xl bg-orange-50 text-orange-600 flex items-center justify-center border border-orange-200">
+              <Sparkles className="w-4 h-4 text-orange-600" />
             </div>
             <div>
-              <h3 className="text-lg font-extrabold text-white">DAIna 9-Step Guided Travel Prompt</h3>
-              <p className="text-xs text-gray-400">Step {currentStep} of {totalSteps}: Fine-tune your AI itinerary parameters</p>
+              <h3 className="text-base font-serif-editorial font-bold text-slate-900">
+                Refine Trip Details with DAIna
+              </h3>
+              <p className="text-xs text-slate-500">
+                Step {currentStep} of {totalSteps}: Tailor your itinerary parameters
+              </p>
             </div>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-white text-lg font-bold">
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close dialog"
+            className="w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500"
+          >
             ✕
           </button>
         </div>
 
         {/* Progress Bar */}
-        <div className="w-full h-1.5 bg-slate-900 rounded-full overflow-hidden border border-white/5">
+        <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
           <div
-            className="h-full bg-gradient-to-r from-orange-500 via-amber-400 to-cyan-400 transition-all duration-300"
+            className="h-full bg-orange-600 transition-all duration-300"
             style={{ width: `${(currentStep / totalSteps) * 100}%` }}
           />
         </div>
 
         {/* Step Contents */}
-        <div className="space-y-4 py-2">
-          {/* STEP 1: Destination */}
+        <div className="space-y-4 py-1">
+          {/* STEP 1: Destination & Departure */}
           {currentStep === 1 && (
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-orange-400 uppercase tracking-wider flex items-center gap-1.5">
-                <MapPin className="w-4 h-4" /> 1. Where do you want to travel?
-              </label>
-              <input
-                type="text"
-                value={formData.destination}
-                onChange={(e) => updateField('destination', e.target.value)}
-                placeholder="e.g. Goa, Manali, Jaipur, Kyoto..."
-                className="w-full glass-input rounded-xl px-4 py-3 text-sm text-white"
-              />
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                  <MapPin className="w-3.5 h-3.5 text-orange-600" /> Destination
+                </label>
+                <input
+                  type="text"
+                  value={formData.destination}
+                  onChange={(e) => updateField('destination', e.target.value)}
+                  placeholder="Where are you going? (e.g. Kyoto, Manali, Goa...)"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-orange-500 focus:bg-white font-medium"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                  <Compass className="w-3.5 h-3.5 text-slate-500" /> Leaving From (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={formData.departure}
+                  onChange={(e) => updateField('departure', e.target.value)}
+                  placeholder="Where are you leaving from? (e.g. Bengaluru, Delhi...)"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-orange-500 focus:bg-white font-medium"
+                />
+              </div>
             </div>
           )}
 
-          {/* STEP 2: Dates */}
+          {/* STEP 2: Travel Dates & Duration */}
           {currentStep === 2 && (
             <div className="space-y-2">
-              <label className="text-xs font-bold text-orange-400 uppercase tracking-wider flex items-center gap-1.5">
-                <Calendar className="w-4 h-4" /> 2. Travel Dates & Duration
+              <label className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                <Calendar className="w-3.5 h-3.5 text-orange-600" /> Travel Dates or Duration
               </label>
               <input
                 type="text"
                 value={formData.dates}
                 onChange={(e) => updateField('dates', e.target.value)}
-                placeholder="e.g. 5 days in August 2026..."
-                className="w-full glass-input rounded-xl px-4 py-3 text-sm text-white"
+                placeholder="Choose your dates (e.g. 5 days in November, Nov 12 - Nov 17...)"
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-orange-500 focus:bg-white font-medium"
               />
+              <p className="text-[11px] text-slate-500">
+                You can specify specific calendar dates or general durations like &ldquo;4-day weekend trip&rdquo;.
+              </p>
             </div>
           )}
 
-          {/* STEP 3: Purpose */}
+          {/* STEP 3: Travelers & Group Size */}
           {currentStep === 3 && (
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-orange-400 uppercase tracking-wider flex items-center gap-1.5">
-                <Compass className="w-4 h-4" /> 3. Trip Purpose & Style
+            <div className="space-y-3">
+              <label className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                <Users className="w-3.5 h-3.5 text-orange-600" /> Travelers & Group Size
               </label>
-              <select
-                value={formData.purpose}
-                onChange={(e) => updateField('purpose', e.target.value)}
-                className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:outline-none"
-              >
-                <option value="Leisure & Beach Getaway">Leisure & Beach Getaway</option>
-                <option value="Alpine Trekking & Adventure">Alpine Trekking & Adventure</option>
-                <option value="Cultural Heritage & Museums">Cultural Heritage & Museums</option>
-                <option value="Workcation & Remote Study">Workcation & Remote Study</option>
-              </select>
-            </div>
-          )}
-
-          {/* STEP 4: Departure */}
-          {currentStep === 4 && (
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-orange-400 uppercase tracking-wider flex items-center gap-1.5">
-                <MapPin className="w-4 h-4" /> 4. Departure City
-              </label>
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  'Solo Traveler',
+                  'Couple (2)',
+                  'Small Squad (3-4)',
+                  'Family with Kids',
+                ].map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => updateField('groupSize', preset)}
+                    className={`p-3 rounded-xl border text-xs font-semibold text-left transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 ${
+                      formData.groupSize === preset
+                        ? 'border-orange-500 bg-orange-50 text-orange-900'
+                        : 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100'
+                    }`}
+                  >
+                    {preset}
+                  </button>
+                ))}
+              </div>
               <input
                 type="text"
-                value={formData.departure}
-                onChange={(e) => updateField('departure', e.target.value)}
-                placeholder="e.g. Bengaluru, Delhi, Mumbai..."
-                className="w-full glass-input rounded-xl px-4 py-3 text-sm text-white"
+                value={formData.groupSize}
+                onChange={(e) => updateField('groupSize', e.target.value)}
+                placeholder="Or specify custom group (e.g. 5 adults, 2 kids)"
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-orange-500 focus:bg-white font-medium"
               />
             </div>
           )}
 
-          {/* STEP 5: Transportation */}
-          {currentStep === 5 && (
+          {/* STEP 4: Target Budget */}
+          {currentStep === 4 && (
             <div className="space-y-2">
-              <label className="text-xs font-bold text-orange-400 uppercase tracking-wider flex items-center gap-1.5">
-                <Car className="w-4 h-4" /> 5. Preferred Transportation Mode
-              </label>
-              <select
-                value={formData.transportationMode}
-                onChange={(e) => updateField('transportationMode', e.target.value)}
-                className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:outline-none"
-              >
-                <option value="Flight">Flight (Fastest)</option>
-                <option value="Train">Express Train (Scenic)</option>
-                <option value="Cab Rental">Private Cab / Car Drive</option>
-                <option value="Bus">Volvo Sleeper Bus</option>
-              </select>
-            </div>
-          )}
-
-          {/* STEP 6: Budget */}
-          {currentStep === 6 && (
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-orange-400 uppercase tracking-wider flex items-center gap-1.5">
-                <DollarSign className="w-4 h-4" /> 6. Total Budget (in INR)
+              <label className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                <DollarSign className="w-3.5 h-3.5 text-orange-600" /> Total Budget Target
               </label>
               <input
                 type="text"
                 value={formData.budget}
                 onChange={(e) => updateField('budget', e.target.value)}
-                placeholder="e.g. ₹25,000"
-                className="w-full glass-input rounded-xl px-4 py-3 text-sm text-white"
+                placeholder="Set a budget (e.g. ₹35,000 or ₹1.2L total)"
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-orange-500 focus:bg-white font-medium"
               />
+              <p className="text-[11px] text-slate-500">
+                DAIna will balance lodging, transit, activities, and dining to fit within this ceiling.
+              </p>
             </div>
           )}
 
-          {/* STEP 7: Group Size */}
-          {currentStep === 7 && (
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-orange-400 uppercase tracking-wider flex items-center gap-1.5">
-                <Users className="w-4 h-4" /> 7. Group Size & Travelers
-              </label>
-              <input
-                type="text"
-                value={formData.groupSize}
-                onChange={(e) => updateField('groupSize', e.target.value)}
-                placeholder="e.g. Solo, Couple (2), Family of 4..."
-                className="w-full glass-input rounded-xl px-4 py-3 text-sm text-white"
-              />
+          {/* STEP 5: Travel Style & Accommodation */}
+          {currentStep === 5 && (
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                  <Compass className="w-3.5 h-3.5 text-orange-600" /> Travel Style & Pacing
+                </label>
+                <select
+                  value={formData.purpose}
+                  onChange={(e) => updateField('purpose', e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-900 focus:outline-none focus:border-orange-500 font-medium"
+                >
+                  <option value="Leisure & Exploration">Leisure & Relaxed Exploration</option>
+                  <option value="Romantic & Scenic Stays">Romantic & Scenic Stays</option>
+                  <option value="Alpine Trekking & Adventure">Alpine Trekking & Adventure</option>
+                  <option value="Cultural Heritage & Museums">Cultural Heritage & Historical Sights</option>
+                  <option value="Food, Cafes & Nightlife">Food, Cafes & Nightlife</option>
+                  <option value="Workcation & High-Speed WiFi">Workcation & High-Speed WiFi</option>
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                  <Hotel className="w-3.5 h-3.5 text-orange-600" /> Accommodation Preference
+                </label>
+                <select
+                  value={formData.accommodation}
+                  onChange={(e) => updateField('accommodation', e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-900 focus:outline-none focus:border-orange-500 font-medium"
+                >
+                  <option value="Boutique Hotel or Resort">Boutique Hotel or Resort</option>
+                  <option value="4-Star / 5-Star Luxury">4-Star / 5-Star Luxury</option>
+                  <option value="Private Villa or Homestay">Private Villa or Homestay</option>
+                  <option value="Cozy Hostel / Budget Stay">Cozy Hostel / Budget Stay</option>
+                </select>
+              </div>
             </div>
           )}
 
-          {/* STEP 8: Accommodation */}
-          {currentStep === 8 && (
+          {/* STEP 6: Special Requirements & Accessibility */}
+          {currentStep === 6 && (
             <div className="space-y-2">
-              <label className="text-xs font-bold text-orange-400 uppercase tracking-wider flex items-center gap-1.5">
-                <Hotel className="w-4 h-4" /> 8. Accommodation Type
-              </label>
-              <input
-                type="text"
-                value={formData.accommodation}
-                onChange={(e) => updateField('accommodation', e.target.value)}
-                placeholder="e.g. 4-Star Beach Resort, Hostel, Villa..."
-                className="w-full glass-input rounded-xl px-4 py-3 text-sm text-white"
-              />
-            </div>
-          )}
-
-          {/* STEP 9: Special Requirements */}
-          {currentStep === 9 && (
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-orange-400 uppercase tracking-wider flex items-center gap-1.5">
-                <ShieldAlert className="w-4 h-4" /> 9. Special Requirements & Accessibility
+              <label className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                <ShieldAlert className="w-3.5 h-3.5 text-orange-600" /> Special Requirements & Accessibility
               </label>
               <textarea
                 rows={3}
                 value={formData.specialRequirements}
                 onChange={(e) => updateField('specialRequirements', e.target.value)}
-                placeholder="e.g. Step-free access ♿, vegetarian food, pet friendly..."
-                className="w-full glass-input rounded-xl px-4 py-3 text-sm text-white resize-none"
+                placeholder="e.g. Vegetarian food only, step-free access ♿, avoid long walks, pet-friendly stay..."
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-orange-500 focus:bg-white font-medium resize-none"
               />
+              <p className="text-[11px] text-slate-500">
+                Optional: DAIna flags matching verified amenities and dietary tags in your plan.
+              </p>
             </div>
           )}
         </div>
 
         {/* Modal Controls */}
-        <div className="flex items-center justify-between border-t border-white/10 pt-4">
+        <div className="flex items-center justify-between border-t border-slate-100 pt-4">
           <Button
+            type="button"
             variant="outline"
             size="sm"
             onClick={handlePrev}
             disabled={currentStep === 1}
+            className="rounded-xl text-xs font-semibold"
           >
             <ArrowLeft className="w-3.5 h-3.5 mr-1" />
             <span>Back</span>
           </Button>
 
-          <Button variant="primary" size="sm" onClick={handleNext}>
+          <Button
+            type="button"
+            variant="primary"
+            size="sm"
+            onClick={handleNext}
+            className="bg-orange-600 hover:bg-orange-700 text-white rounded-xl text-xs font-semibold"
+          >
             {currentStep === totalSteps ? (
               <span className="flex items-center gap-1">
-                <Check className="w-3.5 h-3.5" /> Submit to DAIna AI
+                <Check className="w-3.5 h-3.5" /> Apply & Plan
               </span>
             ) : (
               <span className="flex items-center gap-1">
-                Next Step <ArrowRight className="w-3.5 h-3.5" />
+                Next <ArrowRight className="w-3.5 h-3.5" />
               </span>
             )}
           </Button>

@@ -70,16 +70,34 @@ export default function CommunityPage() {
   const filterCategories = ['All', 'Culture & Heritage', 'Food & Dining', 'Coastal Escapes', 'Nature & Mountains'];
 
   const handleLike = async (postId: string) => {
-    if (!likedPosts[postId]) {
+    if (likedPosts[postId]) return;
+    try {
+      await apiService.likeCommunityPost(postId);
+      // Only mutate state and award coins on verified server confirmation
       setLikedPosts((prev) => ({ ...prev, [postId]: true }));
       setLikes((prev) => ({ ...prev, [postId]: (prev[postId] || 0) + 1 }));
       updateCoins(5);
-      await apiService.likeCommunityPost(postId);
+    } catch (err) {
+      console.error('Failed to like post:', err);
     }
   };
 
-  const handleUsePlan = (destination: string) => {
-    router.push(`/planner?destination=${encodeURIComponent(destination)}`);
+  const handleUsePlan = (trip: any) => {
+    const params = new URLSearchParams();
+    params.set('destination', trip.destination);
+    if (trip.duration) {
+      const days = trip.duration.replace(/\D/g, '');
+      if (days) params.set('duration', days);
+    }
+    if (trip.budget_est) {
+      const rawBudget = trip.budget_est.replace(/[^0-9]/g, '');
+      if (rawBudget) params.set('budget', rawBudget.length <= 3 ? `${rawBudget}000` : rawBudget);
+    }
+    if (trip.trip_style && trip.trip_style.length > 0) {
+      params.set('vibe', trip.trip_style[0].toLowerCase());
+    }
+    params.set('query', `Plan a trip to ${trip.destination} inspired by ${trip.author_name}'s itinerary: ${trip.content.slice(0, 100)}`);
+    router.push(`/planner?${params.toString()}`);
   };
 
   const handlePublishSubmit = async (e: React.FormEvent) => {
@@ -178,18 +196,18 @@ export default function CommunityPage() {
     ? dynamicPosts.map((p) => ({
         id: p.id,
         author_name: p.author_name,
-        author_avatar: p.author_name.charAt(0),
+        author_avatar: p.author_name ? p.author_name.charAt(0) : 'E',
         destination: p.getaway_title || p.location,
-        duration: '5 days',
-        budget_est: '₹35k est.',
-        trip_style: ['Culture', 'Exploration'],
-        is_identity_verified: true,
-        is_trip_completed: true,
+        duration: p.duration || 'Flexible',
+        budget_est: p.budget_est || 'Shared budget',
+        trip_style: Array.isArray(p.trip_style) ? p.trip_style : ['Travel Story'],
+        is_identity_verified: Boolean(p.is_identity_verified),
+        is_trip_completed: Boolean(p.is_trip_completed),
         location: p.location,
         content: p.content,
         image_url: p.image_url,
-        likes_count: p.likes_count || 12,
-        comments_count: 4,
+        likes_count: p.likes_count || 0,
+        comments_count: p.comments_count || 0,
       }))
     : defaultTrips;
 
@@ -345,16 +363,16 @@ export default function CommunityPage() {
                     <Button
                       variant="primary"
                       size="sm"
-                      onClick={() => handleUsePlan(trip.destination)}
-                      className="bg-orange-600 hover:bg-orange-700 text-white font-semibold text-xs shadow-2xs cursor-pointer"
+                      onClick={() => handleUsePlan(trip)}
+                      className="bg-orange-600 hover:bg-orange-700 text-white font-semibold text-xs shadow-2xs cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500"
                     >
                       <Sparkles className="w-3.5 h-3.5 mr-1" />
-                      <span>Use this plan →</span>
+                      <span>Use as starting point →</span>
                     </Button>
                   </div>
 
                   <span className="text-xs text-slate-400">
-                    {trip.comments_count} reviews
+                    {trip.comments_count} comments
                   </span>
                 </div>
               </Card>

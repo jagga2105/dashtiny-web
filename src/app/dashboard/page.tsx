@@ -30,6 +30,7 @@ import {
   Building2,
   Plane,
   Ticket,
+  DollarSign,
 } from 'lucide-react';
 import { TopNavbar } from '@/components/layout/TopNavbar';
 import { BottomNav } from '@/components/layout/BottomNav';
@@ -48,6 +49,8 @@ interface DestinationItem {
   title: string;
   location: string;
   vibe: string;
+  vibes?: string[];
+  categories?: string[];
   duration: string;
   price: string;
   rating: string;
@@ -81,6 +84,17 @@ export default function DashboardPage() {
   const [realActiveTrip, setRealActiveTrip] = useState<any | null>(null);
 
   useEffect(() => {
+    try {
+      const stored = localStorage.getItem('dashtiny_saved_destinations');
+      if (stored) {
+        setSavedFavorites(JSON.parse(stored));
+      }
+    } catch (e) {
+      // ignore
+    }
+  }, []);
+
+  useEffect(() => {
     async function loadBackendData() {
       try {
         const [sancData, drvData, tripsData] = await Promise.all([
@@ -96,7 +110,18 @@ export default function DashboardPage() {
           setDynamicDrives(drvData);
         }
         if (tripsData && tripsData.length > 0) {
-          setRealActiveTrip(tripsData[0]);
+          const today = new Date().toISOString().split('T')[0];
+          // Find an active trip (dates spanning today), or next upcoming trip
+          const activeTrip = tripsData.find((t: any) => {
+            const start = t.startDate || t.start_date;
+            const end = t.endDate || t.end_date;
+            return start && end && start <= today && end >= today;
+          });
+          const upcomingTrip = tripsData.find((t: any) => {
+            const start = t.startDate || t.start_date;
+            return start && start > today;
+          });
+          setRealActiveTrip(activeTrip || upcomingTrip || tripsData[0]);
         } else {
           setRealActiveTrip(null);
         }
@@ -125,8 +150,13 @@ export default function DashboardPage() {
   const toggleFavorite = (id: string, title: string) => {
     setSavedFavorites((prev) => {
       const next = { ...prev, [id]: !prev[id] };
+      try {
+        localStorage.setItem('dashtiny_saved_destinations', JSON.stringify(next));
+      } catch (e) {
+        // ignore
+      }
       if (next[id]) {
-        setFavoriteToast(title);
+        setFavoriteToast(`Saved "${title}" to your wishlist`);
         setTimeout(() => setFavoriteToast(null), 2500);
       }
       return next;
@@ -134,12 +164,16 @@ export default function DashboardPage() {
   };
 
   const travelVibes = [
-    { id: 'all',       label: 'All Getaways', icon: Flame },
-    { id: 'beach',     label: 'Beach Riviera', icon: Waves },
-    { id: 'mountains', label: 'Alpine Retreats', icon: Mountain },
-    { id: 'culture',   label: 'Heritage & Culture', icon: BookMarked },
-    { id: 'foodie',    label: 'Culinary Escapes', icon: Utensils },
-    { id: 'wellness',  label: 'Wellness Sanctuaries', icon: Leaf },
+    { id: 'all',           label: 'All Getaways', icon: Flame },
+    { id: 'beach',         label: 'Beach', icon: Waves },
+    { id: 'mountains',     label: 'Mountains', icon: Mountain },
+    { id: 'culture',       label: 'Culture', icon: BookMarked },
+    { id: 'food',          label: 'Food & Dining', icon: Utensils },
+    { id: 'wellness',      label: 'Wellness', icon: Leaf },
+    { id: 'family',        label: 'Family', icon: Users },
+    { id: 'budget',        label: 'Budget', icon: DollarSign },
+    { id: 'weekend',       label: 'Weekend', icon: Compass },
+    { id: 'international',  label: 'International', icon: Globe },
   ];
 
   const trendingDestinations: DestinationItem[] = [
@@ -148,6 +182,8 @@ export default function DashboardPage() {
       title: 'Manali Alpine Sanctuary & Snow Retreat',
       location: 'Himachal Pradesh, India',
       vibe: 'mountains',
+      vibes: ['mountains', 'adventure'],
+      categories: ['mountains', 'weekend', 'budget', 'family'],
       duration: '4 Days / 3 Nights',
       price: '₹14,500',
       rating: '4.95',
@@ -166,6 +202,8 @@ export default function DashboardPage() {
       title: 'Havelock & Radhanagar Turquoise Bay',
       location: 'Andaman Islands',
       vibe: 'beach',
+      vibes: ['beach', 'wellness'],
+      categories: ['beach', 'family', 'wellness'],
       duration: '5 Days / 4 Nights',
       price: '₹28,900',
       rating: '4.98',
@@ -184,6 +222,8 @@ export default function DashboardPage() {
       title: 'Jaipur Palace & Amer Heritage Estate',
       location: 'Rajasthan, India',
       vibe: 'culture',
+      vibes: ['culture', 'food'],
+      categories: ['culture', 'weekend', 'family', 'food'],
       duration: '3 Days / 2 Nights',
       price: '₹11,200',
       rating: '4.92',
@@ -201,6 +241,8 @@ export default function DashboardPage() {
       title: 'Munnar Tea Estate & Backwater Villa',
       location: 'Kerala, India',
       vibe: 'wellness',
+      vibes: ['wellness', 'mountains'],
+      categories: ['wellness', 'weekend', 'mountains', 'family'],
       duration: '4 Days / 3 Nights',
       price: '₹16,800',
       rating: '4.96',
@@ -218,6 +260,8 @@ export default function DashboardPage() {
       title: 'Gokarna Sanctuary & Cliffside Villa',
       location: 'Karnataka, India',
       vibe: 'beach',
+      vibes: ['beach', 'food'],
+      categories: ['beach', 'budget', 'weekend', 'food'],
       duration: '3 Days / 2 Nights',
       price: '₹8,900',
       rating: '4.88',
@@ -235,6 +279,8 @@ export default function DashboardPage() {
       title: 'Kyoto Imperial Shrines & Bamboo Sanctuary',
       location: 'Japan',
       vibe: 'culture',
+      vibes: ['culture', 'food'],
+      categories: ['culture', 'international', 'food'],
       duration: '6 Days / 5 Nights',
       price: '₹72,000',
       rating: '4.99',
@@ -247,12 +293,74 @@ export default function DashboardPage() {
         'Traditional multi-course Kaiseki dinner at 3-Star Michelin Ryokan.',
       ],
     },
+    {
+      id: 'dest_7',
+      title: 'Ubud Jungle Sanctuary & Rice Terraces',
+      location: 'Bali, Indonesia',
+      vibe: 'international',
+      vibes: ['beach', 'wellness', 'culture', 'food'],
+      categories: ['international', 'beach', 'wellness', 'family', 'food'],
+      duration: '5 Days / 4 Nights',
+      price: '₹48,000',
+      rating: '4.94',
+      reviews: '2,180',
+      image: 'https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=800&auto=format&fit=crop&q=80',
+      tag: 'BALI · INDONESIA',
+      highlights: ['Ubud Jungle Infinity Villa', 'Tirta Empul Water Purification', 'Sunset Catamaran at Uluwatu'],
+      insiderTips: [
+        'Sunrise yoga sessions overlooking Ayung River gorge.',
+        'Private cooking class with village chefs using fresh organic farm harvest.',
+      ],
+    },
+    {
+      id: 'dest_8',
+      title: 'Rishikesh Yoga & Ganges River Sanctuary',
+      location: 'Uttarakhand, India',
+      vibe: 'wellness',
+      vibes: ['wellness', 'mountains', 'budget'],
+      categories: ['wellness', 'budget', 'weekend', 'mountains'],
+      duration: '3 Days / 2 Nights',
+      price: '₹7,800',
+      rating: '4.91',
+      reviews: '1,430',
+      image: 'https://images.unsplash.com/photo-1506197603052-3cc9c3a201bd?w=800&auto=format&fit=crop&q=80',
+      tag: 'RISHIKESH · UTTARAKHAND',
+      highlights: ['White Water River Rafting', 'Triveni Ghat Evening Aarti', 'Cliffside Meditation'],
+      insiderTips: [
+        'Reserved front-row seating at Parmarth Niketan Ganga Aarti.',
+        'Early morning silent walk along Beatles Ashram trail.',
+      ],
+    },
   ];
 
   const listToUse = dynamicSanctuaries.length > 0 ? dynamicSanctuaries : trendingDestinations;
   const filteredDestinations = activeVibe === 'all'
     ? listToUse
-    : listToUse.filter((d) => d.vibe === activeVibe);
+    : listToUse.filter((d) => {
+        const target = activeVibe.toLowerCase();
+        const matchesPrimaryVibe = d.vibe?.toLowerCase() === target;
+        const matchesVibesArray = d.vibes?.some((v) => v.toLowerCase() === target);
+        const matchesCategories = d.categories?.some((c) => c.toLowerCase() === target);
+        const matchesFoodAlias = (target === 'food' || target === 'foodie') && (d.vibe === 'food' || d.vibe === 'foodie' || d.vibes?.includes('food') || d.categories?.includes('food'));
+        return matchesPrimaryVibe || matchesVibesArray || matchesCategories || matchesFoodAlias;
+      });
+
+  const today = new Date().toISOString().split('T')[0];
+  const activeTripStatus = (() => {
+    if (!realActiveTrip) return null;
+    const start = realActiveTrip.startDate || realActiveTrip.start_date;
+    const end = realActiveTrip.endDate || realActiveTrip.end_date;
+    if (start && end && start <= today && end >= today) {
+      return { label: 'Active Trip (In Progress)', color: 'text-emerald-700 bg-emerald-50 border-emerald-200' };
+    }
+    if (start && start > today) {
+      return { label: 'Upcoming Trip', color: 'text-orange-700 bg-orange-50 border-orange-200' };
+    }
+    if (end && end < today) {
+      return { label: 'Past Trip', color: 'text-slate-600 bg-slate-100 border-slate-200' };
+    }
+    return { label: 'Your Next Trip', color: 'text-orange-700 bg-orange-50 border-orange-200' };
+  })();
 
   return (
     <div className="min-h-screen pb-24 md:pb-12 flex flex-col bg-[#FAFAF9] text-slate-900 font-sans selection:bg-orange-500 selection:text-white">
@@ -328,12 +436,12 @@ export default function DashboardPage() {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-orange-600">
-                    Your Active Trip
+                  <span className={`text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${activeTripStatus?.color || 'text-orange-700 bg-orange-50 border-orange-200'}`}>
+                    {activeTripStatus?.label || 'Your Next Trip'}
                   </span>
                   <span className="text-xs text-slate-400">·</span>
                   <span className="text-xs text-slate-500">
-                    {realActiveTrip.startDate ? `Starts ${realActiveTrip.startDate}` : 'Upcoming'}
+                    {realActiveTrip.startDate ? `Starts ${realActiveTrip.startDate}` : 'Dates planned'}
                   </span>
                 </div>
                 <h3 className="text-xl sm:text-2xl font-serif-editorial font-bold text-slate-900">
@@ -393,7 +501,7 @@ export default function DashboardPage() {
                   <button
                     key={vibe.id}
                     onClick={() => setActiveVibe(vibe.id)}
-                    className={`px-3 py-1.5 rounded-full text-xs font-medium shrink-0 transition-colors ${
+                    className={`px-3 py-1.5 rounded-full text-xs font-medium shrink-0 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-1 cursor-pointer ${
                       isActive
                         ? 'bg-orange-500 text-white font-semibold'
                         : 'bg-white text-slate-600 hover:text-slate-900 border border-slate-200'
@@ -427,10 +535,10 @@ export default function DashboardPage() {
                       </span>
                       <button
                         onClick={() => toggleFavorite(dest.id, dest.title)}
-                        className="p-1.5 rounded-full bg-white/90 text-slate-700 hover:text-rose-500 transition-colors shadow-2xs"
+                        className="w-8 h-8 rounded-full bg-white/90 text-slate-700 hover:text-rose-500 transition-colors shadow-2xs flex items-center justify-center cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500"
                         aria-label="Save destination"
                       >
-                        <Heart className={`w-3.5 h-3.5 ${savedFavorites[dest.id] ? 'fill-rose-500 text-rose-500' : ''}`} />
+                        <Heart className={`w-4 h-4 ${savedFavorites[dest.id] ? 'fill-rose-500 text-rose-500' : ''}`} />
                       </button>
                     </div>
                   </div>
@@ -536,14 +644,14 @@ export default function DashboardPage() {
                 <Compass className="w-4 h-4 text-orange-500" /> Weekend Escape Finder
               </span>
               <h2 className="text-3xl font-serif-editorial font-bold text-slate-900 mt-1">
-                Quick 2 & 3-Day Drive Escapes
+                Weekend Drive Escapes
               </h2>
               <p className="text-xs text-slate-600 mt-1 font-medium">
-                Short weekend getaways curated by drive distance & scenic roadtrip routes.
+                Short 2 & 3-day getaways curated by drive distance & scenic roadtrip routes from Bengaluru.
               </p>
             </div>
             <span className="px-3 py-1 rounded-full bg-white text-slate-700 text-xs font-bold border border-slate-200 shadow-2xs">
-              📍 From Your City
+              📍 Escapes from Bengaluru
             </span>
           </div>
 

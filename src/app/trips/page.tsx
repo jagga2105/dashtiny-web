@@ -38,7 +38,7 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { apiService } from '@/services/api';
 
-type TripTab = 'itinerary' | 'overview' | 'map' | 'bookings' | 'budget' | 'squad';
+type TripTab = 'plan' | 'map' | 'bookings' | 'budget' | 'people';
 
 interface AIDiffChange {
   action: string;
@@ -53,13 +53,48 @@ interface AIDiffChange {
 
 export default function ActiveTripsPage() {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<TripTab>('itinerary');
+  const [activeTab, setActiveTab] = useState<TripTab>('plan');
   const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
   const [trips, setTrips] = useState<any[]>([]);
   const [activeTripIndex, setActiveTripIndex] = useState(0);
   const [realBookings, setRealBookings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [removedActivity, setRemovedActivity] = useState<{ activity: any; dayIndex: number; itemIndex: number } | null>(null);
+
+  const handleRemoveActivity = (act: any, dayIdx: number, itemIdx: number) => {
+    setRemovedActivity({ activity: act, dayIndex: dayIdx, itemIndex: itemIdx });
+    setTrips((prevTrips) => {
+      const copy = [...prevTrips];
+      const curTrip = { ...copy[activeTripIndex] };
+      const days = [...curTrip.days];
+      const targetDay = { ...days[dayIdx] };
+      targetDay.items = targetDay.items.filter((item: any) => item.id !== act.id);
+      days[dayIdx] = targetDay;
+      curTrip.days = days;
+      copy[activeTripIndex] = curTrip;
+      return copy;
+    });
+  };
+
+  const handleUndoRemove = () => {
+    if (!removedActivity) return;
+    const { activity, dayIndex, itemIndex } = removedActivity;
+    setTrips((prevTrips) => {
+      const copy = [...prevTrips];
+      const curTrip = { ...copy[activeTripIndex] };
+      const days = [...curTrip.days];
+      const targetDay = { ...days[dayIndex] };
+      const items = [...targetDay.items];
+      items.splice(itemIndex, 0, activity);
+      targetDay.items = items;
+      days[dayIndex] = targetDay;
+      curTrip.days = days;
+      copy[activeTripIndex] = curTrip;
+      return copy;
+    });
+    setRemovedActivity(null);
+  };
 
   // Day filter for Itinerary & Interactive Map
   const [selectedDayIdx, setSelectedDayIdx] = useState<number | 'all'>('all');
@@ -371,12 +406,11 @@ export default function ActiveTripsPage() {
               {/* Primary Cockpit Navigation Tabs */}
               <div className="flex bg-slate-100 p-1 rounded-2xl border border-slate-200 overflow-x-auto no-scrollbar pt-1">
                 {[
-                  { id: 'itinerary' as TripTab, label: 'Itinerary Schedule', icon: CalendarDays },
-                  { id: 'overview' as TripTab, label: 'Overview', icon: Luggage },
-                  { id: 'map' as TripTab, label: 'Interactive Map', icon: Compass },
+                  { id: 'plan' as TripTab, label: 'Plan', icon: CalendarDays },
+                  { id: 'map' as TripTab, label: 'Route View', icon: Compass },
                   { id: 'bookings' as TripTab, label: `Bookings (${realBookings.length})`, icon: Ticket },
-                  { id: 'budget' as TripTab, label: 'Budget & Split', icon: DollarSign },
-                  { id: 'squad' as TripTab, label: 'Squad Room', icon: Users },
+                  { id: 'budget' as TripTab, label: 'Budget', icon: DollarSign },
+                  { id: 'people' as TripTab, label: 'People', icon: Users },
                 ].map((tab) => {
                   const Icon = tab.icon;
                   const isActive = activeTab === tab.id;
@@ -384,7 +418,7 @@ export default function ActiveTripsPage() {
                     <button
                       key={tab.id}
                       onClick={() => setActiveTab(tab.id)}
-                      className={`flex-1 py-2 px-3.5 rounded-xl text-xs transition-all flex items-center justify-center gap-1.5 shrink-0 cursor-pointer ${
+                      className={`flex-1 py-2 px-3.5 rounded-xl text-xs transition-all flex items-center justify-center gap-1.5 shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 ${
                         isActive
                           ? 'bg-white text-orange-600 font-bold shadow-2xs'
                           : 'text-slate-600 hover:text-slate-900 font-medium'
@@ -398,9 +432,31 @@ export default function ActiveTripsPage() {
               </div>
             </div>
 
-            {/* TAB: ITINERARY SCHEDULE (COCKPIT CORE) */}
-            {activeTab === 'itinerary' && (
+            {/* TAB: PLAN (COCKPIT CORE) */}
+            {activeTab === 'plan' && (
               <div className="space-y-6">
+                {/* Compact Trip Overview Hero */}
+                <div className="relative h-44 sm:h-52 rounded-2xl overflow-hidden shadow-xs border border-slate-200">
+                  <Image
+                    src={currentTrip.cover_image || currentTrip.days?.[0]?.coverImage || "https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=1200&auto=format&fit=crop&q=80"}
+                    alt={currentTrip.destination}
+                    fill
+                    className="object-cover"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-black/30 to-transparent" />
+                  <div className="absolute bottom-4 left-5 right-5 flex flex-col sm:flex-row sm:items-end justify-between gap-3 text-white">
+                    <div className="space-y-1">
+                      <span className="px-2.5 py-0.5 rounded-full bg-emerald-600 text-[10px] font-semibold uppercase tracking-wider">
+                        Planned itinerary
+                      </span>
+                      <h2 className="text-xl sm:text-2xl font-serif-editorial font-bold">{currentTrip.destination}</h2>
+                      <p className="text-xs text-slate-200">
+                        {currentTrip.startDate} – {currentTrip.endDate} • {currentTrip.travellers || 2} Travelers • Budget: ₹{currentTrip.budget?.toLocaleString('en-IN')}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
                 {/* Day Selector Pills */}
                 <div className="flex items-center justify-between gap-3 overflow-x-auto pb-1 no-scrollbar">
                   <div className="flex items-center gap-1.5">
@@ -441,7 +497,7 @@ export default function ActiveTripsPage() {
                     {(selectedDayIdx === 'all'
                       ? currentTrip.days || []
                       : (currentTrip.days || []).filter((d: any) => d.dayNumber === selectedDayIdx)
-                    ).map((day: any) => (
+                    ).map((day: any, dIdx: number) => (
                       <div key={day.dayNumber} className="space-y-3">
                         {/* Day Header Banner */}
                         <div className="flex items-center justify-between bg-slate-100/80 px-4 py-2.5 rounded-2xl border border-slate-200/80">
@@ -573,14 +629,9 @@ export default function ActiveTripsPage() {
                                     </button>
                                     <button
                                       type="button"
-                                      disabled={isExecutingCopilot}
-                                      onClick={() =>
-                                        handleExecuteCopilotAction(
-                                          `Remove ${act.description} from Day ${day.dayNumber}`
-                                        )
-                                      }
-                                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-rose-600 hover:text-rose-700 hover:bg-rose-50 border border-rose-200 transition-all cursor-pointer font-medium disabled:opacity-50"
-                                      title="Remove from itinerary"
+                                      onClick={() => handleRemoveActivity(act, dIdx, aIdx)}
+                                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-rose-600 hover:text-rose-700 hover:bg-rose-50 border border-rose-200 transition-all cursor-pointer font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500"
+                                      title="Remove from itinerary (can undo)"
                                     >
                                       <Trash2 className="w-3 h-3" />
                                       <span>Remove</span>
@@ -650,12 +701,17 @@ export default function ActiveTripsPage() {
                               const isHovered = hoveredWaypoint?.id === act.id;
 
                               return (
-                                <div
+                                <button
+                                  type="button"
                                   key={act.id || idx}
                                   style={{ left: `${posX}%`, top: `${posY}%` }}
-                                  className="absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer group z-20"
+                                  className="absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer group z-20 min-w-[28px] min-h-[28px] flex items-center justify-center p-0.5 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500"
+                                  aria-label={`Stop ${act.seqNum || idx + 1}: ${act.description} at ${act.location}`}
+                                  onClick={() => setHoveredWaypoint(hoveredWaypoint?.id === act.id ? null : act)}
                                   onMouseEnter={() => setHoveredWaypoint(act)}
                                   onMouseLeave={() => setHoveredWaypoint(null)}
+                                  onFocus={() => setHoveredWaypoint(act)}
+                                  onBlur={() => setHoveredWaypoint(null)}
                                 >
                                   {/* Node badge */}
                                   <div
@@ -668,7 +724,7 @@ export default function ActiveTripsPage() {
                                     {act.seqNum || idx + 1}
                                   </div>
 
-                                  {/* Tooltip on hover */}
+                                  {/* Tooltip on hover/focus */}
                                   <div
                                     className={`absolute left-1/2 -translate-x-1/2 bottom-9 w-48 p-2.5 rounded-xl bg-slate-900/95 backdrop-blur-md border border-slate-700 shadow-xl text-left pointer-events-none transition-all ${
                                       isHovered ? 'opacity-100 scale-100' : 'opacity-0 scale-95'
@@ -678,7 +734,7 @@ export default function ActiveTripsPage() {
                                     <p className="text-xs font-semibold text-white truncate">{act.description}</p>
                                     <p className="text-[10px] text-slate-400 truncate">{act.location}</p>
                                   </div>
-                                </div>
+                                </button>
                               );
                             })}
                           </>
@@ -704,6 +760,33 @@ export default function ActiveTripsPage() {
                         >
                           Full Map View →
                         </button>
+                      </div>
+                    </Card>
+
+                    {/* Pre-Trip Checklist in Plan sidebar */}
+                    <Card className="p-5 rounded-2xl bg-white border border-slate-200 shadow-2xs space-y-3">
+                      <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                        <h4 className="text-xs font-bold font-serif-editorial text-slate-900">Pre-Trip Checklist</h4>
+                        <span className="text-[11px] text-orange-600 font-semibold">
+                          {checklist.filter((c) => c.done).length}/{checklist.length} Done
+                        </span>
+                      </div>
+                      <div className="space-y-1.5">
+                        {checklist.map((item) => (
+                          <button
+                            key={item.id}
+                            type="button"
+                            onClick={() => toggleChecklist(item.id)}
+                            className={`w-full text-left p-2.5 rounded-xl border flex items-start gap-2.5 transition-all cursor-pointer ${
+                              item.done
+                                ? 'bg-emerald-50/40 border-emerald-200 text-slate-400 line-through'
+                                : 'bg-slate-50 border-slate-200 text-slate-800 font-medium hover:bg-slate-100'
+                            }`}
+                          >
+                            <CheckCircle2 className={`w-3.5 h-3.5 shrink-0 mt-0.5 ${item.done ? 'text-emerald-600' : 'text-slate-300'}`} />
+                            <span className="text-[11px]">{item.task}</span>
+                          </button>
+                        ))}
                       </div>
                     </Card>
                   </div>
@@ -817,92 +900,6 @@ export default function ActiveTripsPage() {
               </div>
             )}
 
-            {/* TAB: OVERVIEW */}
-            {activeTab === 'overview' && (
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                <div className="lg:col-span-2 space-y-6">
-                  {/* Hero Cover Banner */}
-                  <div className="relative h-64 rounded-3xl overflow-hidden shadow-sm border border-slate-200">
-                    <Image
-                      src={currentTrip.cover_image || currentTrip.days?.[0]?.coverImage || "https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=1200&auto=format&fit=crop&q=80"}
-                      alt={currentTrip.destination}
-                      fill
-                      className="object-cover"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-black/20 to-transparent" />
-                    <div className="absolute bottom-6 left-6 right-6 flex items-end justify-between text-white">
-                      <div className="space-y-1">
-                        <span className="px-2.5 py-0.5 rounded-full bg-emerald-600 text-[10px] font-semibold uppercase">
-                          Confirmed Itinerary
-                        </span>
-                        <h3 className="text-2xl font-serif-editorial font-bold">{currentTrip.destination}</h3>
-                        <p className="text-xs text-slate-200">
-                          {currentTrip.startDate} – {currentTrip.endDate} • Budget: ₹{currentTrip.budget?.toLocaleString('en-IN')}
-                        </p>
-                      </div>
-                      <Button
-                        size="sm"
-                        onClick={() => setActiveTab('itinerary')}
-                        className="bg-white hover:bg-slate-100 text-slate-900 text-xs font-semibold"
-                      >
-                        View Schedule →
-                      </Button>
-                    </div>
-                  </div>
-
-                  {/* Day Highlights Breakdown */}
-                  <div className="space-y-3">
-                    <h3 className="text-lg font-serif-editorial font-bold text-slate-900">Itinerary Highlights</h3>
-                    <div className="space-y-3">
-                      {currentTrip.days?.map((day: any, idx: number) => (
-                        <Card key={idx} className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200 space-y-2">
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs font-bold text-orange-600">Day {day.dayNumber} · {day.title}</span>
-                            <span className="text-xs text-slate-500">{day.weather}</span>
-                          </div>
-                          <div className="space-y-1 pt-1">
-                            {day.activities?.map((act: any, aIdx: number) => (
-                              <div key={aIdx} className="flex items-center justify-between text-xs text-slate-700">
-                                <span className="font-semibold text-slate-900">{act.time} — {act.description}</span>
-                                <span className="text-[11px] text-slate-400">{act.location}</span>
-                              </div>
-                            ))}
-                          </div>
-                        </Card>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Right Column: Pre-Trip Checklist */}
-                <div className="space-y-6">
-                  <Card className="p-6 rounded-3xl bg-white border border-slate-200 shadow-sm space-y-4">
-                    <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                      <h4 className="text-sm font-bold font-serif-editorial text-slate-900">Pre-Trip Checklist</h4>
-                      <span className="text-xs text-orange-600 font-semibold">
-                        {checklist.filter((c) => c.done).length}/{checklist.length} Done
-                      </span>
-                    </div>
-                    <div className="space-y-2">
-                      {checklist.map((item) => (
-                        <button
-                          key={item.id}
-                          onClick={() => toggleChecklist(item.id)}
-                          className={`w-full text-left p-3 rounded-xl border flex items-start gap-3 transition-all cursor-pointer ${
-                            item.done
-                              ? 'bg-emerald-50/40 border-emerald-200 text-slate-400 line-through'
-                              : 'bg-slate-50 border-slate-200 text-slate-800 font-medium'
-                          }`}
-                        >
-                          <CheckCircle2 className={`w-4 h-4 shrink-0 mt-0.5 ${item.done ? 'text-emerald-600' : 'text-slate-300'}`} />
-                          <span className="text-xs">{item.task}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </Card>
-                </div>
-              </div>
-            )}
 
             {/* TAB: INTERACTIVE MAP (FULL TACTICAL VIEW) */}
             {activeTab === 'map' && (
@@ -910,8 +907,8 @@ export default function ActiveTripsPage() {
                 <Card className="p-6 rounded-3xl bg-slate-950 border border-slate-800 text-white relative overflow-hidden">
                   <div className="flex items-center justify-between pb-4 border-b border-slate-800">
                     <div>
-                      <h3 className="text-base font-serif-editorial font-bold text-white">Spatial Route Radar</h3>
-                      <p className="text-xs text-slate-400">Waypoints and transit connections for {currentTrip.destination}</p>
+                      <h3 className="text-base font-serif-editorial font-bold text-white">Trip Route Radar</h3>
+                      <p className="text-xs text-slate-400">Waypoints and route sequencing for {currentTrip.destination}</p>
                     </div>
                     <span className="font-mono text-xs text-orange-400">{validPoints.length} Geocoded Pins</span>
                   </div>
@@ -943,19 +940,28 @@ export default function ActiveTripsPage() {
                           })}
                         </svg>
 
-                        {validPoints.map((act: any, idx: number) => (
-                          <div
-                            key={act.id || idx}
-                            style={{ left: `${getX(Number(act.lng))}%`, top: `${getY(Number(act.lat))}%` }}
-                            className="absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer z-20"
-                            onMouseEnter={() => setHoveredWaypoint(act)}
-                            onMouseLeave={() => setHoveredWaypoint(null)}
-                          >
-                            <div className="w-8 h-8 rounded-xl bg-orange-500 text-white font-bold text-xs flex items-center justify-center shadow-lg">
-                              {act.seqNum || idx + 1}
-                            </div>
-                          </div>
-                        ))}
+                        {validPoints.map((act: any, idx: number) => {
+                          const isSelected = hoveredWaypoint?.id === act.id || hoveredWaypoint?.description === act.description;
+                          return (
+                            <button
+                              key={act.id || idx}
+                              type="button"
+                              aria-label={`Stop ${act.seqNum || idx + 1}: ${act.description} at ${act.time}`}
+                              style={{ left: `${getX(Number(act.lng))}%`, top: `${getY(Number(act.lat))}%` }}
+                              className={`absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer z-20 transition-all p-1 min-w-[28px] min-h-[28px] flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 rounded-xl ${
+                                isSelected ? 'scale-125 z-30' : 'hover:scale-110'
+                              }`}
+                              onClick={() => setHoveredWaypoint(isSelected ? null : act)}
+                              onMouseEnter={() => setHoveredWaypoint(act)}
+                            >
+                              <div className={`w-8 h-8 rounded-xl font-bold text-xs flex items-center justify-center shadow-lg transition-colors ${
+                                isSelected ? 'bg-white text-orange-600 ring-2 ring-orange-500' : 'bg-orange-500 text-white'
+                              }`}>
+                                {act.seqNum || idx + 1}
+                              </div>
+                            </button>
+                          );
+                        })}
                       </>
                     ) : (
                       <div className="flex flex-col items-center justify-center h-full text-center">
@@ -1081,8 +1087,8 @@ export default function ActiveTripsPage() {
               </div>
             )}
 
-            {/* TAB: SQUAD ROOM */}
-            {activeTab === 'squad' && (
+            {/* TAB: PEOPLE / SQUAD */}
+            {activeTab === 'people' && (
               <SquadRoomHub
                 squadId={currentTrip.squad_room_code || 'ROOM'}
                 onOpenInviteModal={() => setIsGroupModalOpen(true)}
@@ -1091,6 +1097,24 @@ export default function ActiveTripsPage() {
           </>
         )}
       </main>
+
+      {/* Undo Snackbar for Non-Destructive Itinerary Deletion */}
+      {removedActivity && (
+        <aside
+          role="status"
+          aria-live="polite"
+          className="fixed bottom-20 sm:bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-4 py-2.5 rounded-2xl bg-slate-950 text-white shadow-xl border border-slate-800 animate-in fade-in slide-in-from-bottom-2"
+        >
+          <span className="text-xs font-medium">Activity removed</span>
+          <button
+            type="button"
+            onClick={handleUndoRemove}
+            className="text-xs font-bold text-orange-400 hover:text-orange-300 underline cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 rounded px-1"
+          >
+            Undo
+          </button>
+        </aside>
+      )}
 
       <GroupCollaborationModal
         isOpen={isGroupModalOpen}
