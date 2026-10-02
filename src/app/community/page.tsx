@@ -98,7 +98,8 @@ export default function CommunityPage() {
 
   const handleUsePlan = (trip: any) => {
     const params = new URLSearchParams();
-    params.set('destination', trip.destination);
+    if (trip.id) params.set('source_trip_id', String(trip.id));
+    if (trip.destination) params.set('destination', trip.destination);
     if (trip.duration) {
       const days = trip.duration.replace(/\D/g, '');
       if (days) params.set('duration', days);
@@ -109,8 +110,13 @@ export default function CommunityPage() {
     }
     if (trip.trip_style && trip.trip_style.length > 0) {
       params.set('vibe', trip.trip_style[0].toLowerCase());
+      params.set('interests', trip.trip_style.join(','));
     }
-    params.set('query', `Plan a trip to ${trip.destination} inspired by ${trip.author_name}'s itinerary: ${trip.content.slice(0, 100)}`);
+    if (trip.author_name) {
+      params.set('author', trip.author_name);
+    }
+    params.set('adapt', 'true');
+    params.set('query', `Adapt ${trip.author_name}'s itinerary for ${trip.destination} with optimal pacing and activities`);
     router.push(`/planner?${params.toString()}`);
   };
 
@@ -148,8 +154,8 @@ export default function CommunityPage() {
   };
 
   const handleConnect = (compId: string) => {
-    setConnectedUsers({ ...connectedUsers, [compId]: true });
-    updateCoins(10);
+    setConnectedUsers((prev) => ({ ...prev, [compId]: !prev[compId] }));
+    // No unearned coin reward until actual server-side squad invitation is confirmed
   };
 
   const defaultTrips: CommunityTripPost[] = [
@@ -385,7 +391,7 @@ export default function CommunityPage() {
                       className="bg-orange-600 hover:bg-orange-700 text-white font-semibold text-xs shadow-2xs cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500"
                     >
                       <Sparkles className="w-3.5 h-3.5 mr-1" />
-                      <span>Use as starting point →</span>
+                      <span>Adapt this itinerary →</span>
                     </Button>
                   </div>
 

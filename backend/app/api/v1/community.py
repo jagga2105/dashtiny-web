@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.db.database import get_db
-from app.models.models import CommunityPost, User, UserProfile
+from app.models.models import CommunityPost, User, UserProfile, PostLike
 from app.api.deps import get_current_user
 
 router = APIRouter(prefix="/community", tags=["Community Feed & Squad Match"])
@@ -82,13 +82,35 @@ def create_community_post(
     }
 
 @router.post("/posts/{post_id}/like")
-def like_community_post(post_id: str, db: Session = Depends(get_db)):
+def like_community_post(
+    post_id: str,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     """
-    Increment like count for community post in PostgreSQL.
+    Authenticated like for community post.
+    Enforces unique like per traveler in PostgreSQL (post_likes table).
     """
     post = db.query(CommunityPost).filter(CommunityPost.id == post_id).first()
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
+
+    existing_like = db.query(PostLike).filter(
+        PostLike.post_id == post_id,
+        PostLike.user_id == user.id
+    ).first()
+
+    if existing_like:
+        return {
+            "status": "already_liked",
+            "post_id": post.id,
+            "likes_count": post.likes_count,
+            "message": "You have already liked this getaway post."
+        }
+
+    new_like = PostLike(post_id=post.id, user_id=user.id)
+    db.add(new_like)
     post.likes_count = (post.likes_count or 0) + 1
     db.commit()
     return {"status": "liked", "post_id": post.id, "likes_count": post.likes_count}
+

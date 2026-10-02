@@ -63,7 +63,13 @@ def search_hotels_endpoint(
     Search and normalize live stays inventory into HotelOffer schema.
     Consumes destination, guests, check_in, check_out, and room_type.
     """
-    return search_hotels(destination=destination, guests=guests)
+    return search_hotels(
+        destination=destination,
+        guests=guests,
+        check_in=check_in,
+        check_out=check_out,
+        room_type=room_type
+    )
 
 @router.post("/create")
 def create_booking(
@@ -72,7 +78,10 @@ def create_booking(
     db: Session = Depends(get_db)
 ):
     """
-    Save real travel booking reference in PostgreSQL, validate trip ownership, and attach to Trip.
+    Save travel booking reference in PostgreSQL, validate trip ownership, and attach to Trip.
+    Truth boundary: User-provided booking reference carries status=saved_reference,
+    provenance=SAVED_REFERENCE, source=USER_PROVIDED, verification=UNVERIFIED.
+    Only partner-confirmed API webhooks carry PROVIDER_VERIFIED.
     """
     # Verify Trip ownership / membership if trip_id is provided
     if request.trip_id:
@@ -97,6 +106,10 @@ def create_booking(
     random_num = random.randint(10000, 99999)
     pnr_code = request.pnr_ref or f"DASH-REF-{category_prefix}-{random_num}"
 
+    merged_details = dict(request.details or {})
+    merged_details.setdefault("source", "USER_PROVIDED")
+    merged_details.setdefault("verification", "UNVERIFIED")
+
     new_booking = Booking(
         trip_id=request.trip_id,
         user_id=user.id,
@@ -107,8 +120,8 @@ def create_booking(
         currency=request.currency or "INR",
         status="saved_reference",
         pnr_ref=pnr_code,
-        provenance="PROVIDER_VERIFIED",
-        details=request.details or {}
+        provenance="SAVED_REFERENCE",
+        details=merged_details
     )
     db.add(new_booking)
 
@@ -123,12 +136,16 @@ def create_booking(
     return {
         "status": "saved_reference",
         "booking_id": new_booking.id,
+        "trip_id": new_booking.trip_id,
         "pnr_ref": new_booking.pnr_ref,
         "title": new_booking.title,
         "provider": new_booking.provider,
         "category": new_booking.category,
         "amount": float(new_booking.amount),
         "currency": new_booking.currency,
+        "provenance": "SAVED_REFERENCE",
+        "source": "USER_PROVIDED",
+        "verification": "UNVERIFIED",
         "coins_earned": 50,
         "message": f"Booking reference successfully saved to your trip workspace for {new_booking.provider}!"
     }
@@ -145,6 +162,7 @@ def get_my_bookings(
     return [
         {
             "id": b.id,
+            "trip_id": b.trip_id,
             "category": b.category,
             "provider": b.provider,
             "title": b.title,
@@ -152,8 +170,12 @@ def get_my_bookings(
             "currency": b.currency,
             "status": b.status,
             "pnr_ref": b.pnr_ref,
+            "provenance": b.provenance or "SAVED_REFERENCE",
+            "source": (b.details or {}).get("source", "USER_PROVIDED" if b.status == "saved_reference" else "PROVIDER"),
+            "verification": (b.details or {}).get("verification", "UNVERIFIED" if b.status == "saved_reference" else "VERIFIED"),
             "created_at": str(b.created_at),
             "details": b.details
         }
         for b in bookings
     ]
+

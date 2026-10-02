@@ -21,6 +21,15 @@ function PlannerContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialQuery = searchParams.get('query') || '';
+  const sourceTripId = searchParams.get('source_trip_id') || '';
+  const paramDestination = searchParams.get('destination') || '';
+  const paramDuration = searchParams.get('duration') || '';
+  const paramBudget = searchParams.get('budget') || '';
+  const paramVibe = searchParams.get('vibe') || '';
+  const paramInterests = searchParams.get('interests') || '';
+  const paramAuthor = searchParams.get('author') || '';
+  const isAdapting = Boolean(sourceTripId || searchParams.get('adapt') === 'true');
+
   const { currentItinerary, setCurrentItinerary, addItinerary } = usePlannerStore();
   const { isAuthenticated } = useAuthStore();
   const [selectedPersona, setSelectedPersona] = useState<PersonaType>('solo');
@@ -36,7 +45,8 @@ function PlannerContent() {
     async function loadLatest() {
       if (initialQuery) {
         setPromptText(initialQuery);
-        // Do not auto-generate on load; user sees "Here's what I understood" and clicks Create my trip
+      } else if (paramDestination) {
+        setPromptText(`Plan a trip to ${paramDestination}${paramDuration ? ` for ${paramDuration} days` : ''}${paramBudget ? ` with budget ₹${parseInt(paramBudget, 10).toLocaleString('en-IN')}` : ''}`);
       } else if (!currentItinerary) {
         try {
           const myTrips = await apiService.getMyTrips();
@@ -59,18 +69,23 @@ function PlannerContent() {
       }
     }
     loadLatest();
-  }, [initialQuery]);
+  }, [initialQuery, paramDestination, paramDuration, paramBudget]);
 
   const handleBuildPlan = async (queryText?: string) => {
     const textToUse = queryText || promptText;
-    if (!textToUse.trim()) return;
+    if (!textToUse.trim() && !paramDestination) return;
 
     setIsGenerating(true);
     setSaveSuccessMsg(null);
     setErrorMsg(null);
 
-    // Real natural language request parsing
+    // Natural language request parsing fallback to structured URL params
     const parsed = parseTravelPrompt(textToUse);
+    const dest = parsed.destination || paramDestination || 'Kyoto';
+    const days = parsed.days_count || (paramDuration ? parseInt(paramDuration, 10) : 5);
+    const budgetVal = parsed.budget || (paramBudget ? parseInt(paramBudget, 10) : 50000);
+    const vibeVal = parsed.vibe || paramVibe || 'culture';
+    const interestsVal = parsed.interests && parsed.interests.length > 0 ? parsed.interests : (paramInterests ? paramInterests.split(',') : ['culture', 'sightseeing']);
 
     // Synchronize persona: if prompt specifies companions or persona, prioritize it and sync UI
     const hasExplicitPersonaInPrompt = /(solo|alone|partner|couple|romantic|wife|husband|girlfriend|boyfriend|family|kids|children|parents|squad|friends|gang|buddies|nomad|workation)/i.test(textToUse);
@@ -81,19 +96,19 @@ function PlannerContent() {
 
     try {
       const res = await apiService.generateItinerary({
-        destination: parsed.destination,
+        destination: dest,
         origin: parsed.origin,
         start_date: parsed.start_date,
         end_date: parsed.end_date,
-        days_count: parsed.days_count,
+        days_count: days,
         travellers: parsed.travellers,
-        budget: parsed.budget,
+        budget: budgetVal,
         currency: parsed.currency || 'INR',
         persona: effectivePersona,
-        vibe: parsed.vibe,
-        interests: parsed.interests,
-        raw_prompt: textToUse,
-        prompt: textToUse,
+        vibe: vibeVal,
+        interests: interestsVal,
+        raw_prompt: textToUse || `Trip to ${dest}`,
+        prompt: textToUse || `Trip to ${dest}`,
       });
 
       if (res && res.id) {
@@ -136,13 +151,17 @@ function PlannerContent() {
         <div className="space-y-1 text-center sm:text-left">
           <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-orange-50 text-orange-700 text-xs font-semibold border border-orange-200">
             <Sparkles className="w-3.5 h-3.5" />
-            <span>AI Travel Planner</span>
+            <span>{isAdapting ? 'Adapt Community Itinerary' : 'AI Travel Planner'}</span>
           </div>
           <h1 className="text-3xl sm:text-4xl font-serif-editorial font-bold text-slate-900 tracking-tight">
-            Plan a trip
+            {isAdapting ? 'Adapt this itinerary' : 'Plan a trip'}
           </h1>
           <p className="text-slate-600 text-sm">
-            Tell DAIna what you're looking for. We'll build a personalized day-by-day plan with stays, dining, and activities.
+            {isAdapting
+              ? (paramAuthor
+                  ? `Adapting ${paramDestination || 'this'} itinerary from ${paramAuthor} with your preferred pace and budget.`
+                  : `Adapting ${paramDestination || 'this'} itinerary with personalized pacing and verified recommendations.`)
+              : "Tell DAIna what you're looking for. We'll build a personalized day-by-day plan with stays, dining, and activities."}
           </p>
         </div>
 
@@ -184,7 +203,7 @@ function PlannerContent() {
         <section className="p-6 rounded-2xl bg-white border border-slate-200 shadow-sm space-y-4">
           <div className="flex items-center justify-between">
             <label htmlFor="trip-prompt" className="text-xs font-bold uppercase tracking-wider text-slate-700">
-              Tell DAIna about your trip
+              {isAdapting ? 'Customize your adapted itinerary' : 'Tell DAIna about your trip'}
             </label>
             <span className="text-[11px] text-slate-500 font-medium">
               {activeItinerary ? 'Trip saved automatically' : 'Nothing to set up — just describe your trip'}
@@ -223,17 +242,69 @@ function PlannerContent() {
                 variant="primary"
                 size="md"
                 isLoading={isGenerating}
-                disabled={!promptText.trim()}
+                disabled={!promptText.trim() && !paramDestination}
                 className="bg-orange-500 hover:bg-orange-600 text-white font-semibold px-6 py-2.5 rounded-xl transition-colors cursor-pointer text-xs"
               >
                 <Sparkles className="w-4 h-4 mr-1.5" />
-                {isGenerating ? 'Building your trip...' : 'Create my trip'}
+                {isGenerating ? 'Working out the best option…' : (isAdapting ? 'Adapt & create trip' : 'Create my trip')}
               </Button>
             </div>
           </form>
 
+          {/* Conversational Ambiguity State — DAIna asks one focused question */}
+          {promptText.trim().length > 3 && (!parsedIntent || !parsedIntent.destination) && !paramDestination && (
+            <div className="mt-4 p-4 rounded-xl bg-amber-50/80 border border-amber-200 space-y-3 animate-in fade-in">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-amber-950 flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                  I can help with that. Where would you like to go?
+                </span>
+                <span className="text-[11px] text-amber-800 font-medium">Pick a destination to proceed</span>
+              </div>
+              <p className="text-xs text-amber-900">
+                Tell me your preferred destination, or tap one of these spots matching your vibe:
+              </p>
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                {(parsedIntent?.vibe === 'coastal' || /beach|sea|coast|sand/i.test(promptText)
+                  ? [
+                      { name: 'South Goa', vibe: 'Quiet beaches & cliffside cafes' },
+                      { name: 'Gokarna', vibe: 'Serene coves & temples' },
+                      { name: 'Andaman (Havelock)', vibe: 'Turquoise waters & coral reef' },
+                      { name: 'Bali', vibe: 'Tropical villas & surf' },
+                    ]
+                  : /mountain|hill|trek|snow|cold/i.test(promptText)
+                  ? [
+                      { name: 'Manali', vibe: 'Pine chalets & Solang pass' },
+                      { name: 'Dharamshala', vibe: 'Tea gardens & monastery peace' },
+                      { name: 'Gulmarg', vibe: 'Alpine meadows & cable cars' },
+                    ]
+                  : [
+                      { name: 'Kyoto, Japan', vibe: 'Historic temples & matcha culture' },
+                      { name: 'Udaipur, Rajasthan', vibe: 'Lakeside palaces & heritage' },
+                      { name: 'South Goa', vibe: 'Relaxed coastal escape' },
+                      { name: 'Coorg', vibe: 'Coffee plantations & mist' },
+                    ]
+                ).map((item) => (
+                  <button
+                    key={item.name}
+                    type="button"
+                    onClick={() => {
+                      const newPrompt = promptText.trim() ? `${promptText.trim()} to ${item.name}` : `Trip to ${item.name}`;
+                      setPromptText(newPrompt);
+                    }}
+                    className="px-3 py-1.5 rounded-lg bg-white border border-amber-200 hover:border-amber-400 text-xs font-semibold text-slate-800 shadow-2xs hover:bg-amber-100/50 transition-colors flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <MapPin className="w-3 h-3 text-orange-500" />
+                    <span>{item.name}</span>
+                    <span className="text-[10px] text-slate-400 font-normal">({item.vibe})</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Conversational Confirmation Card */}
-          {parsedIntent && parsedIntent.destination && (
+          {parsedIntent && (parsedIntent.destination || paramDestination) && (
             <div className="mt-4 p-4 rounded-xl bg-orange-50/70 border border-orange-200 space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-orange-950 flex items-center gap-1.5">
@@ -245,25 +316,25 @@ function PlannerContent() {
 
               <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-800">
                 <span className="px-2.5 py-1 rounded-lg bg-white border border-orange-200/80 shadow-2xs">
-                  📍 {parsedIntent.destination}
+                  📍 {parsedIntent.destination || paramDestination}
                 </span>
                 <span className="px-2.5 py-1 rounded-lg bg-white border border-orange-200/80 shadow-2xs">
-                  ⏱️ {parsedIntent.days_count} Days
+                  ⏱️ {parsedIntent.days_count || (paramDuration ? `${paramDuration} Days` : '5 Days')}
                 </span>
                 <span className="px-2.5 py-1 rounded-lg bg-white border border-orange-200/80 shadow-2xs">
                   👥 {parsedIntent.travellers} {parsedIntent.travellers === 1 ? 'traveler' : 'travelers'}
                 </span>
                 <span className="px-2.5 py-1 rounded-lg bg-white border border-orange-200/80 shadow-2xs">
-                  💰 ₹{parsedIntent.budget.toLocaleString('en-IN')}
+                  💰 ₹{(parsedIntent.budget || (paramBudget ? parseInt(paramBudget, 10) : 50000)).toLocaleString('en-IN')}
                 </span>
                 {parsedIntent.origin && (
                   <span className="px-2.5 py-1 rounded-lg bg-white border border-orange-200/80 shadow-2xs">
                     🛫 From {parsedIntent.origin}
                   </span>
                 )}
-                {parsedIntent.vibe && (
+                {(parsedIntent.vibe || paramVibe) && (
                   <span className="px-2.5 py-1 rounded-lg bg-white border border-orange-200/80 shadow-2xs">
-                    ✨ {parsedIntent.vibe}
+                    ✨ {parsedIntent.vibe || paramVibe}
                   </span>
                 )}
               </div>
@@ -285,7 +356,7 @@ function PlannerContent() {
                   className="bg-orange-600 hover:bg-orange-700 text-white font-semibold text-xs px-4 py-1.5 cursor-pointer shadow-xs"
                 >
                   <Sparkles className="w-3.5 h-3.5 mr-1" />
-                  Create my trip →
+                  {isAdapting ? 'Adapt & create trip →' : 'Create my trip →'}
                 </Button>
               </div>
             </div>
@@ -296,12 +367,8 @@ function PlannerContent() {
             <div className="p-6 rounded-xl bg-slate-50 border border-slate-200 text-center space-y-3 animate-in fade-in">
               <div className="w-8 h-8 rounded-full border-2 border-orange-500 border-t-transparent animate-spin mx-auto" />
               <div className="space-y-1">
-                <p className="text-sm font-semibold text-slate-900">Generating your trip with DAIna...</p>
-                <div className="text-xs text-slate-500 space-y-0.5">
-                  <p>• Finding the best flow for your budget</p>
-                  <p>• Checking travel context and local pacing</p>
-                  <p>• Balancing your food, photography and culture interests</p>
-                </div>
+                <p className="text-sm font-semibold text-slate-900">Working out the best option…</p>
+                <p className="text-xs text-slate-500">Checking your budget and route.</p>
               </div>
             </div>
           )}

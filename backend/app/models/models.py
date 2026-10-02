@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import Column, String, Boolean, Integer, Float, DateTime, ForeignKey, Text, JSON, Numeric, Date, ARRAY
+from sqlalchemy import Column, String, Boolean, Integer, Float, DateTime, ForeignKey, Text, JSON, Numeric, Date, ARRAY, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.db.database import Base
@@ -283,4 +283,15 @@ class RewardVoucher(Base):
     category = Column(String(50), nullable=False)
     logo_url = Column(Text, nullable=True)
     code = Column(String(50), nullable=False)
+
+class PostLike(Base):
+    __tablename__ = "post_likes"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    post_id = Column(String(36), ForeignKey("community_posts.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (UniqueConstraint("post_id", "user_id", name="uq_post_user_like"),)
+
 

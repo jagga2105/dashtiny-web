@@ -164,18 +164,26 @@ export const apiService = {
 
   // Phone OTP Flow (Explicit Dev Passkey)
   async requestOTP(phone: string): Promise<{ success: boolean; message: string; isDev: boolean }> {
+    const isDemoMode = process.env.NEXT_PUBLIC_DEMO_MODE === 'true';
+    if (!isDemoMode) {
+      throw new ApiError('Phone sign-in is disabled. Please use Google or Email sign-in.', 403);
+    }
     const cleanPhone = phone.replace(/[^0-9]/g, '');
     if (cleanPhone.length < 10) {
       throw new ApiError('Please enter a valid 10-digit phone number', 400);
     }
     return {
       success: true,
-      message: `OTP sent to ${phone}. [DEMO PASSKEY: 123456]`,
+      message: 'Development mode: Phone sign-in uses a demo passkey: 123456',
       isDev: true,
     };
   },
 
   async verifyOTP(phone: string, code: string): Promise<AuthResponse> {
+    const isDemoMode = process.env.NEXT_PUBLIC_DEMO_MODE === 'true';
+    if (!isDemoMode) {
+      throw new ApiError('Phone sign-in is disabled in production.', 403);
+    }
     if (code.trim() !== '123456') {
       throw new ApiError('Invalid verification code. Enter demo passkey: 123456', 401);
     }
@@ -201,8 +209,11 @@ export const apiService = {
     return request<any[]>(`/explore/sanctuaries?vibe=${encodeURIComponent(vibe)}`);
   },
 
-  async getDriveEscapes(city: string = 'Bengaluru') {
-    return request<any[]>(`/explore/drives?city=${encodeURIComponent(city)}`);
+  async getDriveEscapes(originCity?: string) {
+    const url = originCity && originCity !== 'Weekend'
+      ? `/explore/drives?origin_city=${encodeURIComponent(originCity)}`
+      : '/explore/drives';
+    return request<any[]>(url);
   },
 
   // Planner API (DAIna AI Getaway Architect)

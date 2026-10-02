@@ -94,18 +94,15 @@ export default function DashboardPage() {
     }
   }, []);
 
+  // 1. Static dashboard data: trips and drive escapes load once on mount
   useEffect(() => {
-    async function loadBackendData() {
+    async function loadDashboardStatic() {
       try {
-        const [sancData, drvData, tripsData] = await Promise.all([
-          apiService.getSanctuaries(activeVibe),
-          apiService.getDriveEscapes('Weekend'),
+        const [drvData, tripsData] = await Promise.all([
+          apiService.getDriveEscapes(),
           apiService.getMyTrips(),
         ]);
 
-        if (sancData && sancData.length > 0) {
-          setDynamicSanctuaries(sancData);
-        }
         if (drvData && drvData.length > 0) {
           setDynamicDrives(drvData);
         }
@@ -126,10 +123,25 @@ export default function DashboardPage() {
           setRealActiveTrip(null);
         }
       } catch (err) {
-        console.error('Failed to load dashboard data from backend:', err);
+        console.error('Failed to load dashboard static data:', err);
       }
     }
-    loadBackendData();
+    loadDashboardStatic();
+  }, []);
+
+  // 2. Dynamic destination sanctuaries: refetch only when activeVibe filter changes
+  useEffect(() => {
+    async function loadSanctuaries() {
+      try {
+        const sancData = await apiService.getSanctuaries(activeVibe);
+        if (sancData && sancData.length > 0) {
+          setDynamicSanctuaries(sancData);
+        }
+      } catch (err) {
+        console.error('Failed to load sanctuaries for vibe:', activeVibe, err);
+      }
+    }
+    loadSanctuaries();
   }, [activeVibe]);
 
   useEffect(() => {

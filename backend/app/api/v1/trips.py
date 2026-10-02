@@ -56,6 +56,7 @@ def get_my_trips(user: User = Depends(get_current_user), db: Session = Depends(g
         formatted_bookings = [
             {
                 "id": b.id,
+                "trip_id": b.trip_id,
                 "category": b.category,
                 "provider": b.provider,
                 "title": b.title,
@@ -63,7 +64,9 @@ def get_my_trips(user: User = Depends(get_current_user), db: Session = Depends(g
                 "currency": b.currency,
                 "status": b.status,
                 "pnr_ref": b.pnr_ref,
-                "provenance": b.provenance or "PROVIDER_VERIFIED",
+                "provenance": b.provenance or "SAVED_REFERENCE",
+                "source": (b.details or {}).get("source", "USER_PROVIDED" if b.status == "saved_reference" else "PROVIDER"),
+                "verification": (b.details or {}).get("verification", "UNVERIFIED" if b.status == "saved_reference" else "VERIFIED"),
                 "created_at": str(b.created_at),
                 "details": b.details
             }
@@ -134,6 +137,7 @@ def get_trip_details(
         "bookings": [
             {
                 "id": b.id,
+                "trip_id": b.trip_id,
                 "category": b.category,
                 "provider": b.provider,
                 "title": b.title,
@@ -141,7 +145,9 @@ def get_trip_details(
                 "currency": b.currency,
                 "status": b.status,
                 "pnr_ref": b.pnr_ref,
-                "provenance": b.provenance or "PROVIDER_VERIFIED",
+                "provenance": b.provenance or "SAVED_REFERENCE",
+                "source": (b.details or {}).get("source", "USER_PROVIDED" if b.status == "saved_reference" else "PROVIDER"),
+                "verification": (b.details or {}).get("verification", "UNVERIFIED" if b.status == "saved_reference" else "VERIFIED"),
                 "created_at": str(b.created_at),
                 "details": b.details
             }

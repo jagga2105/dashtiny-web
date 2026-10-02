@@ -79,6 +79,8 @@ function TripsContent() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [removedActivity, setRemovedActivity] = useState<{ activity: any; dayIndex: number; itemIndex: number } | null>(null);
+  const [deletionStatus, setDeletionStatus] = useState<'idle' | 'deleting' | 'deleted' | 'undoing' | 'failed'>('idle');
+  const [activityActionError, setActivityActionError] = useState<string | null>(null);
   const [checklist, setChecklist] = useState(DEFAULT_CHECKLIST);
 
   // Day filter for Itinerary & Interactive Map
@@ -95,8 +97,18 @@ function TripsContent() {
 
   const currentTrip = trips[activeTripIndex] || trips[0];
 
-  // Persistent removal of itinerary activity with backend mutation
+  // Strictly trip-scoped bookings: only bookings belonging to currentTrip.id
+  const currentTripBookings = currentTrip ? (
+    (currentTrip.bookings && currentTrip.bookings.length > 0)
+      ? currentTrip.bookings
+      : realBookings.filter((b: any) => b.trip_id === currentTrip.id)
+  ) : [];
+
+  // Persistent removal of itinerary activity with state machine & automatic rollback on failure
   const handleRemoveActivity = async (act: any, dayIdx: number, itemIdx: number) => {
+    if (!currentTrip?.id || !act.id) return;
+    setActivityActionError(null);
+    setDeletionStatus('deleting');
     setRemovedActivity({ activity: act, dayIndex: dayIdx, itemIndex: itemIdx });
     
     // Optimistic UI update
@@ -114,18 +126,36 @@ function TripsContent() {
 
     // Persist mutation to backend
     try {
-      if (currentTrip?.id && act.id) {
-        await apiService.removeTripActivity(currentTrip.id, act.id);
-      }
+      await apiService.removeTripActivity(currentTrip.id, act.id);
+      setDeletionStatus('deleted');
     } catch (err) {
       console.error('Failed to remove activity on server:', err);
+      // Automatic rollback on failure: re-insert item into state
+      setTrips((prevTrips) => {
+        const copy = [...prevTrips];
+        const curTrip = { ...copy[activeTripIndex] };
+        const days = [...curTrip.days];
+        const targetDay = { ...days[dayIdx] };
+        const acts = [...(targetDay.activities || targetDay.items || [])];
+        acts.splice(itemIdx, 0, act);
+        targetDay.activities = acts;
+        days[dayIdx] = targetDay;
+        curTrip.days = days;
+        copy[activeTripIndex] = curTrip;
+        return copy;
+      });
+      setRemovedActivity(null);
+      setDeletionStatus('failed');
+      setActivityActionError('Failed to remove activity from trip. Changes have been restored.');
     }
   };
 
-  // Restore deleted activity via backend mutation and update UI
+  // Restore deleted activity via backend mutation with state machine & error rollback
   const handleUndoRemove = async () => {
-    if (!removedActivity || !currentTrip) return;
+    if (!removedActivity || !currentTrip || deletionStatus !== 'deleted') return;
     const { activity, dayIndex, itemIndex } = removedActivity;
+    setActivityActionError(null);
+    setDeletionStatus('undoing');
     
     // Optimistic UI restore
     setTrips((prevTrips) => {
@@ -141,8 +171,6 @@ function TripsContent() {
       copy[activeTripIndex] = curTrip;
       return copy;
     });
-
-    setRemovedActivity(null);
 
     // Persist restoration to backend
     try {
@@ -161,8 +189,24 @@ function TripsContent() {
         provenance: activity.provenance || 'DETERMINISTIC',
         why_recommended: activity.whyRecommended || 'Restored activity'
       });
+      setDeletionStatus('idle');
+      setRemovedActivity(null);
     } catch (err) {
       console.error('Failed to restore activity on server:', err);
+      // Rollback optimistic restore if server rejected
+      setTrips((prevTrips) => {
+        const copy = [...prevTrips];
+        const curTrip = { ...copy[activeTripIndex] };
+        const days = [...curTrip.days];
+        const targetDay = { ...days[dayIndex] };
+        targetDay.activities = (targetDay.activities || targetDay.items || []).filter((item: any) => item.id !== activity.id);
+        days[dayIndex] = targetDay;
+        curTrip.days = days;
+        copy[activeTripIndex] = curTrip;
+        return copy;
+      });
+      setDeletionStatus('deleted');
+      setActivityActionError('Failed to restore activity. Please try again.');
     }
   };
 
@@ -343,7 +387,10 @@ function TripsContent() {
       );
     }
     return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-50 text-slate-600 border border-slate-200 text-[10px] font-medium">
+      <span
+        title="Curated by DashTiny's travel catalog"
+        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-50 text-slate-600 border border-slate-200 text-[10px] font-medium"
+      >
         <CheckCircle2 className="w-3 h-3 text-slate-500" />
         Curated
       </span>
@@ -522,7 +569,7 @@ function TripsContent() {
                 {[
                   { id: 'plan' as TripTab, label: 'Plan', icon: CalendarDays },
                   { id: 'map' as TripTab, label: 'Route View', icon: Compass },
-                  { id: 'bookings' as TripTab, label: `Bookings (${realBookings.length})`, icon: Ticket },
+                  { id: 'bookings' as TripTab, label: `Bookings (${currentTripBookings.length})`, icon: Ticket },
                   { id: 'budget' as TripTab, label: 'Budget', icon: DollarSign },
                   { id: 'people' as TripTab, label: 'People', icon: Users },
                 ].map((tab) => {
@@ -549,27 +596,52 @@ function TripsContent() {
             {/* TAB: PLAN (COCKPIT CORE) */}
             {activeTab === 'plan' && (
               <div className="space-y-6">
-                {/* Compact Trip Overview Hero */}
-                <div className="relative h-44 sm:h-52 rounded-2xl overflow-hidden shadow-xs border border-slate-200">
-                  <Image
-                    src={currentTrip.cover_image || currentTrip.days?.[0]?.coverImage || "https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=1200&auto=format&fit=crop&q=80"}
-                    alt={currentTrip.destination}
-                    fill
-                    className="object-cover"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-black/30 to-transparent" />
-                  <div className="absolute bottom-4 left-5 right-5 flex flex-col sm:flex-row sm:items-end justify-between gap-3 text-white">
-                    <div className="space-y-1">
-                      <span className="px-2.5 py-0.5 rounded-full bg-emerald-600 text-[10px] font-semibold uppercase tracking-wider">
-                        Planned itinerary
-                      </span>
-                      <h2 className="text-xl sm:text-2xl font-serif-editorial font-bold">{currentTrip.destination}</h2>
-                      <p className="text-xs text-slate-200">
-                        {currentTrip.startDate} – {currentTrip.endDate} • {currentTrip.travellers || 2} Travelers • Budget: ₹{currentTrip.budget?.toLocaleString('en-IN')}
-                      </p>
-                    </div>
+                {/* Action Feedback Banner (Deletion / Restoration Rollback alerts) */}
+                {activityActionError && (
+                  <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-xs font-semibold flex items-center justify-between shadow-2xs animate-in fade-in">
+                    <span>⚠️ {activityActionError}</span>
+                    <button
+                      onClick={() => setActivityActionError(null)}
+                      className="text-amber-700 font-bold hover:text-amber-900 px-2 cursor-pointer"
+                    >
+                      ✕
+                    </button>
                   </div>
-                </div>
+                )}
+
+                {/* Day Experience Focus Banner (No redundant Kyoto/date/budget repetition) */}
+                {(() => {
+                  const activeDayObj = selectedDayIdx !== 'all'
+                    ? currentTrip.days?.find((d: any) => d.dayNumber === selectedDayIdx)
+                    : currentTrip.days?.[0];
+                  const dayTitle = selectedDayIdx === 'all'
+                    ? `Curated ${currentTrip.days?.length || 0}-Day Itinerary`
+                    : `Day ${selectedDayIdx}: ${activeDayObj?.title || 'Daily Experience'}`;
+                  const daySubtitle = selectedDayIdx === 'all'
+                    ? `${getMapPoints().allActivities.length} planned experiences · Optimized walking & transit corridor`
+                    : `${activeDayObj?.activities?.length || 0} stops scheduled · ${activeDayObj?.weather || 'Pleasant weather forecast'}`;
+
+                  return (
+                    <div className="relative h-36 sm:h-44 rounded-2xl overflow-hidden shadow-xs border border-slate-200">
+                      <Image
+                        src={activeDayObj?.coverImage || currentTrip.cover_image || "https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=1200&auto=format&fit=crop&q=80"}
+                        alt={dayTitle}
+                        fill
+                        className="object-cover"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-black/30 to-transparent" />
+                      <div className="absolute bottom-4 left-5 right-5 flex flex-col sm:flex-row sm:items-end justify-between gap-2 text-white">
+                        <div className="space-y-1">
+                          <span className="px-2.5 py-0.5 rounded-full bg-orange-600 text-[10px] font-semibold uppercase tracking-wider">
+                            {selectedDayIdx === 'all' ? 'Full Itinerary' : `Day ${selectedDayIdx}`}
+                          </span>
+                          <h2 className="text-xl sm:text-2xl font-serif-editorial font-bold">{dayTitle}</h2>
+                          <p className="text-xs text-slate-200 font-medium">{daySubtitle}</p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {/* Day Selector Pills */}
                 <div className="flex items-center justify-between gap-3 overflow-x-auto pb-1 no-scrollbar">
@@ -962,7 +1034,7 @@ function TripsContent() {
                     >
                       {isExecutingCopilot ? (
                         <span className="flex items-center gap-1.5">
-                          <Sparkles className="w-3.5 h-3.5 animate-spin" /> Adjusting...
+                          <Sparkles className="w-3.5 h-3.5 animate-spin" /> Working out the best option…
                         </span>
                       ) : (
                         <span className="flex items-center gap-1.5">
@@ -971,6 +1043,9 @@ function TripsContent() {
                       )}
                     </Button>
                   </div>
+                  {isExecutingCopilot && (
+                    <p className="text-[11px] text-orange-700 font-medium animate-pulse">Checking your budget and route…</p>
+                  )}
 
                   {/* Copilot Error Message */}
                   {copilotError && (
@@ -1078,16 +1153,20 @@ function TripsContent() {
             {/* TAB: INTERACTIVE MAP (FULL TACTICAL VIEW) */}
             {activeTab === 'map' && (
               <div className="space-y-6">
-                <Card className="p-6 rounded-3xl bg-slate-950 border border-slate-800 text-white relative overflow-hidden">
-                  <div className="flex items-center justify-between pb-4 border-b border-slate-800">
+                <Card className="p-6 rounded-3xl bg-white border border-slate-200 text-slate-900 shadow-sm relative overflow-hidden">
+                  <div className="flex items-center justify-between pb-4 border-b border-slate-100">
                     <div>
-                      <h3 className="text-base font-serif-editorial font-bold text-white">Route View</h3>
-                      <p className="text-xs text-slate-400">Your day-by-day route overview for {currentTrip.destination}</p>
+                      <h3 className="text-base font-serif-editorial font-bold text-slate-900">Today&apos;s route</h3>
+                      <p className="text-xs text-slate-500 font-medium">
+                        {validPoints.length} stops · Estimated transit and sequence for {currentTrip.destination}
+                      </p>
                     </div>
-                    <span className="font-mono text-xs text-orange-400">{validPoints.length} mapped stops</span>
+                    <span className="font-mono text-xs font-semibold text-orange-600 bg-orange-50 px-2.5 py-1 rounded-lg border border-orange-200">
+                      {validPoints.length} stops mapped
+                    </span>
                   </div>
 
-                  <div className="relative h-96 w-full my-4">
+                  <div className="relative h-96 w-full my-4 rounded-2xl bg-amber-50/20 border border-slate-100 overflow-hidden">
                     {hasCoordinates ? (
                       <>
                         <svg className="absolute inset-0 w-full h-full pointer-events-none">
@@ -1106,9 +1185,9 @@ function TripsContent() {
                                 x2={x2}
                                 y2={y2}
                                 stroke="#FF5A00"
-                                strokeWidth="2"
-                                strokeDasharray="4 4"
-                                strokeOpacity="0.7"
+                                strokeWidth="2.5"
+                                strokeDasharray="5 5"
+                                strokeOpacity="0.8"
                               />
                             );
                           })}
@@ -1122,14 +1201,14 @@ function TripsContent() {
                               type="button"
                               aria-label={`Stop ${act.seqNum || idx + 1}: ${act.description} at ${act.time}`}
                               style={{ left: `${getX(Number(act.lng))}%`, top: `${getY(Number(act.lat))}%` }}
-                              className={`absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer z-20 transition-all p-1 min-w-[28px] min-h-[28px] flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 rounded-xl ${
+                              className={`absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer z-20 transition-all p-1 min-w-[28px] min-h-[28px] flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 rounded-xl ${
                                 isSelected ? 'scale-125 z-30' : 'hover:scale-110'
                               }`}
                               onClick={() => setHoveredWaypoint(isSelected ? null : act)}
                               onMouseEnter={() => setHoveredWaypoint(act)}
                             >
-                              <div className={`w-8 h-8 rounded-xl font-bold text-xs flex items-center justify-center shadow-lg transition-colors ${
-                                isSelected ? 'bg-white text-orange-600 ring-2 ring-orange-500' : 'bg-orange-500 text-white'
+                              <div className={`w-8 h-8 rounded-xl font-bold text-xs flex items-center justify-center shadow-md transition-colors ${
+                                isSelected ? 'bg-orange-600 text-white ring-2 ring-orange-400' : 'bg-white text-orange-600 border border-orange-200'
                               }`}>
                                 {act.seqNum || idx + 1}
                               </div>
@@ -1140,7 +1219,7 @@ function TripsContent() {
                     ) : (
                       <div className="flex flex-col items-center justify-center h-full text-center">
                         <Compass className="w-10 h-10 text-orange-400 mb-2" />
-                        <p className="text-sm font-semibold text-slate-300">Coordinates mapped to {currentTrip.destination}</p>
+                        <p className="text-sm font-semibold text-slate-600">Coordinates mapped to {currentTrip.destination}</p>
                       </div>
                     )}
                   </div>
@@ -1172,7 +1251,7 @@ function TripsContent() {
 
             {/* TAB: BOOKINGS & PASSES */}
             {activeTab === 'bookings' && (() => {
-              const displayBookings = (currentTrip.bookings && currentTrip.bookings.length > 0) ? currentTrip.bookings : realBookings;
+              const displayBookings = currentTripBookings;
               return (
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
@@ -1208,26 +1287,42 @@ function TripsContent() {
                     </Card>
                   ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {displayBookings.map((b: any) => (
-                        <Card key={b.id} className="p-5 rounded-2xl bg-white border border-slate-200 shadow-2xs space-y-3">
-                          <div className="flex items-center justify-between">
-                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded bg-emerald-50 text-emerald-800 text-[10px] font-semibold uppercase border border-emerald-200">
-                              <ShieldCheck className="w-3 h-3 text-emerald-600" />
-                              {b.status || 'CONFIRMED'}
-                            </span>
-                            <span className="font-mono text-xs font-semibold text-orange-600 bg-orange-50 px-2 py-0.5 rounded border border-orange-200">
-                              Ref: {b.pnr_ref}
-                            </span>
-                          </div>
-                          <h4 className="text-sm font-semibold text-slate-900">{b.title}</h4>
-                          <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-xs text-slate-600">
-                            <span>Provider: {b.provider}</span>
-                            <span className="font-semibold text-orange-600">
-                              ₹{b.amount?.toLocaleString('en-IN')}
-                            </span>
-                          </div>
-                        </Card>
-                      ))}
+                      {displayBookings.map((b: any) => {
+                        const isSavedRef = b.status === 'saved_reference' || b.provenance === 'SAVED_REFERENCE' || b.verification === 'UNVERIFIED';
+                        return (
+                          <Card key={b.id} className="p-5 rounded-2xl bg-white border border-slate-200 shadow-2xs space-y-3">
+                            <div className="flex items-center justify-between">
+                              <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-[10px] font-semibold uppercase border ${
+                                isSavedRef
+                                  ? 'bg-slate-100 text-slate-700 border-slate-300'
+                                  : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                              }`}>
+                                {isSavedRef ? (
+                                  <>
+                                    <Ticket className="w-3 h-3 text-slate-500" />
+                                    Saved Reference · Unverified
+                                  </>
+                                ) : (
+                                  <>
+                                    <ShieldCheck className="w-3 h-3 text-emerald-600" />
+                                    {b.status || 'CONFIRMED'}
+                                  </>
+                                )}
+                              </span>
+                              <span className="font-mono text-xs font-semibold text-orange-600 bg-orange-50 px-2 py-0.5 rounded border border-orange-200">
+                                Ref: {b.pnr_ref}
+                              </span>
+                            </div>
+                            <h4 className="text-sm font-semibold text-slate-900">{b.title}</h4>
+                            <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-xs text-slate-600">
+                              <span>Provider: {b.provider}</span>
+                              <span className="font-semibold text-orange-600">
+                                ₹{b.amount?.toLocaleString('en-IN')}
+                              </span>
+                            </div>
+                          </Card>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -1242,7 +1337,7 @@ function TripsContent() {
               const actsEst = Math.round(totalBudget * 0.18);
               const transitEst = Math.round(totalBudget * 0.12);
 
-              const allBookings = (currentTrip.bookings || realBookings || []);
+              const allBookings = currentTripBookings;
               const staysBooked = allBookings.filter((b: any) => b.category === 'hotel').reduce((acc: number, b: any) => acc + (b.amount || 0), 0);
               const flightsBooked = allBookings.filter((b: any) => b.category === 'flight').reduce((acc: number, b: any) => acc + (b.amount || 0), 0);
               const otherBooked = allBookings.filter((b: any) => !['hotel', 'flight'].includes(b.category)).reduce((acc: number, b: any) => acc + (b.amount || 0), 0);
@@ -1287,10 +1382,10 @@ function TripsContent() {
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                       <div>
                         <h3 className="font-serif-editorial font-bold text-lg text-slate-900">
-                          Estimated Budget Allocation
+                          Starting estimate: Category allocation breakdown based on total trip budget
                         </h3>
                         <p className="text-xs text-slate-500 font-medium">
-                          Estimated distribution based on your ₹{totalBudget.toLocaleString('en-IN')} trip budget. Actual spend updates as you save bookings.
+                          Proportional heuristic distribution based on your ₹{totalBudget.toLocaleString('en-IN')} trip budget. Actual spend updates as you save bookings.
                         </p>
                       </div>
                       <div className="text-left sm:text-right">
@@ -1357,7 +1452,7 @@ function TripsContent() {
       </main>
 
       {/* Undo Snackbar for Non-Destructive Itinerary Deletion */}
-      {removedActivity && (
+      {removedActivity && deletionStatus === 'deleted' && (
         <aside
           role="status"
           aria-live="polite"
@@ -1371,6 +1466,17 @@ function TripsContent() {
           >
             Undo
           </button>
+        </aside>
+      )}
+
+      {deletionStatus === 'undoing' && (
+        <aside
+          role="status"
+          aria-live="polite"
+          className="fixed bottom-20 sm:bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-slate-900 text-white shadow-xl border border-slate-800 animate-in fade-in slide-in-from-bottom-2 text-xs font-medium"
+        >
+          <div className="w-3.5 h-3.5 border-2 border-orange-400 border-t-transparent rounded-full animate-spin" />
+          <span>Restoring activity...</span>
         </aside>
       )}
 

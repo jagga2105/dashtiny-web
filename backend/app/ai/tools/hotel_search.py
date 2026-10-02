@@ -154,14 +154,34 @@ CURATED_HOTELS: Dict[str, List[Dict[str, Any]]] = {
     ]
 }
 
-def search_hotels(destination: str, budget_tier: str = "luxury", guests: int = 2) -> List[Dict[str, Any]]:
+def search_hotels(
+    destination: str,
+    budget_tier: str = "luxury",
+    guests: int = 2,
+    check_in: Any = None,
+    check_out: Any = None,
+    room_type: Any = None
+) -> List[Dict[str, Any]]:
     """
-    Search curated hotel offers scaled appropriately to party size (guests/travellers).
+    Search curated hotel offers scaled appropriately to party size (guests/travellers),
+    stay dates (check-in/check-out), and room requirements.
     Provenances: CURATED for editorial selections; DEMO for demonstration prototypes.
     """
     clean_guests = max(1, guests or 2)
     dest_lower = destination.lower() if destination else ""
     matched_stays = None
+
+    nights = 1
+    if check_in and check_out:
+        try:
+            from datetime import datetime
+            d_in = datetime.fromisoformat(str(check_in).strip().split('T')[0])
+            d_out = datetime.fromisoformat(str(check_out).strip().split('T')[0])
+            delta = (d_out - d_in).days
+            if delta > 0:
+                nights = delta
+        except Exception:
+            nights = 1
 
     for key, stays in CURATED_HOTELS.items():
         if key in dest_lower:
@@ -170,7 +190,7 @@ def search_hotels(destination: str, budget_tier: str = "luxury", guests: int = 2
 
     if not matched_stays:
         clean_dest = destination.title() if destination else "Getaway Destination"
-        room_title = "Scenic Vista Suite" if clean_guests <= 2 else ("Family Connecting Suite" if clean_guests <= 4 else "Private Multi-Bedroom Villa")
+        room_title = room_type if room_type else ("Scenic Vista Suite" if clean_guests <= 2 else ("Family Connecting Suite" if clean_guests <= 4 else "Private Multi-Bedroom Villa"))
         base_price = 8500
         matched_stays = [
             {
@@ -192,12 +212,18 @@ def search_hotels(destination: str, budget_tier: str = "luxury", guests: int = 2
             }
         ]
 
-    # Dynamically tailor stays to guests capacity and squad/family sizing
+    # Dynamically tailor stays to guests capacity, dates, and sizing
     scaled_results = []
     for stay in matched_stays:
         item = dict(stay)
         item["guests_capacity"] = clean_guests
-        if clean_guests > 4:
+        item["check_in"] = str(check_in) if check_in else None
+        item["check_out"] = str(check_out) if check_out else None
+        item["nights"] = nights
+
+        if room_type:
+            item["room_type"] = f"{room_type} — {item.get('room_type', '')}"
+        elif clean_guests > 4:
             item["room_type"] = f"Private {clean_guests}-Guest Estate Villa / Chalet"
             item["price_per_night"] = int(round(item["price_per_night"] * 2.2))
             item["why_recommended"] = f"{item.get('why_recommended', '')} — Scaled for private {clean_guests}-member squad/family gathering."
@@ -207,6 +233,9 @@ def search_hotels(destination: str, budget_tier: str = "luxury", guests: int = 2
             item["why_recommended"] = f"{item.get('why_recommended', '')} — Tailored to accommodate {clean_guests} guests comfortably."
         else:
             item["why_recommended"] = f"{item.get('why_recommended', '')} — Ideal bespoke setup for {clean_guests} traveler{'s' if clean_guests > 1 else ''}."
+
+        item["total_price"] = item["price_per_night"] * nights
         scaled_results.append(item)
 
     return scaled_results
+

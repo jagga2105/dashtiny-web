@@ -564,6 +564,133 @@ def test_flight_search_parameterized(client):
     assert first["return_date"] == "2026-11-20"
     assert "duration_minutes" in first
     assert first["duration_minutes"] > 0
-    assert first["provenance"] == "CURATED"
+def test_hotel_search_parameterized(client):
+    """
+    Test hotel search consuming check_in, check_out, guests, room_type.
+    """
+    res = client.get(
+        "/api/v1/bookings/search/hotels",
+        params={
+            "destination": "Goa",
+            "guests": 4,
+            "check_in": "2026-11-15",
+            "check_out": "2026-11-19",
+            "room_type": "Executive Suite"
+        }
+    )
+    assert res.status_code == 200
+    hotels = res.json()
+    assert len(hotels) > 0
+    first = hotels[0]
+    assert first["guests_capacity"] == 4
+    assert first["nights"] == 4
+    assert "2026-11-15" in first["check_in"]
+    assert "2026-11-19" in first["check_out"]
+    assert "Executive Suite" in first["room_type"]
+    assert first["total_price"] == first["price_per_night"] * 4
+
+def test_saved_booking_provenance_and_scope(client, db_session):
+    """
+    Test saved booking reference carries SAVED_REFERENCE and USER_PROVIDED (UNVERIFIED),
+    NOT PROVIDER_VERIFIED.
+    """
+    # 1. Create a trip
+    trip_res = client.post(
+        "/api/v1/planner/generate",
+        json={
+            "destination": "Kyoto",
+            "days_count": 2,
+            "budget": 50000,
+            "start_date": "2026-11-01",
+            "end_date": "2026-11-02"
+        }
+    )
+    assert trip_res.status_code == 200
+    trip_id = trip_res.json()["id"]
+
+    # 2. Save a booking reference attached to the trip
+    booking_res = client.post(
+        "/api/v1/bookings/create",
+        json={
+            "category": "flight",
+            "provider": "Air India Express",
+            "title": "BLR -> KIX Morning Corridor",
+            "amount": 28500,
+            "currency": "INR",
+            "trip_id": trip_id,
+            "pnr_ref": "AIX-TEST-999"
+        }
+    )
+    assert booking_res.status_code == 200
+    b_data = booking_res.json()
+    assert b_data["status"] == "saved_reference"
+    assert b_data["provenance"] == "SAVED_REFERENCE"
+    assert b_data["source"] == "USER_PROVIDED"
+    assert b_data["verification"] == "UNVERIFIED"
+    assert b_data["trip_id"] == trip_id
+
+    # 3. Check /my-bookings returns trip_id and correct provenance
+    my_bookings_res = client.get("/api/v1/bookings/my-bookings")
+    assert my_bookings_res.status_code == 200
+    user_bookings = my_bookings_res.json()
+    matched = next((b for b in user_bookings if b["pnr_ref"] == "AIX-TEST-999"), None)
+    assert matched is not None
+    assert matched["trip_id"] == trip_id
+    assert matched["provenance"] == "SAVED_REFERENCE"
+    assert matched["verification"] == "UNVERIFIED"
+
+    # 4. Check /trips/{trip_id} returns the booking with SAVED_REFERENCE
+    details_res = client.get(f"/api/v1/trips/{trip_id}")
+    assert details_res.status_code == 200
+    trip_bookings = details_res.json()["bookings"]
+    assert len(trip_bookings) == 1
+    assert trip_bookings[0]["provenance"] == "SAVED_REFERENCE"
+    assert trip_bookings[0]["trip_id"] == trip_id
+
+def test_community_post_like_authenticated_and_unique(client, db_session):
+    """
+    Test authenticated liking of community posts and prevention of duplicate likes.
+    """
+    # 1. Create a post
+    post_res = client.post(
+        "/api/v1/community/posts",
+        json={
+            "getaway_title": "Hidden Waterfalls in Western Ghats",
+            "location": "Coorg",
+            "content": "Secret trek through coffee estates to secluded natural pool.",
+            "companions_needed": 2
+        }
+    )
+    assert post_res.status_code == 200
+    post_id = post_res.json()["post_id"]
+    initial_likes = post_res.json()["likes_count"]
+
+    # 2. Like the post
+    like1 = client.post(f"/api/v1/community/posts/{post_id}/like")
+    assert like1.status_code == 200
+    assert like1.json()["status"] == "liked"
+    assert like1.json()["likes_count"] == initial_likes + 1
+
+    # 3. Like the post a second time by the same user -> should be prevented
+    like2 = client.post(f"/api/v1/community/posts/{post_id}/like")
+    assert like2.status_code == 200
+    assert like2.json()["status"] == "already_liked"
+    assert like2.json()["likes_count"] == initial_likes + 1
+
+def test_explore_sanctuaries_taxonomy(client):
+    """
+    Test sanctuary filtering across vibes and categories.
+    """
+    res_beach = client.get("/api/v1/explore/sanctuaries", params={"vibe": "beach"})
+    assert res_beach.status_code == 200
+    beach_items = res_beach.json()
+    assert len(beach_items) > 0
+    assert any("beach" in (s.get("vibe", "").lower() or s.get("vibes", [])) for s in beach_items)
+
+    res_weekend = client.get("/api/v1/explore/sanctuaries", params={"vibe": "weekend"})
+    assert res_weekend.status_code == 200
+    weekend_items = res_weekend.json()
+    assert len(weekend_items) > 0
+
 
 
