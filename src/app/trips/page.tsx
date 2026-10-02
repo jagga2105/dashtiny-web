@@ -31,7 +31,6 @@ import {
 } from 'lucide-react';
 import { TopNavbar } from '@/components/layout/TopNavbar';
 import { BottomNav } from '@/components/layout/BottomNav';
-import { DAInaChatWidget } from '@/components/layout/DAInaChatWidget';
 import { SquadRoomHub } from '@/components/squad/SquadRoomHub';
 import { GroupCollaborationModal } from '@/components/planner/GroupCollaborationModal';
 import { Card } from '@/components/ui/Card';
@@ -1122,7 +1121,6 @@ export default function ActiveTripsPage() {
         roomCode={currentTrip?.squad_room_code || 'ROOM'}
       />
 
-      <DAInaChatWidget />
       <BottomNav />
     </div>
   );

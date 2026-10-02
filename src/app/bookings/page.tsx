@@ -56,6 +56,10 @@ function BookingsContent() {
   const [isSearchingFlights, setIsSearchingFlights] = useState(false);
   const [flightError, setFlightError] = useState<string | null>(null);
 
+  const lowestFareFlight = flightsList.length > 0
+    ? flightsList.reduce((min, f) => (f.price < min.price ? f : min), flightsList[0])
+    : null;
+
   // Hotel search states
   const [hotelDest, setHotelDest] = useState('Goa');
   const [hotelGuests, setHotelGuests] = useState(2);
@@ -348,13 +352,8 @@ function BookingsContent() {
         </div>
 
         {/* FLIGHTS TAB */}
-        {activeCategory === 'flights' && (() => {
-          const lowestFareFlight = flightsList.length > 0
-            ? flightsList.reduce((min, f) => (f.price < min.price ? f : min), flightsList[0])
-            : null;
-
-          return (
-            <section className="space-y-4">
+        {activeCategory === 'flights' && (
+          <section className="space-y-4">
               {/* Comprehensive Filter Controls */}
               <Card className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200 shadow-2xs space-y-3.5">
                 {/* Trip Type & Cabin Pill Row */}
@@ -593,8 +592,7 @@ function BookingsContent() {
             })}
           </div>
         </section>
-      );
-    })()}
+      )}
 
         {/* HOTELS & STAYS TAB */}
         {activeCategory === 'hotels' && (
