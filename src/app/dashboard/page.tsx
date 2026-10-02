@@ -99,7 +99,7 @@ export default function DashboardPage() {
       try {
         const [sancData, drvData, tripsData] = await Promise.all([
           apiService.getSanctuaries(activeVibe),
-          apiService.getDriveEscapes('Bengaluru'),
+          apiService.getDriveEscapes('Weekend'),
           apiService.getMyTrips(),
         ]);
 
@@ -131,6 +131,16 @@ export default function DashboardPage() {
     }
     loadBackendData();
   }, [activeVibe]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && selectedGuide) {
+        setSelectedGuide(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedGuide]);
 
   const handleQuickPlan = (e: React.FormEvent) => {
     e.preventDefault();
@@ -346,21 +356,50 @@ export default function DashboardPage() {
       });
 
   const today = new Date().toISOString().split('T')[0];
-  const activeTripStatus = (() => {
+  const activeTripContext = (() => {
     if (!realActiveTrip) return null;
     const start = realActiveTrip.startDate || realActiveTrip.start_date;
     const end = realActiveTrip.endDate || realActiveTrip.end_date;
     if (start && end && start <= today && end >= today) {
-      return { label: 'Active Trip (In Progress)', color: 'text-emerald-700 bg-emerald-50 border-emerald-200' };
+      return {
+        sectionHeading: "Today's Active Trip",
+        badge: 'Active Trip',
+        color: 'text-emerald-700 bg-emerald-50 border-emerald-200',
+        cta: "Continue today's trip →",
+      };
     }
     if (start && start > today) {
-      return { label: 'Upcoming Trip', color: 'text-orange-700 bg-orange-50 border-orange-200' };
+      return {
+        sectionHeading: 'Your Next Trip',
+        badge: 'Upcoming Trip',
+        color: 'text-orange-700 bg-orange-50 border-orange-200',
+        cta: 'Continue planning →',
+      };
     }
     if (end && end < today) {
-      return { label: 'Past Trip', color: 'text-slate-600 bg-slate-100 border-slate-200' };
+      return {
+        sectionHeading: 'Past Trip Memories',
+        badge: 'Past Trip',
+        color: 'text-slate-600 bg-slate-100 border-slate-200',
+        cta: 'View trip →',
+      };
     }
-    return { label: 'Your Next Trip', color: 'text-orange-700 bg-orange-50 border-orange-200' };
+    return {
+      sectionHeading: 'Trip in Planning',
+      badge: 'Draft Trip',
+      color: 'text-orange-700 bg-orange-50 border-orange-200',
+      cta: 'Finish planning →',
+    };
   })();
+
+  const getCanonicalDestination = (dest: DestinationItem) => {
+    const titleFirst = dest.title.split(' ')[0];
+    if (['Kyoto', 'Goa', 'Manali', 'Rishikesh', 'Munnar', 'Gokarna', 'Ubud', 'Wayanad', 'Jaipur', 'Bali'].includes(titleFirst)) {
+      return titleFirst;
+    }
+    const locationCity = dest.location.split(',')[0].trim();
+    return locationCity || dest.title;
+  };
 
   return (
     <div className="min-h-screen pb-24 md:pb-12 flex flex-col bg-[#FAFAF9] text-slate-900 font-sans selection:bg-orange-500 selection:text-white">
@@ -436,8 +475,8 @@ export default function DashboardPage() {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
-                  <span className={`text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${activeTripStatus?.color || 'text-orange-700 bg-orange-50 border-orange-200'}`}>
-                    {activeTripStatus?.label || 'Your Next Trip'}
+                  <span className={`text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${activeTripContext?.color || 'text-orange-700 bg-orange-50 border-orange-200'}`}>
+                    {activeTripContext?.badge || 'Your Next Trip'}
                   </span>
                   <span className="text-xs text-slate-400">·</span>
                   <span className="text-xs text-slate-500">
@@ -448,18 +487,18 @@ export default function DashboardPage() {
                   {realActiveTrip.title}
                 </h3>
                 <p className="text-xs text-slate-600">
-                  {realActiveTrip.destination} · {realActiveTrip.daysCount || realActiveTrip.days?.length || 3} days · ₹{realActiveTrip.budget?.toLocaleString('en-IN')} estimated
+                  {realActiveTrip.destination} · {realActiveTrip.daysCount || realActiveTrip.days?.length || 3} days · ₹{Number(realActiveTrip.budget || 50000).toLocaleString('en-IN')} estimated
                 </p>
               </div>
 
               <Button
                 variant="primary"
                 size="md"
-                className="bg-orange-500 hover:bg-orange-600 text-white font-semibold shrink-0 px-5 py-2.5 rounded-xl transition-colors text-xs"
-                onClick={() => router.push('/trips')}
+                className="bg-orange-500 hover:bg-orange-600 text-white font-semibold shrink-0 px-5 py-2.5 rounded-xl transition-colors text-xs cursor-pointer"
+                onClick={() => router.push(`/trips?tripId=${realActiveTrip.id}`)}
               >
                 <Luggage className="w-4 h-4 mr-1.5" />
-                Continue planning in Trip Workspace →
+                {activeTripContext?.cta || 'Continue planning →'}
               </Button>
             </div>
           </section>
@@ -576,8 +615,11 @@ export default function DashboardPage() {
                   <Button
                     variant="primary"
                     size="sm"
-                    className="bg-orange-500 hover:bg-orange-600 text-white text-xs font-semibold px-3.5 py-1.5 rounded-lg"
-                    onClick={() => router.push(`/planner?query=${encodeURIComponent(`Plan getaway to ${dest.title}`)}`)}
+                    className="bg-orange-500 hover:bg-orange-600 text-white text-xs font-semibold px-3.5 py-1.5 rounded-lg cursor-pointer"
+                    onClick={() => {
+                      const canonical = getCanonicalDestination(dest);
+                      router.push(`/planner?destination=${encodeURIComponent(canonical)}&destination_id=${dest.id}&query=${encodeURIComponent(`Plan getaway to ${canonical}`)}`);
+                    }}
                   >
                     Plan this →
                   </Button>
@@ -647,11 +689,11 @@ export default function DashboardPage() {
                 Weekend Drive Escapes
               </h2>
               <p className="text-xs text-slate-600 mt-1 font-medium">
-                Short 2 & 3-day getaways curated by drive distance & scenic roadtrip routes from Bengaluru.
+                Short 2 & 3-day getaways curated by drive distance & scenic roadtrip routes.
               </p>
             </div>
             <span className="px-3 py-1 rounded-full bg-white text-slate-700 text-xs font-bold border border-slate-200 shadow-2xs">
-              📍 Escapes from Bengaluru
+              🚗 Scenic Roadtrips
             </span>
           </div>
 
@@ -682,7 +724,14 @@ export default function DashboardPage() {
                 image: 'https://images.unsplash.com/photo-1548013146-72479768bada?w=800&auto=format&fit=crop&q=80'
               }
             ]).map((esc) => (
-              <div key={esc.id} className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-2xs space-y-3 hover:border-orange-300 hover:scale-[1.02] transition-all cursor-pointer" onClick={() => router.push(`/planner?query=${encodeURIComponent(esc.name)}`)}>
+              <div
+                key={esc.id}
+                className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-2xs space-y-3 hover:border-orange-300 hover:scale-[1.02] transition-all cursor-pointer"
+                onClick={() => {
+                  const canonical = esc.name.split(' ')[0] || esc.name;
+                  router.push(`/planner?destination=${encodeURIComponent(canonical)}&query=${encodeURIComponent(`Plan getaway to ${canonical}`)}`);
+                }}
+              >
                 <div className="relative h-32 rounded-xl overflow-hidden">
                   <Image src={esc.image} alt={esc.name} fill className="object-cover" />
                   <span className="absolute top-2 left-2 px-2.5 py-1 rounded-full bg-slate-900/80 backdrop-blur-md text-white text-[10px] font-extrabold">
@@ -721,7 +770,7 @@ export default function DashboardPage() {
               <Button
                 variant="primary"
                 size="md"
-                className="bg-gradient-to-r from-orange-500 to-amber-500 text-white font-extrabold px-6 hover:scale-105 transition-all"
+                className="bg-gradient-to-r from-orange-500 to-amber-500 text-white font-extrabold px-6 hover:scale-105 transition-all cursor-pointer"
                 onClick={() => router.push('/planner')}
               >
                 Create Group Getaway →
@@ -741,6 +790,9 @@ export default function DashboardPage() {
         {/* Editorial Guide Modal Drawer */}
         {selectedGuide && (
           <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="guide-modal-title"
             className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md"
             onClick={() => setSelectedGuide(null)}
           >
@@ -751,11 +803,15 @@ export default function DashboardPage() {
                     <BookOpen className="w-5 h-5" />
                   </div>
                   <div>
-                    <h3 className="text-xl font-serif-editorial font-bold text-slate-900">{selectedGuide.title}</h3>
+                    <h3 id="guide-modal-title" className="text-xl font-serif-editorial font-bold text-slate-900">{selectedGuide.title}</h3>
                     <p className="text-xs text-orange-600 uppercase tracking-widest font-extrabold">Insider Tips & Local Secrets</p>
                   </div>
                 </div>
-                <button onClick={() => setSelectedGuide(null)} className="text-slate-400 hover:text-slate-800 text-lg font-bold">
+                <button
+                  onClick={() => setSelectedGuide(null)}
+                  aria-label="Close tips"
+                  className="text-slate-400 hover:text-slate-800 p-1.5 rounded-xl hover:bg-slate-100 cursor-pointer"
+                >
                   <X className="w-5 h-5" />
                 </button>
               </div>
@@ -775,11 +831,12 @@ export default function DashboardPage() {
               <Button
                 variant="primary"
                 size="md"
-                className="w-full bg-gradient-to-r from-orange-500 to-amber-500 text-white font-extrabold shadow-md shadow-orange-500/20"
+                className="w-full bg-gradient-to-r from-orange-500 to-amber-500 text-white font-extrabold shadow-md shadow-orange-500/20 cursor-pointer"
                 onClick={() => {
-                  const targetTitle = selectedGuide.title;
+                  const guide = selectedGuide;
+                  const canonical = getCanonicalDestination(guide);
                   setSelectedGuide(null);
-                  router.push(`/planner?query=${encodeURIComponent(`Plan getaway to ${targetTitle}`)}`);
+                  router.push(`/planner?destination=${encodeURIComponent(canonical)}&destination_id=${guide.id}&query=${encodeURIComponent(`Plan getaway to ${canonical}`)}`);
                 }}
               >
                 <span>Plan This Getaway with DAIna →</span>

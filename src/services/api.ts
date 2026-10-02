@@ -233,13 +233,88 @@ export const apiService = {
     return request<any[]>('/trips/my-trips');
   },
 
-  // Bookings API
-  async searchFlights(origin: string = 'BLR', destination: string = 'GOI') {
-    return request<any>(`/bookings/search/flights?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}`);
+  async getTripDetails(tripId: string) {
+    return request<any>(`/trips/${tripId}`);
   },
 
-  async searchHotels(destination: string = 'Goa', guests: number = 2) {
-    return request<any>(`/bookings/search/hotels?destination=${encodeURIComponent(destination)}&guests=${guests}`);
+  async removeTripActivity(tripId: string, activityId: string) {
+    return request<any>(`/trips/${tripId}/activities/${activityId}`, {
+      method: 'DELETE',
+    });
+  },
+
+  async addTripActivity(tripId: string, activity: any) {
+    return request<any>(`/trips/${tripId}/activities`, {
+      method: 'POST',
+      body: JSON.stringify(activity),
+    });
+  },
+
+  // Bookings API
+  async searchFlights(
+    paramsOrOrigin: string | {
+      origin?: string;
+      destination?: string;
+      departureDate?: string;
+      returnDate?: string;
+      passengers?: number;
+      cabinClass?: string;
+      tripType?: string;
+    } = 'BLR',
+    destinationFallback: string = 'GOI'
+  ) {
+    let params: Record<string, string> = {};
+    if (typeof paramsOrOrigin === 'string') {
+      params = {
+        origin: paramsOrOrigin,
+        destination: destinationFallback,
+      };
+    } else {
+      params = {
+        origin: paramsOrOrigin.origin || 'BLR',
+        destination: paramsOrOrigin.destination || 'GOI',
+        departure_date: paramsOrOrigin.departureDate || '',
+        return_date: paramsOrOrigin.returnDate || '',
+        passengers: String(paramsOrOrigin.passengers || 1),
+        cabin_class: paramsOrOrigin.cabinClass || 'economy',
+        trip_type: paramsOrOrigin.tripType || 'roundtrip',
+      };
+    }
+    const query = new URLSearchParams(
+      Object.entries(params).filter(([_, v]) => Boolean(v))
+    ).toString();
+    return request<any[]>(`/bookings/search/flights?${query}`);
+  },
+
+  async searchHotels(
+    paramsOrDest: string | {
+      destination?: string;
+      guests?: number;
+      checkIn?: string;
+      checkOut?: string;
+      roomType?: string;
+    } = 'Goa',
+    guestsFallback: number = 2
+  ) {
+    let params: Record<string, string> = {};
+    if (typeof paramsOrDest === 'string') {
+      params = {
+        destination: paramsOrDest,
+        guests: String(guestsFallback),
+      };
+    } else {
+      params = {
+        destination: paramsOrDest.destination || 'Goa',
+        guests: String(paramsOrDest.guests || 2),
+        check_in: paramsOrDest.checkIn || '',
+        check_out: paramsOrDest.checkOut || '',
+        room_type: paramsOrDest.roomType || '',
+      };
+    }
+    const query = new URLSearchParams(
+      Object.entries(params).filter(([_, v]) => Boolean(v))
+    ).toString();
+    return request<any[]>(`/bookings/search/hotels?${query}`);
   },
 
   async createBooking(payload: BookingPayload) {

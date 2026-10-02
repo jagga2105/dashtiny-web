@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import Image from 'next/image';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   Luggage,
   CalendarDays,
@@ -50,8 +50,27 @@ interface AIDiffChange {
   details?: string;
 }
 
-export default function ActiveTripsPage() {
+interface CopilotProposal {
+  summary: string;
+  changes: AIDiffChange[];
+  proposedTrip: any;
+  previousTrip: any;
+}
+
+const DEFAULT_CHECKLIST = [
+  { id: 'c1', task: 'Valid Passport & Photo ID', done: false, category: 'Docs' },
+  { id: 'c2', task: 'Flight Boarding Pass / Ticket Downloaded', done: false, category: 'Tickets' },
+  { id: 'c3', task: 'Hotel / Sanctuary Booking Voucher', done: false, category: 'Hotel' },
+  { id: 'c4', task: 'Pack Sunscreen, Walking Shoes & Sunglasses', done: false, category: 'Packing' },
+  { id: 'c5', task: 'Camera, Chargers & Universal Adapter', done: false, category: 'Equipment' },
+  { id: 'c6', task: 'Notify Bank / Credit Card for Travel', done: false, category: 'Finance' },
+];
+
+function TripsContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const tripIdParam = searchParams.get('tripId');
+
   const [activeTab, setActiveTab] = useState<TripTab>('plan');
   const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
   const [trips, setTrips] = useState<any[]>([]);
@@ -60,40 +79,7 @@ export default function ActiveTripsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [removedActivity, setRemovedActivity] = useState<{ activity: any; dayIndex: number; itemIndex: number } | null>(null);
-
-  const handleRemoveActivity = (act: any, dayIdx: number, itemIdx: number) => {
-    setRemovedActivity({ activity: act, dayIndex: dayIdx, itemIndex: itemIdx });
-    setTrips((prevTrips) => {
-      const copy = [...prevTrips];
-      const curTrip = { ...copy[activeTripIndex] };
-      const days = [...curTrip.days];
-      const targetDay = { ...days[dayIdx] };
-      targetDay.items = targetDay.items.filter((item: any) => item.id !== act.id);
-      days[dayIdx] = targetDay;
-      curTrip.days = days;
-      copy[activeTripIndex] = curTrip;
-      return copy;
-    });
-  };
-
-  const handleUndoRemove = () => {
-    if (!removedActivity) return;
-    const { activity, dayIndex, itemIndex } = removedActivity;
-    setTrips((prevTrips) => {
-      const copy = [...prevTrips];
-      const curTrip = { ...copy[activeTripIndex] };
-      const days = [...curTrip.days];
-      const targetDay = { ...days[dayIndex] };
-      const items = [...targetDay.items];
-      items.splice(itemIndex, 0, activity);
-      targetDay.items = items;
-      days[dayIndex] = targetDay;
-      curTrip.days = days;
-      copy[activeTripIndex] = curTrip;
-      return copy;
-    });
-    setRemovedActivity(null);
-  };
+  const [checklist, setChecklist] = useState(DEFAULT_CHECKLIST);
 
   // Day filter for Itinerary & Interactive Map
   const [selectedDayIdx, setSelectedDayIdx] = useState<number | 'all'>('all');
@@ -104,16 +90,81 @@ export default function ActiveTripsPage() {
   const [copilotInput, setCopilotInput] = useState('');
   const [isExecutingCopilot, setIsExecutingCopilot] = useState(false);
   const [copilotError, setCopilotError] = useState<string | null>(null);
-  const [lastDiffResult, setLastDiffResult] = useState<{ summary: string; changes: AIDiffChange[] } | null>(null);
+  const [pendingProposal, setPendingProposal] = useState<CopilotProposal | null>(null);
+  const [lastDiffResult, setLastDiffResult] = useState<{ summary: string; changes: AIDiffChange[]; canUndo?: boolean; previousTrip?: any } | null>(null);
 
-  const [checklist, setChecklist] = useState([
-    { id: 'c1', task: 'Valid Passport & Photo ID', done: true, category: 'Docs' },
-    { id: 'c2', task: 'Flight Boarding Pass / Ticket Downloaded', done: true, category: 'Tickets' },
-    { id: 'c3', task: 'Hotel / Sanctuary Booking Voucher', done: true, category: 'Hotel' },
-    { id: 'c4', task: 'Pack Sunscreen, Walking Shoes & Sunglasses', done: false, category: 'Packing' },
-    { id: 'c5', task: 'Camera, Chargers & Universal Adapter', done: false, category: 'Equipment' },
-    { id: 'c6', task: 'Notify Bank / Credit Card for Travel', done: true, category: 'Finance' },
-  ]);
+  const currentTrip = trips[activeTripIndex] || trips[0];
+
+  // Persistent removal of itinerary activity with backend mutation
+  const handleRemoveActivity = async (act: any, dayIdx: number, itemIdx: number) => {
+    setRemovedActivity({ activity: act, dayIndex: dayIdx, itemIndex: itemIdx });
+    
+    // Optimistic UI update
+    setTrips((prevTrips) => {
+      const copy = [...prevTrips];
+      const curTrip = { ...copy[activeTripIndex] };
+      const days = [...curTrip.days];
+      const targetDay = { ...days[dayIdx] };
+      targetDay.activities = (targetDay.activities || targetDay.items || []).filter((item: any) => item.id !== act.id);
+      days[dayIdx] = targetDay;
+      curTrip.days = days;
+      copy[activeTripIndex] = curTrip;
+      return copy;
+    });
+
+    // Persist mutation to backend
+    try {
+      if (currentTrip?.id && act.id) {
+        await apiService.removeTripActivity(currentTrip.id, act.id);
+      }
+    } catch (err) {
+      console.error('Failed to remove activity on server:', err);
+    }
+  };
+
+  // Restore deleted activity via backend mutation and update UI
+  const handleUndoRemove = async () => {
+    if (!removedActivity || !currentTrip) return;
+    const { activity, dayIndex, itemIndex } = removedActivity;
+    
+    // Optimistic UI restore
+    setTrips((prevTrips) => {
+      const copy = [...prevTrips];
+      const curTrip = { ...copy[activeTripIndex] };
+      const days = [...curTrip.days];
+      const targetDay = { ...days[dayIndex] };
+      const activities = [...(targetDay.activities || targetDay.items || [])];
+      activities.splice(itemIndex, 0, activity);
+      targetDay.activities = activities;
+      days[dayIndex] = targetDay;
+      curTrip.days = days;
+      copy[activeTripIndex] = curTrip;
+      return copy;
+    });
+
+    setRemovedActivity(null);
+
+    // Persist restoration to backend
+    try {
+      const targetDay = currentTrip.days[dayIndex];
+      await apiService.addTripActivity(currentTrip.id, {
+        id: activity.id,
+        day_id: targetDay?.id,
+        day_number: targetDay?.dayNumber || dayIndex + 1,
+        time_slot: activity.time || '10:00 AM',
+        description: activity.description,
+        location: activity.location || currentTrip.destination,
+        place_type: activity.placeType || 'TA',
+        cost_estimate: activity.costEstimate || 0,
+        lat: activity.lat,
+        lng: activity.lng,
+        provenance: activity.provenance || 'DETERMINISTIC',
+        why_recommended: activity.whyRecommended || 'Restored activity'
+      });
+    } catch (err) {
+      console.error('Failed to restore activity on server:', err);
+    }
+  };
 
   const loadData = async () => {
     setLoading(true);
@@ -124,9 +175,18 @@ export default function ActiveTripsPage() {
         apiService.getMyBookings(),
       ]);
 
-      setTrips(tripsData || []);
+      const loaded = tripsData || [];
+      setTrips(loaded);
       if (bookingsData && bookingsData.length > 0) {
         setRealBookings(bookingsData);
+      }
+
+      // If URL param specifies tripId, automatically focus on it
+      if (loaded.length > 0 && tripIdParam) {
+        const matchIdx = loaded.findIndex((t: any) => t.id === tripIdParam);
+        if (matchIdx >= 0) {
+          setActiveTripIndex(matchIdx);
+        }
       }
     } catch (err) {
       console.error('Failed to load trips:', err);
@@ -139,6 +199,52 @@ export default function ActiveTripsPage() {
   useEffect(() => {
     loadData();
   }, []);
+
+  // When tripIdParam changes dynamically, switch active trip index
+  useEffect(() => {
+    if (tripIdParam && trips.length > 0) {
+      const matchIdx = trips.findIndex((t: any) => t.id === tripIdParam);
+      if (matchIdx >= 0 && matchIdx !== activeTripIndex) {
+        setActiveTripIndex(matchIdx);
+      }
+    }
+  }, [tripIdParam, trips, activeTripIndex]);
+
+  // Load and derive persistent checklist from currentTrip
+  useEffect(() => {
+    if (!currentTrip?.id) return;
+    try {
+      const stored = localStorage.getItem(`dashtiny_checklist_${currentTrip.id}`);
+      let userChecks: Record<string, boolean> = {};
+      if (stored) {
+        userChecks = JSON.parse(stored);
+      }
+      const hasFlightBooking = (currentTrip.bookings || []).some((b: any) => b.category === 'flight');
+      const hasHotelBooking = (currentTrip.bookings || []).some((b: any) => b.category === 'hotel');
+
+      setChecklist(
+        DEFAULT_CHECKLIST.map((item) => {
+          let isDone = Boolean(userChecks[item.id]);
+          if (item.id === 'c2' && hasFlightBooking) isDone = true;
+          if (item.id === 'c3' && hasHotelBooking) isDone = true;
+          return { ...item, done: isDone };
+        })
+      );
+    } catch {
+      // Fallback to default clean state
+    }
+  }, [currentTrip?.id, currentTrip?.bookings]);
+
+  const toggleChecklist = (id: string) => {
+    setChecklist((prev) => {
+      const updated = prev.map((item) => (item.id === id ? { ...item, done: !item.done } : item));
+      if (currentTrip?.id) {
+        const stateMap = updated.reduce((acc, curr) => ({ ...acc, [curr.id]: curr.done }), {});
+        localStorage.setItem(`dashtiny_checklist_${currentTrip.id}`, JSON.stringify(stateMap));
+      }
+      return updated;
+    });
+  };
 
   const handleExecuteCopilotAction = async (customInstruction?: string) => {
     const instruction = (customInstruction || copilotInput).trim();
@@ -155,21 +261,14 @@ export default function ActiveTripsPage() {
       const res = await apiService.executeAIAction(tripId, instruction);
 
       if (res && res.status === 'success') {
-        setLastDiffResult({
+        setPendingProposal({
           summary: res.summary,
           changes: res.changes || [],
+          proposedTrip: res.trip || null,
+          previousTrip: JSON.parse(JSON.stringify(activeTrip)),
         });
-
-        // Update active trip with new modified activities returned by backend
-        if (res.trip) {
-          setTrips((prev) =>
-            prev.map((t, idx) => (idx === activeTripIndex ? { ...t, ...res.trip } : t))
-          );
-        } else {
-          await loadData();
-        }
       } else {
-        setCopilotError('DAIna could not apply this adjustment right now. Please try a different request.');
+        setCopilotError('DAIna could not propose this adjustment right now. Please try a different request.');
       }
     } catch (err) {
       console.error('Failed to execute AI Copilot diff:', err);
@@ -179,13 +278,35 @@ export default function ActiveTripsPage() {
     }
   };
 
-  const toggleChecklist = (id: string) => {
-    setChecklist((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, done: !item.done } : item))
-    );
+  const handleApplyProposal = async () => {
+    if (!pendingProposal) return;
+    const applied = pendingProposal;
+    setPendingProposal(null);
+
+    if (applied.proposedTrip) {
+      setTrips((prev) =>
+        prev.map((t, idx) => (idx === activeTripIndex ? { ...t, ...applied.proposedTrip } : t))
+      );
+    } else {
+      await loadData();
+    }
+
+    setLastDiffResult({
+      summary: applied.summary,
+      changes: applied.changes,
+      canUndo: true,
+      previousTrip: applied.previousTrip,
+    });
   };
 
-  const currentTrip = trips[activeTripIndex] || trips[0];
+  const handleUndoCopilotDiff = () => {
+    if (lastDiffResult?.previousTrip) {
+      setTrips((prev) =>
+        prev.map((t, idx) => (idx === activeTripIndex ? lastDiffResult.previousTrip : t))
+      );
+      setLastDiffResult(null);
+    }
+  };
 
   // Helper: map activity place codes to human tags and icons
   const getPlaceCategory = (code?: string) => {
@@ -338,23 +459,17 @@ export default function ActiveTripsPage() {
             {/* TRIP COCKPIT HEADER */}
             <div className="p-6 sm:p-7 rounded-3xl bg-white border border-slate-200 shadow-sm space-y-4">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div className="space-y-1.5">
-                  <div className="flex items-center gap-2">
-                    <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-semibold uppercase tracking-wide">
-                      Active Trip Workspace
-                    </span>
-                    <span className="text-xs text-slate-400 font-medium">• Saved automatically</span>
-                  </div>
+                <div className="space-y-1">
                   <h1 className="text-2xl sm:text-3xl font-serif-editorial font-bold text-slate-900 tracking-tight">
                     {currentTrip.destination}
                   </h1>
                   <p className="text-xs sm:text-sm text-slate-600 font-medium flex flex-wrap items-center gap-2">
                     <span>{currentTrip.startDate} – {currentTrip.endDate}</span>
                     <span>•</span>
-                    <span>{currentTrip.travelers || 2} travelers</span>
+                    <span>{currentTrip.travelers || currentTrip.travellers || 2} travelers</span>
                     <span>•</span>
                     <span className="font-semibold text-slate-900">
-                      ₹{Number(currentTrip.budget || 50000).toLocaleString('en-IN')} estimated
+                      ₹{Number(currentTrip.budget || 50000).toLocaleString('en-IN')} est.
                     </span>
                   </p>
                 </div>
@@ -581,7 +696,7 @@ export default function ActiveTripsPage() {
                                         className="text-[11px] text-slate-500 hover:text-slate-800 flex items-center gap-1 cursor-pointer font-medium"
                                       >
                                         <Sparkles className="w-3 h-3 text-orange-500" />
-                                        <span>Why DashTiny chose this</span>
+                                        <span>Why this is here</span>
                                         {isWhyOpen ? (
                                           <ChevronUp className="w-3 h-3" />
                                         ) : (
@@ -660,7 +775,7 @@ export default function ActiveTripsPage() {
                           </h4>
                         </div>
                         <span className="text-[11px] font-mono text-orange-400">
-                          {validPoints.length} Stops Plotted
+                          {validPoints.length} mapped stops
                         </span>
                       </div>
 
@@ -803,7 +918,7 @@ export default function ActiveTripsPage() {
                           ✨ What would you like to change?
                         </h3>
                         <p className="text-xs text-slate-500">
-                          Tell DAIna how to adjust your trip. Pacing, budget, and route updates apply instantly.
+                          Tell DAIna how to adjust your trip. DAIna will update your trip and show you what changed.
                         </p>
                       </div>
                     </div>
@@ -865,20 +980,80 @@ export default function ActiveTripsPage() {
                     </div>
                   )}
 
-                  {/* Real-time Diff Review Banner */}
+                  {/* DAIna Proposed Changes Review Banner (User Decides before applying) */}
+                  {pendingProposal && (
+                    <div className="p-4 rounded-2xl bg-amber-50/90 border border-amber-200 text-amber-950 space-y-3 animate-in fade-in">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold flex items-center gap-1.5 text-amber-900">
+                          <Sparkles className="w-4 h-4 text-orange-600" />
+                          DAIna suggests: {pendingProposal.summary}
+                        </span>
+                        <button
+                          onClick={() => setPendingProposal(null)}
+                          className="text-xs text-amber-700 hover:text-amber-950 cursor-pointer"
+                          aria-label="Dismiss suggestion"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                      <div className="flex flex-wrap gap-2 pt-1">
+                        {pendingProposal.changes.map((ch, idx) => (
+                          <span
+                            key={idx}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white border border-amber-200 text-[11px] font-semibold text-slate-800 shadow-2xs"
+                          >
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                            <strong>{ch.action.toUpperCase()}:</strong> {ch.item || ch.details}
+                            {ch.from && ch.to && <span className="text-slate-500 font-mono">({ch.from} → {ch.to})</span>}
+                            {ch.saving_amount && <span className="text-emerald-700 font-bold">(Save ₹{ch.saving_amount})</span>}
+                          </span>
+                        ))}
+                      </div>
+                      <div className="flex items-center gap-2 pt-2 border-t border-amber-200/60">
+                        <Button
+                          size="sm"
+                          onClick={handleApplyProposal}
+                          className="bg-orange-600 hover:bg-orange-700 text-white font-semibold text-xs px-4 py-1.5 shadow-2xs cursor-pointer"
+                        >
+                          Apply changes
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setPendingProposal(null)}
+                          className="bg-white border-slate-200 text-slate-700 hover:bg-slate-50 text-xs px-3 py-1.5 cursor-pointer"
+                        >
+                          Keep current plan
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Real-time Diff Review Banner (Once applied, with Undo) */}
                   {lastDiffResult && (
-                    <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-950 space-y-2">
+                    <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-950 space-y-2 animate-in fade-in">
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-bold flex items-center gap-1.5 text-emerald-900">
                           <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                           {lastDiffResult.summary}
                         </span>
-                        <button
-                          onClick={() => setLastDiffResult(null)}
-                          className="text-xs text-emerald-700 hover:text-emerald-950 cursor-pointer"
-                        >
-                          ✕
-                        </button>
+                        <div className="flex items-center gap-2">
+                          {lastDiffResult.canUndo && (
+                            <button
+                              onClick={handleUndoCopilotDiff}
+                              className="text-xs font-semibold text-emerald-800 hover:text-emerald-950 bg-emerald-100 hover:bg-emerald-200 px-2 py-0.5 rounded cursor-pointer underline"
+                            >
+                              Undo changes
+                            </button>
+                          )}
+                          <button
+                            onClick={() => setLastDiffResult(null)}
+                            className="text-xs text-emerald-700 hover:text-emerald-950 cursor-pointer"
+                            aria-label="Dismiss banner"
+                          >
+                            ✕
+                          </button>
+                        </div>
                       </div>
                       <div className="flex flex-wrap gap-2 pt-1">
                         {lastDiffResult.changes.map((ch, idx) => (
@@ -906,10 +1081,10 @@ export default function ActiveTripsPage() {
                 <Card className="p-6 rounded-3xl bg-slate-950 border border-slate-800 text-white relative overflow-hidden">
                   <div className="flex items-center justify-between pb-4 border-b border-slate-800">
                     <div>
-                      <h3 className="text-base font-serif-editorial font-bold text-white">Trip Route Radar</h3>
-                      <p className="text-xs text-slate-400">Waypoints and route sequencing for {currentTrip.destination}</p>
+                      <h3 className="text-base font-serif-editorial font-bold text-white">Route View</h3>
+                      <p className="text-xs text-slate-400">Your day-by-day route overview for {currentTrip.destination}</p>
                     </div>
-                    <span className="font-mono text-xs text-orange-400">{validPoints.length} Geocoded Pins</span>
+                    <span className="font-mono text-xs text-orange-400">{validPoints.length} mapped stops</span>
                   </div>
 
                   <div className="relative h-96 w-full my-4">
@@ -1060,31 +1235,115 @@ export default function ActiveTripsPage() {
             })()}
 
             {/* TAB: BUDGET & SPLIT */}
-            {activeTab === 'budget' && (
-              <div className="space-y-6">
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-                  {[
-                    { category: 'Stays & Lodging', amount: '₹22,000', pct: '52%', count: '2 Nights' },
-                    { category: 'Dining & Cafes', amount: '₹9,500', pct: '23%', count: '5 Meals' },
-                    { category: 'Activities & Tours', amount: '₹6,000', pct: '14%', count: '3 Passes' },
-                    { category: 'Transit', amount: '₹4,500', pct: '11%', count: 'Local cabs' }
-                  ].map((b, i) => (
-                    <Card key={i} className="p-5 rounded-2xl bg-white border border-slate-200 space-y-2">
-                      <span className="text-[10px] font-semibold uppercase text-slate-400">{b.category}</span>
-                      <p className="text-xl font-serif-editorial font-bold text-slate-900">{b.amount}</p>
-                      <div className="flex items-center justify-between text-xs text-slate-500 pt-1 border-t border-slate-100">
-                        <span>{b.count}</span>
-                        <span className="font-semibold text-orange-600">{b.pct}</span>
+            {activeTab === 'budget' && (() => {
+              const totalBudget = Number(currentTrip.budget || 50000);
+              const staysEst = Math.round(totalBudget * 0.45);
+              const diningEst = Math.round(totalBudget * 0.25);
+              const actsEst = Math.round(totalBudget * 0.18);
+              const transitEst = Math.round(totalBudget * 0.12);
+
+              const allBookings = (currentTrip.bookings || realBookings || []);
+              const staysBooked = allBookings.filter((b: any) => b.category === 'hotel').reduce((acc: number, b: any) => acc + (b.amount || 0), 0);
+              const flightsBooked = allBookings.filter((b: any) => b.category === 'flight').reduce((acc: number, b: any) => acc + (b.amount || 0), 0);
+              const otherBooked = allBookings.filter((b: any) => !['hotel', 'flight'].includes(b.category)).reduce((acc: number, b: any) => acc + (b.amount || 0), 0);
+              const totalBooked = staysBooked + flightsBooked + otherBooked;
+              const remainingBudget = Math.max(0, totalBudget - totalBooked);
+
+              const budgetCategories = [
+                {
+                  category: 'Stays & Lodging',
+                  estimated: staysEst,
+                  pct: '45%',
+                  booked: staysBooked,
+                  note: staysBooked > 0 ? `₹${staysBooked.toLocaleString('en-IN')} booked` : 'Estimated allocation'
+                },
+                {
+                  category: 'Dining & Cafes',
+                  estimated: diningEst,
+                  pct: '25%',
+                  booked: 0,
+                  note: 'Daily meals & cafes'
+                },
+                {
+                  category: 'Activities & Tours',
+                  estimated: actsEst,
+                  pct: '18%',
+                  booked: otherBooked,
+                  note: otherBooked > 0 ? `₹${otherBooked.toLocaleString('en-IN')} booked` : 'Attractions & passes'
+                },
+                {
+                  category: 'Transit & Flights',
+                  estimated: transitEst,
+                  pct: '12%',
+                  booked: flightsBooked,
+                  note: flightsBooked > 0 ? `₹${flightsBooked.toLocaleString('en-IN')} booked` : 'Corridor transport'
+                },
+              ];
+
+              return (
+                <div className="space-y-6">
+                  {/* Budget Overview Banner */}
+                  <div className="p-5 sm:p-6 rounded-2xl bg-white border border-slate-200 shadow-2xs space-y-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div>
+                        <h3 className="font-serif-editorial font-bold text-lg text-slate-900">
+                          Estimated Budget Allocation
+                        </h3>
+                        <p className="text-xs text-slate-500 font-medium">
+                          Estimated distribution based on your ₹{totalBudget.toLocaleString('en-IN')} trip budget. Actual spend updates as you save bookings.
+                        </p>
                       </div>
-                    </Card>
-                  ))}
+                      <div className="text-left sm:text-right">
+                        <span className="text-[11px] text-slate-400 font-semibold uppercase">Total Trip Budget</span>
+                        <p className="text-xl font-serif-editorial font-bold text-slate-900">
+                          ₹{totalBudget.toLocaleString('en-IN')}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Progress Bar of Committed vs Remaining */}
+                    <div className="space-y-1.5 pt-2">
+                      <div className="w-full h-2.5 rounded-full bg-slate-100 overflow-hidden flex">
+                        <div
+                          style={{ width: `${Math.min(100, Math.round((totalBooked / totalBudget) * 100))}%` }}
+                          className="h-full bg-emerald-500 transition-all duration-500"
+                        />
+                      </div>
+                      <div className="flex items-center justify-between text-xs text-slate-600 font-medium">
+                        <span className="flex items-center gap-1.5 text-emerald-700 font-semibold">
+                          <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                          ₹{totalBooked.toLocaleString('en-IN')} confirmed bookings
+                        </span>
+                        <span className="text-slate-500">
+                          ₹{remainingBudget.toLocaleString('en-IN')} remaining
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Category Breakdown Cards */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                    {budgetCategories.map((b, i) => (
+                      <Card key={i} className="p-5 rounded-2xl bg-white border border-slate-200 space-y-2">
+                        <span className="text-[10px] font-semibold uppercase text-slate-400">{b.category}</span>
+                        <p className="text-xl font-serif-editorial font-bold text-slate-900">
+                          ₹{b.estimated.toLocaleString('en-IN')}
+                        </p>
+                        <div className="flex items-center justify-between text-xs text-slate-500 pt-1 border-t border-slate-100">
+                          <span className="text-[11px] font-medium text-slate-600 truncate pr-1">{b.note}</span>
+                          <span className="font-semibold text-orange-600 shrink-0">{b.pct}</span>
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+
+                  <SquadRoomHub
+                    squadId={currentTrip.squad_room_code || currentTrip.id || 'SQUAD-HUB'}
+                    onOpenInviteModal={() => setIsGroupModalOpen(true)}
+                  />
                 </div>
-                <SquadRoomHub
-                  squadId={currentTrip.squad_room_code || currentTrip.id || 'SQUAD-HUB'}
-                  onOpenInviteModal={() => setIsGroupModalOpen(true)}
-                />
-              </div>
-            )}
+              );
+            })()}
 
             {/* TAB: PEOPLE / SQUAD */}
             {activeTab === 'people' && (
@@ -1123,5 +1382,17 @@ export default function ActiveTripsPage() {
 
       <BottomNav />
     </div>
+  );
+}
+
+export default function ActiveTripsPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-[#FAFAF9] flex items-center justify-center text-xs text-slate-500 font-medium">
+        Loading Trip Workspace...
+      </div>
+    }>
+      <TripsContent />
+    </Suspense>
   );
 }

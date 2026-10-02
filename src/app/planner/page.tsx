@@ -36,7 +36,7 @@ function PlannerContent() {
     async function loadLatest() {
       if (initialQuery) {
         setPromptText(initialQuery);
-        handleBuildPlan(initialQuery);
+        // Do not auto-generate on load; user sees "Here's what I understood" and clicks Create my trip
       } else if (!currentItinerary) {
         try {
           const myTrips = await apiService.getMyTrips();
@@ -171,7 +171,7 @@ function PlannerContent() {
               <span>Itinerary created and saved automatically!</span>
             </div>
             <button
-              onClick={() => router.push('/trips')}
+              onClick={() => router.push(activeItinerary?.id ? `/trips?tripId=${activeItinerary.id}` : '/trips')}
               className="px-3.5 py-1.5 rounded-lg bg-emerald-600 text-white font-semibold hover:bg-emerald-700 flex items-center gap-1.5 text-xs cursor-pointer"
             >
               <span>Open in Trip Workspace</span>
@@ -232,60 +232,61 @@ function PlannerContent() {
             </div>
           </form>
 
-          {/* DAIna Understood — Immediate Structured Interpretation Card */}
+          {/* Conversational Confirmation Card */}
           {parsedIntent && parsedIntent.destination && (
-            <div className="mt-4 p-4 rounded-xl bg-orange-50/60 border border-orange-200/80 space-y-3">
+            <div className="mt-4 p-4 rounded-xl bg-orange-50/70 border border-orange-200 space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-orange-900 uppercase tracking-wide flex items-center gap-1.5">
+                <span className="text-xs font-bold text-orange-950 flex items-center gap-1.5">
                   <Sparkles className="w-3.5 h-3.5 text-orange-600" />
-                  DAIna Understood
+                  Here&apos;s what I understood
                 </span>
-                <span className="text-[11px] text-orange-700 font-medium">Ready to structure</span>
+                <span className="text-[11px] text-orange-800 font-medium">Ready to create</span>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-xs">
-                <div className="p-2.5 rounded-lg bg-white border border-orange-100 space-y-0.5">
-                  <span className="text-[10px] text-slate-400 uppercase font-semibold block">Destination</span>
-                  <span className="font-bold text-slate-900">📍 {parsedIntent.destination}</span>
-                </div>
-                <div className="p-2.5 rounded-lg bg-white border border-orange-100 space-y-0.5">
-                  <span className="text-[10px] text-slate-400 uppercase font-semibold block">Duration</span>
-                  <span className="font-bold text-slate-900">⏱️ {parsedIntent.days_count} Days</span>
-                </div>
-                <div className="p-2.5 rounded-lg bg-white border border-orange-100 space-y-0.5">
-                  <span className="text-[10px] text-slate-400 uppercase font-semibold block">Travelers</span>
-                  <span className="font-bold text-slate-900">👥 {parsedIntent.travellers} {parsedIntent.travellers === 1 ? 'traveler' : 'travelers'}</span>
-                </div>
-                <div className="p-2.5 rounded-lg bg-white border border-orange-100 space-y-0.5">
-                  <span className="text-[10px] text-slate-400 uppercase font-semibold block">Estimated Budget</span>
-                  <span className="font-bold text-slate-900">💰 ₹{parsedIntent.budget.toLocaleString('en-IN')}</span>
-                </div>
-                <div className="p-2.5 rounded-lg bg-white border border-orange-100 space-y-0.5">
-                  <span className="text-[10px] text-slate-400 uppercase font-semibold block">Origin</span>
-                  <span className="font-bold text-slate-900">🛫 {parsedIntent.origin || 'Flexible'}</span>
-                </div>
-                <div className="p-2.5 rounded-lg bg-white border border-orange-100 space-y-0.5">
-                  <span className="text-[10px] text-slate-400 uppercase font-semibold block">Style & Interests</span>
-                  <span className="font-bold text-slate-900 truncate block">📷 {parsedIntent.vibe}</span>
-                </div>
+              <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-800">
+                <span className="px-2.5 py-1 rounded-lg bg-white border border-orange-200/80 shadow-2xs">
+                  📍 {parsedIntent.destination}
+                </span>
+                <span className="px-2.5 py-1 rounded-lg bg-white border border-orange-200/80 shadow-2xs">
+                  ⏱️ {parsedIntent.days_count} Days
+                </span>
+                <span className="px-2.5 py-1 rounded-lg bg-white border border-orange-200/80 shadow-2xs">
+                  👥 {parsedIntent.travellers} {parsedIntent.travellers === 1 ? 'traveler' : 'travelers'}
+                </span>
+                <span className="px-2.5 py-1 rounded-lg bg-white border border-orange-200/80 shadow-2xs">
+                  💰 ₹{parsedIntent.budget.toLocaleString('en-IN')}
+                </span>
+                {parsedIntent.origin && (
+                  <span className="px-2.5 py-1 rounded-lg bg-white border border-orange-200/80 shadow-2xs">
+                    🛫 From {parsedIntent.origin}
+                  </span>
+                )}
+                {parsedIntent.vibe && (
+                  <span className="px-2.5 py-1 rounded-lg bg-white border border-orange-200/80 shadow-2xs">
+                    ✨ {parsedIntent.vibe}
+                  </span>
+                )}
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-1">
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-orange-200/60">
                 <button
                   type="button"
                   onClick={() => setShowArchitect(true)}
-                  className="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:text-slate-900 hover:bg-white transition-colors"
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 cursor-pointer"
                 >
                   Edit details
                 </button>
-                <button
+                <Button
                   type="button"
+                  variant="primary"
+                  size="sm"
                   onClick={() => handleBuildPlan()}
-                  disabled={isGenerating}
-                  className="px-4 py-1.5 rounded-lg text-xs font-semibold bg-orange-600 hover:bg-orange-700 text-white transition-colors cursor-pointer flex items-center gap-1.5"
+                  isLoading={isGenerating}
+                  className="bg-orange-600 hover:bg-orange-700 text-white font-semibold text-xs px-4 py-1.5 cursor-pointer shadow-xs"
                 >
-                  <span>Looks right →</span>
-                </button>
+                  <Sparkles className="w-3.5 h-3.5 mr-1" />
+                  Create my trip →
+                </Button>
               </div>
             </div>
           )}
@@ -353,7 +354,7 @@ function PlannerContent() {
                 variant="primary"
                 size="md"
                 className="bg-orange-500 hover:bg-orange-600 text-white font-semibold text-xs px-5 py-2.5 rounded-xl shrink-0 cursor-pointer"
-                onClick={() => router.push('/trips')}
+                onClick={() => router.push(activeItinerary?.id ? `/trips?tripId=${activeItinerary.id}` : '/trips')}
               >
                 <Luggage className="w-4 h-4 mr-1.5" />
                 Manage in Trip Workspace →
@@ -400,7 +401,13 @@ function PlannerContent() {
         onClose={() => setShowArchitect(false)}
         destination={activeItinerary ? activeItinerary.destination : (promptText || 'Your Destination')}
         onComplete={(answers) => {
-          handleBuildPlan(`Trip for ${answers.travelers} with ${answers.occasion} occasion, budget: ${answers.budget}`);
+          const parts = [];
+          if (answers.travelers) parts.push(`${answers.travelers}`);
+          if (answers.food) parts.push(`food: ${answers.food}`);
+          if (answers.walking) parts.push(`pace: ${answers.walking}`);
+          if (answers.budget) parts.push(`budget: ${answers.budget}`);
+          const prompt = parts.length > 0 ? parts.join(', ') : 'Refined getaway plan';
+          handleBuildPlan(prompt);
         }}
       />
 

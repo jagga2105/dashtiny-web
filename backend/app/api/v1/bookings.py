@@ -28,18 +28,42 @@ class CreateBookingRequest(BaseModel):
     details: Optional[dict] = None
 
 @router.get("/search/flights")
-def search_flights_endpoint(origin: str = "BLR", destination: str = "GOI"):
+def search_flights_endpoint(
+    origin: str = "BLR",
+    destination: str = "GOI",
+    departure_date: Optional[str] = None,
+    return_date: Optional[str] = None,
+    passengers: int = 1,
+    cabin_class: str = "economy",
+    trip_type: str = "roundtrip"
+):
     """
     Search and normalize live flight inventory into FlightOffer schema.
+    Consumes departure_date, return_date, passengers, cabin_class, and trip_type.
     """
-    return search_flights(origin, destination)
+    return search_flights(
+        origin=origin,
+        destination=destination,
+        date=departure_date,
+        return_date=return_date,
+        passengers=passengers,
+        cabin_class=cabin_class,
+        trip_type=trip_type
+    )
 
 @router.get("/search/hotels")
-def search_hotels_endpoint(destination: str = "Goa", guests: int = 2):
+def search_hotels_endpoint(
+    destination: str = "Goa",
+    guests: int = 2,
+    check_in: Optional[str] = None,
+    check_out: Optional[str] = None,
+    room_type: Optional[str] = None
+):
     """
     Search and normalize live stays inventory into HotelOffer schema.
+    Consumes destination, guests, check_in, check_out, and room_type.
     """
-    return search_hotels(destination, guests=guests)
+    return search_hotels(destination=destination, guests=guests)
 
 @router.post("/create")
 def create_booking(

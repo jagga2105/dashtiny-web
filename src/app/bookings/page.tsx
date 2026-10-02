@@ -60,6 +60,60 @@ function BookingsContent() {
     ? flightsList.reduce((min, f) => (f.price < min.price ? f : min), flightsList[0])
     : null;
 
+  const parseDurationMinutes = (dur?: string): number => {
+    if (!dur) return 9999;
+    const matchH = dur.match(/(\d+)\s*h/);
+    const matchM = dur.match(/(\d+)\s*m/);
+    const hours = matchH ? parseInt(matchH[1], 10) : 0;
+    const mins = matchM ? parseInt(matchM[1], 10) : 0;
+    return hours * 60 + mins;
+  };
+
+  const fastestFlight = flightsList.length > 0
+    ? flightsList.reduce((fastest, f) => {
+        const fMinutes = typeof f.duration_minutes === 'number' && f.duration_minutes > 0
+          ? f.duration_minutes
+          : parseDurationMinutes(f.duration);
+        const fastestMinutes = typeof fastest.duration_minutes === 'number' && fastest.duration_minutes > 0
+          ? fastest.duration_minutes
+          : parseDurationMinutes(fastest.duration);
+        return fMinutes < fastestMinutes ? f : fastest;
+      }, flightsList[0])
+    : null;
+
+  const getBookingProvenanceBadge = (provenance?: string) => {
+    const prov = (provenance || '').toUpperCase();
+    if (prov === 'VERIFIED' || prov === 'PROVIDER_VERIFIED') {
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-semibold border border-emerald-200">
+          <ShieldCheck className="w-3 h-3 text-emerald-600" />
+          Provider verified
+        </span>
+      );
+    }
+    if (prov === 'CURATED') {
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-50 text-slate-700 text-[10px] font-medium border border-slate-200">
+          <CheckCircle2 className="w-3 h-3 text-slate-500" />
+          Curated schedule
+        </span>
+      );
+    }
+    if (prov === 'ESTIMATED') {
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 text-[10px] font-medium border border-amber-200">
+          <Sparkles className="w-3 h-3 text-amber-500" />
+          Estimated fare
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-50 text-slate-600 text-[10px] font-medium border border-slate-200">
+        Demo inventory
+      </span>
+    );
+  };
+
   // Hotel search states
   const [hotelDest, setHotelDest] = useState('Goa');
   const [hotelGuests, setHotelGuests] = useState(2);
@@ -128,12 +182,28 @@ function BookingsContent() {
     }
   }, [selectedTripId, activeTrips]);
 
-  // Load Flights from Backend Aggregator
-  const loadFlights = async (orig = flightOrigin, dest = flightDest) => {
+  // Load Flights from Backend Aggregator with all parameters
+  const loadFlights = async (
+    orig = flightOrigin,
+    dest = flightDest,
+    dep = departureDate,
+    ret = returnDate,
+    pax = passengers,
+    cabin = cabinClass,
+    type = tripType
+  ) => {
     setIsSearchingFlights(true);
     setFlightError(null);
     try {
-      const results = await apiService.searchFlights(orig, dest);
+      const results = await apiService.searchFlights({
+        origin: orig,
+        destination: dest,
+        departureDate: dep,
+        returnDate: type === 'round' ? ret : undefined,
+        passengers: pax,
+        cabinClass: cabin,
+        tripType: type,
+      });
       setFlightsList(results || []);
     } catch (err) {
       console.error('Failed to search flights:', err);
@@ -144,12 +214,22 @@ function BookingsContent() {
     }
   };
 
-  // Load Hotels from Backend Aggregator
-  const loadHotels = async (dest = hotelDest, guests = hotelGuests) => {
+  // Load Hotels from Backend Aggregator with all parameters
+  const loadHotels = async (
+    dest = hotelDest,
+    guests = hotelGuests,
+    inDate = hotelCheckIn,
+    outDate = hotelCheckOut
+  ) => {
     setIsSearchingHotels(true);
     setHotelError(null);
     try {
-      const results = await apiService.searchHotels(dest, guests);
+      const results = await apiService.searchHotels({
+        destination: dest,
+        guests,
+        checkIn: inDate,
+        checkOut: outDate,
+      });
       setHotelsList(results || []);
     } catch (err) {
       console.error('Failed to search hotels:', err);
@@ -474,12 +554,12 @@ function BookingsContent() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => loadFlights()}
+                    onClick={() => loadFlights(flightOrigin, flightDest, departureDate, returnDate, passengers, cabinClass, tripType)}
                     disabled={isSearchingFlights}
                     className="border-slate-200 text-xs font-semibold hover:bg-slate-50 cursor-pointer"
                   >
                     <Search className="w-3.5 h-3.5 mr-1 text-orange-500" />
-                    Refresh Offers
+                    {flightsList.length > 0 ? 'Update results' : 'Search flights'}
                   </Button>
                 </div>
               </Card>
@@ -488,7 +568,7 @@ function BookingsContent() {
               <div className="space-y-3">
                 {flightsList.map((fl, idx) => {
                   const isLowestFare = lowestFareFlight && fl.id === lowestFareFlight.id;
-                  const isFastest = fl.duration?.includes('1h');
+                  const isFastest = fastestFlight && fl.id === fastestFlight.id;
 
                   return (
                     <Card
@@ -511,10 +591,7 @@ function BookingsContent() {
                               Fastest Transit
                             </span>
                           )}
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-50 text-slate-700 text-[10px] font-medium border border-slate-200">
-                            <ShieldCheck className="w-3 h-3 text-emerald-600" />
-                            Provider verified
-                          </span>
+                          {getBookingProvenanceBadge(fl.provenance)}
                         </div>
 
                         <div className="flex items-center gap-3 text-sm font-semibold text-slate-800">
@@ -660,12 +737,12 @@ function BookingsContent() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => loadHotels()}
+                  onClick={() => loadHotels(hotelDest, hotelGuests, hotelCheckIn, hotelCheckOut)}
                   disabled={isSearchingHotels}
                   className="border-slate-200 text-xs font-semibold hover:bg-slate-50 cursor-pointer"
                 >
                   <Search className="w-3.5 h-3.5 mr-1 text-orange-500" />
-                  Refresh
+                  {hotelsList.length > 0 ? 'Update results' : 'Search stays'}
                 </Button>
               </div>
             </Card>

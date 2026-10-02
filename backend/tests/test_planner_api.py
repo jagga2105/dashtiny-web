@@ -487,3 +487,83 @@ def test_strict_constraint_validator():
     assert len(validated.days) == 1
     assert len(validated.days[0].activities) == 3
 
+def test_trip_activity_deletion_and_restoration(client, db_session):
+    """
+    Test persistent deletion of trip activity and restoration via POST.
+    """
+    # Create a trip first
+    payload = {
+        "destination": "Goa",
+        "days_count": 2,
+        "budget": 30000,
+        "start_date": "2026-11-10",
+        "end_date": "2026-11-11"
+    }
+    create_res = client.post("/api/v1/planner/generate", json=payload)
+    assert create_res.status_code == 200
+    trip_data = create_res.json()
+    trip_id = trip_data["id"]
+    target_act = trip_data["days"][0]["activities"][0]
+    act_id = target_act["id"]
+    day_id = trip_data["days"][0]["id"]
+
+    # Delete the activity
+    del_res = client.delete(f"/api/v1/trips/{trip_id}/activities/{act_id}")
+    assert del_res.status_code == 200
+    assert del_res.json()["status"] == "success"
+
+    # Verify activity is absent from trip details
+    details_res = client.get(f"/api/v1/trips/{trip_id}")
+    assert details_res.status_code == 200
+    remaining_acts = details_res.json()["days"][0]["activities"]
+    assert not any(a["id"] == act_id for a in remaining_acts)
+
+    # Restore the activity (Undo simulation)
+    restore_res = client.post(
+        f"/api/v1/trips/{trip_id}/activities",
+        json={
+            "day_id": day_id,
+            "time_slot": target_act["time"],
+            "description": target_act["description"],
+            "location": target_act["location"],
+            "place_type": target_act["placeType"],
+            "cost_estimate": target_act["costEstimate"]
+        }
+    )
+    assert restore_res.status_code == 200
+    restored_act = restore_res.json()["activity"]
+    assert restored_act["description"] == target_act["description"]
+
+    # Verify restored activity is in trip details again
+    details_res2 = client.get(f"/api/v1/trips/{trip_id}")
+    assert any(a["description"] == target_act["description"] for a in details_res2.json()["days"][0]["activities"])
+
+def test_flight_search_parameterized(client):
+    """
+    Test flight search with passengers, cabin_class, trip_type and duration_minutes.
+    """
+    res = client.get(
+        "/api/v1/bookings/search/flights",
+        params={
+            "origin": "DEL",
+            "destination": "BOM",
+            "departure_date": "2026-11-15",
+            "return_date": "2026-11-20",
+            "passengers": 3,
+            "cabin_class": "business",
+            "trip_type": "roundtrip"
+        }
+    )
+    assert res.status_code == 200
+    flights = res.json()
+    assert len(flights) > 0
+    first = flights[0]
+    assert first["passengers"] == 3
+    assert first["cabin_class"] == "business"
+    assert first["departure_date"] == "2026-11-15"
+    assert first["return_date"] == "2026-11-20"
+    assert "duration_minutes" in first
+    assert first["duration_minutes"] > 0
+    assert first["provenance"] == "CURATED"
+
+

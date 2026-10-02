@@ -133,8 +133,8 @@ export function TopNavbar() {
                       onClick={() => setShowUserMenu(false)}
                       className="px-4 py-2 text-slate-700 hover:bg-slate-50 flex items-center gap-2.5 font-medium"
                     >
-                      <Sliders className="w-3.5 h-3.5 text-slate-400" />
-                      <span>Travel Preferences</span>
+                      <Sparkles className="w-3.5 h-3.5 text-slate-400" />
+                      <span>Plan a new trip</span>
                     </Link>
                     <Link
                       href="/rewards"

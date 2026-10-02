@@ -1,5 +1,6 @@
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -173,4 +174,159 @@ def get_trip_details(
             }
             for d in days
         ]
+    }
+
+class AddActivityRequest(BaseModel):
+    id: Optional[str] = None
+    day_id: Optional[str] = None
+    day_number: Optional[int] = 1
+    time_slot: str = "10:00 AM"
+    description: str
+    location: Optional[str] = None
+    place_type: Optional[str] = "TA"
+    cost_estimate: Optional[float] = 0.0
+    lat: Optional[float] = None
+    lng: Optional[float] = None
+    provenance: Optional[str] = "DETERMINISTIC"
+    why_recommended: Optional[str] = None
+    source_citation: Optional[str] = None
+
+@router.delete("/{trip_id}/activities/{activity_id}")
+def delete_trip_activity(
+    trip_id: str,
+    activity_id: str,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Persistently remove an itinerary activity from a trip.
+    Enforces user data ownership and validates activity membership in the trip.
+    """
+    it = db.query(Itinerary).filter(Itinerary.id == trip_id).first()
+    if not it:
+        raise HTTPException(status_code=404, detail="Trip not found")
+
+    is_owner = (it.owner_id == user.id)
+    squad = db.query(SquadRoom).filter(SquadRoom.itinerary_id == it.id).first()
+    is_member = False
+    if squad:
+        is_member = db.query(SquadMember).filter(
+            SquadMember.squad_id == squad.id,
+            SquadMember.user_id == user.id
+        ).first() is not None
+    if not is_owner and not is_member:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied. You do not have permission to modify this trip."
+        )
+
+    # Find the activity and verify it belongs to one of this trip's days
+    activity = db.query(ItineraryActivity).filter(ItineraryActivity.id == activity_id).first()
+    if not activity:
+        raise HTTPException(status_code=404, detail="Activity not found")
+
+    day = db.query(ItineraryDay).filter(ItineraryDay.id == activity.day_id).first()
+    if not day or day.itinerary_id != it.id:
+        raise HTTPException(status_code=400, detail="Activity does not belong to the specified trip")
+
+    db.delete(activity)
+    db.commit()
+
+    return {
+        "status": "success",
+        "action": "deleted",
+        "trip_id": trip_id,
+        "activity_id": activity_id,
+        "message": "Activity removed persistently from trip"
+    }
+
+@router.post("/{trip_id}/activities")
+def add_trip_activity(
+    trip_id: str,
+    request: AddActivityRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Add or restore an itinerary activity to a trip day.
+    Used for user-initiated additions and undoing deletions.
+    """
+    it = db.query(Itinerary).filter(Itinerary.id == trip_id).first()
+    if not it:
+        raise HTTPException(status_code=404, detail="Trip not found")
+
+    is_owner = (it.owner_id == user.id)
+    squad = db.query(SquadRoom).filter(SquadRoom.itinerary_id == it.id).first()
+    is_member = False
+    if squad:
+        is_member = db.query(SquadMember).filter(
+            SquadMember.squad_id == squad.id,
+            SquadMember.user_id == user.id
+        ).first() is not None
+    if not is_owner and not is_member:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied. You do not have permission to modify this trip."
+        )
+
+    # Locate destination day
+    target_day = None
+    if request.day_id:
+        target_day = db.query(ItineraryDay).filter(
+            ItineraryDay.id == request.day_id,
+            ItineraryDay.itinerary_id == it.id
+        ).first()
+
+    if not target_day:
+        target_day = db.query(ItineraryDay).filter(
+            ItineraryDay.itinerary_id == it.id,
+            ItineraryDay.day_number == (request.day_number or 1)
+        ).first()
+
+    if not target_day:
+        # Fallback to first day
+        target_day = db.query(ItineraryDay).filter(ItineraryDay.itinerary_id == it.id).order_by(ItineraryDay.day_number.asc()).first()
+
+    if not target_day:
+        raise HTTPException(status_code=404, detail="No days found in trip to attach activity")
+
+    # Get max sort order in day
+    current_count = db.query(ItineraryActivity).filter(ItineraryActivity.day_id == target_day.id).count()
+
+    new_act = ItineraryActivity(
+        id=request.id if request.id else None,
+        day_id=target_day.id,
+        time_slot=request.time_slot,
+        description=request.description,
+        location=request.location or it.destination,
+        place_type=request.place_type or "TA",
+        cost_estimate=request.cost_estimate or 0.0,
+        provenance=request.provenance or "DETERMINISTIC",
+        lat=request.lat,
+        lng=request.lng,
+        why_recommended=request.why_recommended or "Added to itinerary",
+        source_citation=request.source_citation or "User Action",
+        sort_order=current_count
+    )
+    db.add(new_act)
+    db.commit()
+    db.refresh(new_act)
+
+    return {
+        "status": "success",
+        "action": "added",
+        "activity": {
+            "id": new_act.id,
+            "dayId": new_act.day_id,
+            "dayNumber": target_day.day_number,
+            "time": new_act.time_slot,
+            "description": new_act.description,
+            "location": new_act.location,
+            "placeType": new_act.place_type,
+            "costEstimate": float(new_act.cost_estimate or 0),
+            "lat": new_act.lat,
+            "lng": new_act.lng,
+            "provenance": new_act.provenance,
+            "whyRecommended": new_act.why_recommended
+        }
     }
