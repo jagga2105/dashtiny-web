@@ -6,16 +6,17 @@ import { useRouter, usePathname } from 'next/navigation';
 import { X, Send, Sparkles, SlidersHorizontal, Award } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { TravelInputDialogModal, TravelInputResult } from '@/components/planner/TravelInputDialogModal';
-import { parseTravelPrompt, inferPlaceType, StructuredItineraryData, ActivityItem } from '@/lib/dainaIntentParser';
+import { parseTravelPrompt, inferPlaceType } from '@/lib/dainaIntentParser';
 import { usePlannerStore } from '@/store/usePlannerStore';
 import { apiService } from '@/services/api';
+import { Trip, TripActivity } from '@/types/trip';
 
 interface ChatMessageItem {
   id: string;
   sender: 'daina' | 'user';
   text: string;
   isItinerary?: boolean;
-  itineraryData?: StructuredItineraryData;
+  itineraryData?: Trip;
 }
 
 export function DAInaChatWidget() {
@@ -70,7 +71,7 @@ export function DAInaChatWidget() {
     try {
       const res = await apiService.sendChatMessage(textToSend);
       if (res && res.reply) {
-        let itData: StructuredItineraryData | undefined = undefined;
+        let itData: Trip | undefined = undefined;
 
         // If DAIna detects an itinerary intent, use the ONE canonical Planner service
         if (res.is_itinerary && res.itinerary_data) {
@@ -98,13 +99,16 @@ export function DAInaChatWidget() {
               });
 
               if (planRes && planRes.id) {
-                const formatted: StructuredItineraryData = {
+                const formatted: Trip = {
                   id: planRes.id,
                   title: planRes.title || `Custom ${daysCount}-Day ${dest} Getaway`,
                   destination: planRes.destination || dest,
+                  origin: planRes.origin || parsed.origin,
                   startDate: planRes.startDate || new Date().toISOString().split('T')[0],
                   endDate: planRes.endDate || new Date(Date.now() + daysCount * 86400000).toISOString().split('T')[0],
+                  travellers: planRes.travellers || parsed.travellers || 2,
                   budget: planRes.budget || budget,
+                  currency: planRes.currency || 'INR',
                   days: planRes.days || [],
                 };
                 addItinerary(formatted);
@@ -189,13 +193,16 @@ export function DAInaChatWidget() {
       });
 
       if (planRes && planRes.id) {
-        const generatedItinerary: StructuredItineraryData = {
+        const generatedItinerary: Trip = {
           id: planRes.id,
           title: planRes.title || `${formResult.destination} Getaway`,
           destination: planRes.destination || formResult.destination,
+          origin: planRes.origin || formResult.departure || undefined,
           startDate: planRes.startDate || formResult.dates.split('to')[0]?.trim() || new Date().toISOString().split('T')[0],
           endDate: planRes.endDate || formResult.dates.split('to')[1]?.trim() || new Date(Date.now() + 4 * 86400000).toISOString().split('T')[0],
+          travellers: planRes.travellers || travellersNum,
           budget: planRes.budget || budgetNum,
+          currency: planRes.currency || 'INR',
           days: planRes.days || [],
         };
 
@@ -333,7 +340,7 @@ export function DAInaChatWidget() {
                       <span className="text-[11px] text-orange-600 font-bold">₹{msg.itineraryData.budget.toLocaleString('en-IN')}</span>
                     </div>
                     <div className="space-y-1">
-                      {msg.itineraryData.days[0]?.activities?.map((act: ActivityItem, i: number) => {
+                      {msg.itineraryData.days[0]?.activities?.map((act: TripActivity, i: number) => {
                         const label = act.placeType === 'H' ? 'Hotel' : act.placeType === 'R' ? 'Dining' : 'Activity';
                         return (
                           <div key={i} className="flex items-center justify-between text-[11px] text-slate-700">

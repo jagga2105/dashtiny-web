@@ -42,7 +42,7 @@ DashTiny never presents hallucinated inventory, fabricated coordinates, or disgu
 | Tier | Category | Examples | UI Treatment |
 | :--- | :--- | :--- | :--- |
 | **`VERIFIED`** | Provider Inventory, Official Policy, Coordinates | Real airline flights, partner hotel inventory, geocoded GPS | Green verification badge, partner citation, exact timestamp |
-| **`CURATED`** | Editorial & Guide Selections | Hand-selected local sanctuaries, heritage dining | Curated badge, editorial review note |
+| **`CURATED`** | Editorial Catalog & Demo Offers | Hand-selected local sanctuaries, heritage dining, demo flight/stay comparisons (explicitly labeled `CURATED / DEMO`, never disguised as live OTA inventory) | Curated badge, editorial review note, estimated fare pill |
 | **`AI GENERATED`** | Pacing, Narrative, Route Optimization | Daily narrative, activity sequencing, slot allocation | Subtle AI aura, editable pills, "Why recommended" tooltip |
 | **`USER GENERATED`** | Community Posts, Traveler Reviews | Tips from fellow travelers, squad memories | Explorer trust score, traveler avatar |
 
@@ -147,10 +147,11 @@ For full technical specifications and governance rules, consult [ARCHITECTURE.md
 | `/api/v1/trips/{id}/public` | `GET` | Privacy-governed public trip snapshot (strictly requires explicit publication) |
 | `/api/v1/trips/{id}/undo` | `POST` | Server-authoritative append-only revision rollback |
 | `/api/v1/ai/proposals` | `POST` | Generate structured diff proposal without mutating Trip |
-| `/api/v1/ai/proposals/{id}/accept` | `POST` | Atomically lock Trip, create TripRevision, apply diff, and record telemetry |
+| `/api/v1/ai/proposals/{id}/accept` | `POST` | Atomically lock Trip row, verify parent version, apply diff, create TripRevision, and record telemetry |
 | `/api/v1/ai/proposals/{id}/reject` | `POST` | Mark proposal rejected without mutating Trip |
-| `/api/v1/bookings/search/flights` | `GET` | Query normalized flight inventory offers via provider abstraction layer |
-| `/api/v1/bookings/search/hotels` | `GET` | Query normalized stay inventory via provider abstraction layer |
+| `/api/v1/ai/query` | `POST` | Non-mutating backward-compatible wrapper returning proposals (Trip unchanged) |
+| `/api/v1/bookings/search/flights` | `GET` | Query normalized curated flight offers (`CURATED / DEMO`) via provider abstraction layer |
+| `/api/v1/bookings/search/hotels` | `GET` | Query normalized curated stay offers (`CURATED / DEMO`) via provider abstraction layer |
 | `/api/v1/bookings/create` | `POST` | Attach booking reference to trip with server-authoritative reward coin tracking |
 | `/api/v1/community/feed` | `GET` | Curated community feed with canonical `CommunityTripCard` attributes |
 | `/api/v1/community/posts` | `POST` | Publish travel story linked to an active DashTiny trip (`source_trip_id`) |

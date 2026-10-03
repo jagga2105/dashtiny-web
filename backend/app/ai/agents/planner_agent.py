@@ -23,6 +23,7 @@ from app.models.models import Itinerary, ItineraryDay, ItineraryActivity, SquadR
 from app.ai.tools.weather import get_destination_weather
 from app.ai.tools.hotel_search import search_hotels
 from app.ai.tools.maps import get_coordinates
+from app.services.trip_revision_service import create_revision, serialize_trip_days
 
 logger = logging.getLogger(__name__)
 
@@ -1123,6 +1124,22 @@ def build_itinerary_with_planner_agent(
             status="success"
         )
         db.add(ai_run)
+        db.flush()
+
+        # Create authoritative initial revision v1 for the newly synthesized trip
+        create_revision(
+            db=db,
+            trip_id=new_itinerary.id,
+            user_id=user.id,
+            action_type="INITIAL_CREATION",
+            days_data=serialize_trip_days(new_itinerary),
+            summary=f"Initial itinerary generated for {clean_dest}",
+            instruction=effective_prompt or f"Generate itinerary for {clean_dest}",
+            model=used_model,
+            actor_type="USER",
+            action="initial_creation",
+            parent_version=None
+        )
 
         # Single atomic commit for the entire trip graph
         db.commit()

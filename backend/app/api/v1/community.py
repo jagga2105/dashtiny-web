@@ -248,16 +248,18 @@ def fork_community_trip(
 
         new_trip = Itinerary(
             owner_id=user.id,
-            title=f"Trip to {source_trip.destination} (from {post.author_name or 'Community'})",
+            title=f"Draft Trip to {source_trip.destination} (from {post.author_name or 'Community'})",
             destination=source_trip.destination,
-            origin=source_trip.origin or "",
-            travellers=1,
-            total_budget=source_trip.total_budget,
-            currency=source_trip.currency,
-            start_date=today + timedelta(days=14),
-            end_date=today + timedelta(days=14 + duration_days),
+            source_trip_id=source_trip.id,
+            origin=None,
+            travellers=None,
+            total_budget=None,
+            currency=source_trip.currency or "INR",
+            start_date=None,
+            end_date=None,
             vibe=source_trip.vibe,
             persona=source_trip.persona,
+            status="draft",
             is_public=False
         )
         db.add(new_trip)
@@ -301,20 +303,21 @@ def fork_community_trip(
     elif post.id in COMMUNITY_PUBLIC_SNAPSHOTS:
         snap = COMMUNITY_PUBLIC_SNAPSHOTS[post.id]
         dest = snap.get("destination", post.location)
-        duration_days = snap.get("duration_days", 4)
 
         new_trip = Itinerary(
             owner_id=user.id,
-            title=f"Trip to {dest} (from {post.author_name or 'Community'})",
+            title=f"Draft Trip to {dest} (from {post.author_name or 'Community'})",
             destination=dest,
-            origin="DEL",
-            travellers=1,
-            total_budget=40000.0,
+            source_trip_id=post.source_trip_id,
+            origin=None,
+            travellers=None,
+            total_budget=None,
             currency="INR",
-            start_date=today + timedelta(days=14),
-            end_date=today + timedelta(days=14 + duration_days),
+            start_date=None,
+            end_date=None,
             vibe=snap.get("vibe", "Discovery"),
-            persona="SOLO",
+            persona="solo",
+            status="draft",
             is_public=False
         )
         db.add(new_trip)
@@ -356,16 +359,18 @@ def fork_community_trip(
         # Generic single-day template
         new_trip = Itinerary(
             owner_id=user.id,
-            title=f"Trip to {post.location} (from {post.author_name or 'Community'})",
+            title=f"Draft Trip to {post.location} (from {post.author_name or 'Community'})",
             destination=post.location,
-            origin="DEL",
-            travellers=1,
-            total_budget=30000.0,
+            source_trip_id=post.source_trip_id,
+            origin=None,
+            travellers=None,
+            total_budget=None,
             currency="INR",
-            start_date=today + timedelta(days=14),
-            end_date=today + timedelta(days=17),
+            start_date=None,
+            end_date=None,
             vibe="Discovery",
-            persona="SOLO",
+            persona="solo",
+            status="draft",
             is_public=False
         )
         db.add(new_trip)

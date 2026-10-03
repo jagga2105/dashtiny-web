@@ -106,17 +106,17 @@ def get_my_trips(user: User = Depends(get_current_user), db: Session = Depends(g
             "destination": it.destination,
             "destination_id": it.destination.lower().replace(" ", "-"),
             "origin": it.origin or "",
-            "startDate": str(it.start_date),
-            "endDate": str(it.end_date),
-            "travellers": it.travellers or 2,
-            "budget": float(it.total_budget),
+            "startDate": str(it.start_date) if it.start_date else None,
+            "endDate": str(it.end_date) if it.end_date else None,
+            "travellers": it.travellers,
+            "budget": float(it.total_budget) if it.total_budget is not None else 0.0,
             "currency": it.currency,
             "persona": it.persona,
             "vibe": it.vibe or it.persona or "Discovery",
             "status": it.status or "draft",
             "is_public": bool(it.is_public),
             "source_trip_id": it.source_trip_id,
-            "squad_room_code": squad.room_code if squad else "DASH-ROOM",
+            "squad_room_code": squad.room_code if squad else None,
             "daysCount": total_days,
             "bookingsCount": len(formatted_bookings),
             "completed_days": completed_days,
@@ -229,8 +229,8 @@ def get_public_trip_snapshot(trip_id: str, db: Session = Depends(get_db)):
             "author_name": owner.full_name if owner else "Community Explorer",
             "destination": it.destination,
             "origin": it.origin or "",
-            "travellers": it.travellers or 2,
-            "duration_days": len(sorted_days) or 3,
+            "travellers": it.travellers,
+            "duration_days": len(sorted_days) if sorted_days else ((it.end_date - it.start_date).days + 1 if it.start_date and it.end_date else None),
             "budget_est": f"₹{int(it.total_budget):,} est." if it.total_budget else "Flexible",
             "vibe": it.vibe or it.persona or "Discovery",
             "stops": stops
@@ -312,10 +312,10 @@ def get_trip_details(
         "destination": it.destination,
         "destination_id": it.destination.lower().replace(" ", "-"),
         "origin": it.origin or "",
-        "startDate": str(it.start_date),
-        "endDate": str(it.end_date),
-        "travellers": it.travellers or 2,
-        "budget": float(it.total_budget),
+        "startDate": str(it.start_date) if it.start_date else None,
+        "endDate": str(it.end_date) if it.end_date else None,
+        "travellers": it.travellers,
+        "budget": float(it.total_budget) if it.total_budget is not None else 0.0,
         "currency": it.currency,
         "persona": it.persona,
         "vibe": it.vibe or it.persona or "Discovery",
@@ -554,10 +554,11 @@ def get_trip_snapshots(
             "id": s.id,
             "version": s.version,
             "parent_version": s.parent_version,
+            "restored_from_version": s.restored_from_version,
             "action": s.action,
             "action_type": s.action_type,
             "summary": s.summary,
-            "is_reverted": (s.action == "reverted"),
+            "is_undo": (s.action_type == "UNDO"),
             "created_at": str(s.created_at)
         }
         for s in snapshots
@@ -604,9 +605,8 @@ def undo_trip_change(
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to undo trip change: {str(exc)}")
 
-    remaining_active = db.query(TripSnapshot).filter(
-        TripSnapshot.trip_id == it.id,
-        TripSnapshot.action != "reverted"
+    total_revisions = db.query(TripSnapshot).filter(
+        TripSnapshot.trip_id == it.id
     ).count()
 
     return {
@@ -617,7 +617,7 @@ def undo_trip_change(
         "restored_version": restored_version,
         "new_revision_version": new_undo_snap.version,
         "summary": new_undo_snap.summary,
-        "remaining_active_revisions": remaining_active
+        "total_revisions": total_revisions
     }
 
 

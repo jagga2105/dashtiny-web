@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
@@ -12,16 +12,16 @@ from app.ai.agents.planner_agent import build_itinerary_with_planner_agent
 router = APIRouter(prefix="/planner", tags=["DAIna AI Getaway Architect"])
 
 class PlannerRequest(BaseModel):
-    destination: str
-    origin: Optional[str] = None
+    destination: str = Field(..., min_length=1, max_length=200)
+    origin: Optional[str] = Field(None, max_length=200)
     start_date: Optional[str] = None
     end_date: Optional[str] = None
-    days_count: int = 4
-    travellers: int = 2
-    budget: float = 0.0
-    currency: str = "INR"
-    persona: str = "solo"
-    vibe: Optional[str] = None
+    days_count: int = Field(4, ge=1, le=30)
+    travellers: int = Field(2, ge=1, le=50)
+    budget: float = Field(0.0, ge=0.0, le=100_000_000.0)
+    currency: str = Field("INR", max_length=10)
+    persona: str = Field("solo", max_length=50)
+    vibe: Optional[str] = Field(None, max_length=100)
     interests: Optional[List[str]] = None
     raw_prompt: Optional[str] = None
     prompt: Optional[str] = None

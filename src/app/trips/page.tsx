@@ -61,6 +61,10 @@ interface CopilotProposal {
   changes: AIDiffChange[];
   proposedTrip: any;
   previousTrip: any;
+  parentVersion?: number;
+  verification?: any;
+  provenance?: any;
+  budgetImpact?: number;
 }
 
 const DEFAULT_CHECKLIST = [
@@ -329,6 +333,12 @@ function TripsContent() {
 
       if (res && res.proposal_id) {
         const afterDays = res.after?.days || activeTrip.days;
+        const beforeCost = (res.before?.days || []).reduce((sum: number, d: any) =>
+          sum + (d.activities || []).reduce((s: number, a: any) => s + (a.cost || a.cost_estimate || 0), 0), 0);
+        const afterCost = (res.after?.days || []).reduce((sum: number, d: any) =>
+          sum + (d.activities || []).reduce((s: number, a: any) => s + (a.cost || a.cost_estimate || 0), 0), 0);
+        const budgetImpact = afterCost - beforeCost;
+
         setPendingProposal({
           proposalId: res.proposal_id,
           summary: res.summary,
@@ -338,6 +348,10 @@ function TripsContent() {
             days: afterDays
           },
           previousTrip: JSON.parse(JSON.stringify(activeTrip)),
+          parentVersion: res.parent_version,
+          verification: res.verification,
+          provenance: res.provenance,
+          budgetImpact: budgetImpact !== 0 ? budgetImpact : undefined,
         });
       } else {
         setCopilotError('DAIna could not generate a proposal right now. Please try a different request.');
@@ -1258,10 +1272,38 @@ function TripsContent() {
                   {pendingProposal && (
                     <div className="p-4 rounded-2xl bg-amber-50/90 border border-amber-200 text-amber-950 space-y-3 animate-in fade-in">
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold flex items-center gap-1.5 text-amber-900">
-                          <Sparkles className="w-4 h-4 text-orange-600" />
-                          DAIna suggests: {pendingProposal.summary}
-                        </span>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-xs font-bold flex items-center gap-1.5 text-amber-900">
+                            <Sparkles className="w-4 h-4 text-orange-600" />
+                            DAIna suggests: {pendingProposal.summary}
+                          </span>
+                          {pendingProposal.parentVersion !== undefined && (
+                            <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-semibold border border-amber-300">
+                              Base: v{pendingProposal.parentVersion}
+                            </span>
+                          )}
+                          {pendingProposal.verification && (
+                            <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-semibold border border-emerald-300">
+                              ✓ {pendingProposal.verification.status || 'Verified'}
+                            </span>
+                          )}
+                          {pendingProposal.provenance && (
+                            <span className="px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 text-[10px] font-semibold border border-purple-300">
+                              {pendingProposal.provenance.tier || 'AI_GENERATED'}
+                            </span>
+                          )}
+                          {pendingProposal.budgetImpact !== undefined && (
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                              pendingProposal.budgetImpact < 0
+                                ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                                : 'bg-slate-100 text-slate-800 border-slate-300'
+                            }`}>
+                              {pendingProposal.budgetImpact < 0
+                                ? `Saves ₹${Math.abs(pendingProposal.budgetImpact).toLocaleString('en-IN')}`
+                                : `+₹${pendingProposal.budgetImpact.toLocaleString('en-IN')}`}
+                            </span>
+                          )}
+                        </div>
                         <button
                           onClick={handleRejectProposal}
                           className="text-xs text-amber-700 hover:text-amber-950 cursor-pointer"
@@ -1289,7 +1331,7 @@ function TripsContent() {
                           onClick={handleApplyProposal}
                           className="bg-orange-600 hover:bg-orange-700 text-white font-semibold text-xs px-4 py-1.5 shadow-2xs cursor-pointer"
                         >
-                          Apply changes
+                          Accept
                         </Button>
                         <Button
                           size="sm"
@@ -1297,7 +1339,7 @@ function TripsContent() {
                           onClick={handleRejectProposal}
                           className="bg-white border-slate-200 text-slate-700 hover:bg-slate-50 text-xs px-3 py-1.5 cursor-pointer"
                         >
-                          Keep current plan
+                          Reject
                         </Button>
                       </div>
                     </div>

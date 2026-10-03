@@ -66,3 +66,25 @@ Every single data element presented in the DashTiny interface carries its proven
    - Active vibe category filtering across shared traveler trips.
    - New posts start at 0 likes; server-synchronized reward coins.
    - "Adapt this itinerary" action carrying structured payloads to Planner for day-by-day preview and customization.
+
+---
+
+## ⚡ P0 Trip Revision & AI Consistency Architecture
+
+1. **Single Authoritative Mutation Channel**:
+   - All domain changes (activities, budget, dates, AI modifications, undos) execute strictly via `TripRevisionService`.
+   - Revisions are strictly append-only: historical snapshots are never altered, deleted, or marked `reverted`.
+2. **AI Proposal Lifecycle (`Proposal → Accept → Revision`)**:
+   - `POST /api/v1/ai/proposals` generates a structured diff without mutating the Trip or creating history.
+   - The UI surfaces a proposal card with summary, changes diff, budget impact, verification provenance, and base version pill.
+   - `[Accept]` locks the Trip row (`with_for_update()`), checks `parent_version == current_version`, applies diffs, increments version to $v(N+1)$, and commits atomically. Stale proposals return `409 Conflict`.
+   - `[Reject]` marks the proposal rejected without altering Trip state.
+   - `/api/v1/ai/query` is a non-mutating compatibility wrapper returning proposals.
+3. **Deterministic Multi-Step Undo**:
+   - Undoing creates a new revision `v(N+1)` with `action_type = "UNDO"` restoring `v(target)`.
+   - Multiple undos follow the `parent_version` chain backward, preserving complete and transparent audit trails.
+4. **Canonical Types & Zero Fallbacks**:
+   - Unified `@/types/trip` models (`Trip`, `TripDay`, `TripActivity`, `TripRevision`, `TripProposal`) used across all frontend stores and views.
+   - Removed misleading client and backend fallbacks (`travellers or 2`, `duration or 3`, `"DASH-ROOM"`, "latest trip").
+5. **Inventory Honesty**:
+   - Search & compare inventory explicitly designated as `CURATED / DEMO` offers, never disguised as live OTA inventory.

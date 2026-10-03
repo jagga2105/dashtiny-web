@@ -54,54 +54,58 @@ def test_multiple_trip_snapshots_versioning_and_reason(client, db_session, test_
 
     original_act_id = act1.id
 
-    # 1. First AI edit -> creates snapshot v1
+    # Record initial revision v1
+    from app.services.trip_revision_service import record_initial_revision
+    record_initial_revision(db_session, trip.id, test_user.id)
+    db_session.commit()
+
+    # 1. First AI proposal & accept -> creates revision v2
     res1 = client.post(
         "/api/v1/ai/query",
         json={"trip_id": trip.id, "instruction": "Add lunch at Nishiki Market"}
     )
     assert res1.status_code == 200, res1.text
-    snap1 = db_session.query(TripSnapshot).filter(
-        TripSnapshot.trip_id == trip.id,
-        TripSnapshot.version == 1
-    ).first()
-    assert snap1 is not None
-    assert snap1.action_type == "AI_MODIFY_ITINERARY"
-    assert snap1.actor_type == "USER"
-    assert "lunch" in snap1.instruction.lower()
+    prop1_id = res1.json()["proposal_id"]
+    acc1 = client.post(f"/api/v1/ai/proposals/{prop1_id}/accept")
+    assert acc1.status_code == 200
+    assert acc1.json()["revision_version"] == 2
 
-    # 2. Second AI edit -> must increment to version 2 without crashing
-    res2 = client.post(
-        "/api/v1/ai/query",
-        json={"trip_id": trip.id, "instruction": "Move sunset to Kiyomizu-dera"}
-    )
-    assert res2.status_code == 200, res2.text
     snap2 = db_session.query(TripSnapshot).filter(
         TripSnapshot.trip_id == trip.id,
         TripSnapshot.version == 2
     ).first()
     assert snap2 is not None
-    assert snap2.version == 2
-    assert snap2.action_type == "AI_MODIFY_ITINERARY"
+    assert snap2.action_type == "AI_PROPOSAL_ACCEPTED"
+    assert snap2.actor_type == "USER"
+    assert "lunch" in snap2.instruction.lower()
 
-    # 3. Third AI edit -> must increment to version 3 sequentially
+    # 2. Second AI edit -> increments to version 3
+    res2 = client.post(
+        "/api/v1/ai/query",
+        json={"trip_id": trip.id, "instruction": "Move sunset to Kiyomizu-dera"}
+    )
+    assert res2.status_code == 200, res2.text
+    prop2_id = res2.json()["proposal_id"]
+    acc2 = client.post(f"/api/v1/ai/proposals/{prop2_id}/accept")
+    assert acc2.status_code == 200
+    assert acc2.json()["revision_version"] == 3
+
+    # 3. Third AI edit -> increments to version 4 sequentially
     res3 = client.post(
         "/api/v1/ai/query",
         json={"trip_id": trip.id, "instruction": "Add matcha tea ceremony at Uji"}
     )
     assert res3.status_code == 200, res3.text
-    snap3 = db_session.query(TripSnapshot).filter(
-        TripSnapshot.trip_id == trip.id,
-        TripSnapshot.version == 3
-    ).first()
-    assert snap3 is not None
-    assert snap3.version == 3
-    assert snap3.action_type == "AI_MODIFY_ITINERARY"
+    prop3_id = res3.json()["proposal_id"]
+    acc3 = client.post(f"/api/v1/ai/proposals/{prop3_id}/accept")
+    assert acc3.status_code == 200
+    assert acc3.json()["revision_version"] == 4
 
-    # Verify all snapshots for this trip are strictly sequential [1, 2, 3] with NO duplicates
+    # Verify all snapshots for this trip are strictly sequential [1, 2, 3, 4] with NO duplicates
     all_snaps = db_session.query(TripSnapshot).filter(
         TripSnapshot.trip_id == trip.id
     ).order_by(TripSnapshot.version.asc()).all()
-    assert [s.version for s in all_snaps] == [1, 2, 3]
+    assert [s.version for s in all_snaps] == [1, 2, 3, 4]
 
     # 4. Verify stable activity ID was retained for the existing activity
     db_session.expire_all()
@@ -164,16 +168,27 @@ def test_complete_22_field_snapshot_and_undo_restoration(client, db_session, tes
 
     act_id = act.id
 
-    # Mutate trip with AI
+    # Record initial revision v1
+    from app.services.trip_revision_service import record_initial_revision
+    record_initial_revision(db_session, trip.id, test_user.id)
+    db_session.commit()
+
+    # Generate & accept proposal -> creates revision v2
     ai_res = client.post(
         "/api/v1/ai/query",
         json={"trip_id": trip.id, "instruction": "Add coffee near Akihabara station"}
     )
     assert ai_res.status_code == 200
+    prop_id = ai_res.json()["proposal_id"]
+    acc_res = client.post(f"/api/v1/ai/proposals/{prop_id}/accept")
+    assert acc_res.status_code == 200
+    assert acc_res.json()["revision_version"] == 2
 
-    # Undo trip modification
+    # Undo trip modification -> creates append-only revision v3 (restores v1 state)
     undo_res = client.post(f"/api/v1/trips/{trip.id}/undo")
     assert undo_res.status_code == 200, undo_res.text
+    assert undo_res.json()["new_revision_version"] == 3
+    assert undo_res.json()["restored_version"] == 1
 
     # Verify that all 22 fields are fully restored
     db_session.expire_all()
@@ -758,46 +773,62 @@ def test_undo_multi_step_revisions_a_b_c_b_a(client, db_session, test_user):
     db_session.commit()
     act_a_id = act_a.id
 
+    # Record initial revision v1 (State A)
+    from app.services.trip_revision_service import record_initial_revision
+    record_initial_revision(db_session, trip.id, test_user.id)
+    db_session.commit()
+
     # Verify State A in DB
     acts_a = db_session.query(ItineraryActivity).filter(ItineraryActivity.day_id == day1.id).all()
     assert len(acts_a) == 1
     assert "Morning Yoga" in acts_a[0].description
 
-    # 2. AI Change 1 -> State B: Add nearby walk
+    # 2. AI Change 1 -> State B: Add nearby walk (Proposal -> Accept -> v2)
     res_b = client.post("/api/v1/ai/query", json={
         "trip_id": trip.id,
         "instruction": "I have 2 hours free in the afternoon, add a nearby walk"
     })
     assert res_b.status_code == 200, res_b.text
+    prop_b_id = res_b.json()["proposal_id"]
+    acc_b = client.post(f"/api/v1/ai/proposals/{prop_b_id}/accept")
+    assert acc_b.status_code == 200
+    assert acc_b.json()["revision_version"] == 2
+
     db_session.expire_all()
     acts_b = db_session.query(ItineraryActivity).filter(ItineraryActivity.day_id == day1.id).order_by(ItineraryActivity.sort_order).all()
     assert len(acts_b) >= 2
     assert any("Heritage Photography Walk" in a.description for a in acts_b)
 
-    # 3. AI Change 2 -> State C: Add relaxing spa siesta
+    # 3. AI Change 2 -> State C: Add relaxing spa siesta (Proposal -> Accept -> v3)
     res_c = client.post("/api/v1/ai/query", json={
         "trip_id": trip.id,
         "instruction": "Make the schedule more relaxing and chill with a spa"
     })
     assert res_c.status_code == 200, res_c.text
+    prop_c_id = res_c.json()["proposal_id"]
+    acc_c = client.post(f"/api/v1/ai/proposals/{prop_c_id}/accept")
+    assert acc_c.status_code == 200
+    assert acc_c.json()["revision_version"] == 3
+
     db_session.expire_all()
     acts_c = db_session.query(ItineraryActivity).filter(ItineraryActivity.day_id == day1.id).order_by(ItineraryActivity.sort_order).all()
     assert len(acts_c) >= 3
     assert any("Siesta & Spa" in a.description for a in acts_c)
 
-    # Verify snapshots v1 and v2 exist with action == "ai_query"
+    # Verify snapshots v1, v2, v3 exist
     snaps_c = db_session.query(TripSnapshot).filter(TripSnapshot.trip_id == trip.id).order_by(TripSnapshot.version.asc()).all()
-    assert len(snaps_c) == 2
-    assert snaps_c[0].version == 1 and snaps_c[0].action == "ai_query"
-    assert snaps_c[1].version == 2 and snaps_c[1].action == "ai_query"
+    assert len(snaps_c) == 3
+    assert snaps_c[0].version == 1 and snaps_c[0].action_type == "INITIAL_CREATION"
+    assert snaps_c[1].version == 2 and snaps_c[1].action_type == "AI_PROPOSAL_ACCEPTED"
+    assert snaps_c[2].version == 3 and snaps_c[2].action_type == "AI_PROPOSAL_ACCEPTED"
 
-    # --- Step 4: First Undo -> Restores State B ---
+    # --- Step 4: First Undo -> Restores State B, creates append-only revision v4 ---
     undo_1 = client.post(f"/api/v1/trips/{trip.id}/undo")
     assert undo_1.status_code == 200, undo_1.text
     u1_data = undo_1.json()
     assert u1_data["status"] == "success"
+    assert u1_data["new_revision_version"] == 4
     assert u1_data["restored_version"] == 2
-    assert u1_data["remaining_active_revisions"] == 1
 
     # Verify DB activities match State B (Siesta & Spa is gone, Heritage Photography Walk remains)
     db_session.expire_all()
@@ -805,19 +836,22 @@ def test_undo_multi_step_revisions_a_b_c_b_a(client, db_session, test_user):
     assert not any("Siesta & Spa" in a.description for a in acts_after_u1)
     assert any("Heritage Photography Walk" in a.description for a in acts_after_u1)
 
-    # Verify snapshot 2 is marked 'reverted' and snapshot 1 remains 'ai_query'
-    snap_v2 = db_session.query(TripSnapshot).filter(TripSnapshot.trip_id == trip.id, TripSnapshot.version == 2).first()
-    assert snap_v2.action == "reverted"
-    snap_v1 = db_session.query(TripSnapshot).filter(TripSnapshot.trip_id == trip.id, TripSnapshot.version == 1).first()
-    assert snap_v1.action == "ai_query"
+    # Invariants: v1, v2, v3 are unchanged and NOT marked 'reverted'
+    snaps_after_u1 = db_session.query(TripSnapshot).filter(TripSnapshot.trip_id == trip.id).order_by(TripSnapshot.version.asc()).all()
+    assert len(snaps_after_u1) == 4
+    assert [s.version for s in snaps_after_u1] == [1, 2, 3, 4]
+    assert all(s.action != "reverted" for s in snaps_after_u1)
+    assert snaps_after_u1[3].action_type == "UNDO"
+    assert snaps_after_u1[3].parent_version == 3
+    assert snaps_after_u1[3].restored_from_version == 2
 
-    # --- Step 5: Second Undo -> Restores State A ---
+    # --- Step 5: Second Undo -> Restores State A, creates append-only revision v5 ---
     undo_2 = client.post(f"/api/v1/trips/{trip.id}/undo")
     assert undo_2.status_code == 200, undo_2.text
     u2_data = undo_2.json()
     assert u2_data["status"] == "success"
+    assert u2_data["new_revision_version"] == 5
     assert u2_data["restored_version"] == 1
-    assert u2_data["remaining_active_revisions"] == 0
 
     # Verify DB activities match State A (both Siesta & Spa and Heritage Walk are gone, only Morning Yoga remains)
     db_session.expire_all()
@@ -826,15 +860,19 @@ def test_undo_multi_step_revisions_a_b_c_b_a(client, db_session, test_user):
     assert "Morning Yoga" in acts_after_u2[0].description
     assert acts_after_u2[0].id == act_a_id
 
-    # Verify both snapshots are marked 'reverted'
-    all_reverted = db_session.query(TripSnapshot).filter(TripSnapshot.trip_id == trip.id).all()
-    assert len(all_reverted) == 2
-    assert all(s.action == "reverted" for s in all_reverted)
+    # Invariants: v1, v2, v3, v4, v5 all exist and are unmodified
+    snaps_after_u2 = db_session.query(TripSnapshot).filter(TripSnapshot.trip_id == trip.id).order_by(TripSnapshot.version.asc()).all()
+    assert len(snaps_after_u2) == 5
+    assert [s.version for s in snaps_after_u2] == [1, 2, 3, 4, 5]
+    assert all(s.action != "reverted" for s in snaps_after_u2)
+    assert snaps_after_u2[4].action_type == "UNDO"
+    assert snaps_after_u2[4].parent_version == 4
+    assert snaps_after_u2[4].restored_from_version == 1
 
-    # --- Step 6: Third Undo -> Fails with 400 (Does NOT repeatedly restore the same snapshot) ---
+    # --- Step 6: Third Undo -> Fails with 400 (v1 has no parent) ---
     undo_3 = client.post(f"/api/v1/trips/{trip.id}/undo")
     assert undo_3.status_code == 400
-    assert "no previous trip snapshot available to undo" in undo_3.json()["detail"].lower()
+    assert "no previous trip revision available to undo" in undo_3.json()["detail"].lower()
 
     # State A remains strictly intact
     db_session.expire_all()
@@ -846,9 +884,9 @@ def test_undo_multi_step_revisions_a_b_c_b_a(client, db_session, test_user):
 def test_undo_history_behavior_and_audit_trail(client, db_session, test_user):
     """
     Test A -> B -> undo -> history behavior:
-    1. Revisions are NOT deleted on undo; they remain in audit history.
-    2. GET /trips/{trip_id}/snapshots reflects is_reverted=True for reverted revisions.
-    3. New AI mutation after undo starts from restored state and advances version chain.
+    1. Revisions are strictly append-only; old revisions are NEVER deleted or modified.
+    2. GET /trips/{trip_id}/snapshots reflects complete linear history.
+    3. New AI mutation after undo starts from restored state (v3) and creates v4.
     """
     trip = Itinerary(
         title="Hakone Springs Revision History",
@@ -877,30 +915,41 @@ def test_undo_history_behavior_and_audit_trail(client, db_session, test_user):
     db_session.add(act1)
     db_session.commit()
 
+    # Record initial revision v1
+    from app.services.trip_revision_service import record_initial_revision
+    record_initial_revision(db_session, trip.id, test_user.id)
+    db_session.commit()
+
     # AI change to State B
     res_b = client.post("/api/v1/ai/query", json={
         "trip_id": trip.id,
         "instruction": "State B: Add Lake Ashi pirate boat cruise"
     })
     assert res_b.status_code == 200
+    prop_b_id = res_b.json()["proposal_id"]
+    acc_b = client.post(f"/api/v1/ai/proposals/{prop_b_id}/accept")
+    assert acc_b.status_code == 200
+    assert acc_b.json()["revision_version"] == 2
 
-    # History before undo shows active snapshot v1
+    # History before undo shows [v2, v1]
     history_pre = client.get(f"/api/v1/trips/{trip.id}/snapshots").json()
-    assert len(history_pre) == 1
-    assert history_pre[0]["version"] == 1
-    assert history_pre[0]["action"] == "ai_query"
-    assert history_pre[0]["is_reverted"] is False
+    assert len(history_pre) == 2
+    assert history_pre[0]["version"] == 2
+    assert history_pre[1]["version"] == 1
 
-    # Undo
+    # Undo -> creates v3 (restores v1 state)
     undo_res = client.post(f"/api/v1/trips/{trip.id}/undo")
     assert undo_res.status_code == 200
+    assert undo_res.json()["new_revision_version"] == 3
+    assert undo_res.json()["restored_version"] == 1
 
-    # History AFTER undo: snapshot v1 is still present in history, marked is_reverted=True
+    # History AFTER undo: contains [v3, v2, v1]
     history_post = client.get(f"/api/v1/trips/{trip.id}/snapshots").json()
-    assert len(history_post) == 1
-    assert history_post[0]["version"] == 1
-    assert history_post[0]["action"] == "reverted"
-    assert history_post[0]["is_reverted"] is True
+    assert len(history_post) == 3
+    assert history_post[0]["version"] == 3
+    assert history_post[0]["action_type"] == "UNDO"
+    assert history_post[1]["version"] == 2
+    assert history_post[2]["version"] == 1
 
     # New AI mutation to State C
     res_c = client.post("/api/v1/ai/query", json={
@@ -908,14 +957,15 @@ def test_undo_history_behavior_and_audit_trail(client, db_session, test_user):
         "instruction": "State C: Add Mt. Fuji ropeway ride"
     })
     assert res_c.status_code == 200
+    prop_c_id = res_c.json()["proposal_id"]
+    acc_c = client.post(f"/api/v1/ai/proposals/{prop_c_id}/accept")
+    assert acc_c.status_code == 200
+    assert acc_c.json()["revision_version"] == 4
 
-    # History now has 2 revisions: v2 (active) and v1 (reverted)
+    # History now has 4 revisions: [v4, v3, v2, v1]
     history_c = client.get(f"/api/v1/trips/{trip.id}/snapshots").json()
-    assert len(history_c) == 2
-    assert history_c[0]["version"] == 2
-    assert history_c[0]["is_reverted"] is False
-    assert history_c[1]["version"] == 1
-    assert history_c[1]["is_reverted"] is True
+    assert len(history_c) == 4
+    assert [h["version"] for h in history_c] == [4, 3, 2, 1]
 
 
 

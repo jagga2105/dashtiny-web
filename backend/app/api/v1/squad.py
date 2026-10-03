@@ -3,6 +3,7 @@ from decimal import Decimal
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
@@ -22,6 +23,10 @@ class CreateSquadRequest(BaseModel):
 class AddMemberRequest(BaseModel):
     user_id: str
     role: Optional[str] = "member"
+
+
+class TransferOwnershipRequest(BaseModel):
+    new_owner_id: str
 
 
 class AddExpenseRequest(BaseModel):
@@ -65,8 +70,14 @@ def create_squad(
     """
     Creates a squad room attached to an itinerary.
     User must be the trip owner.
+    Serializes creation under Itinerary row lock to prevent race conditions.
     """
-    itinerary = db.query(Itinerary).filter(Itinerary.id == request.itinerary_id).first()
+    itinerary = (
+        db.query(Itinerary)
+        .filter(Itinerary.id == request.itinerary_id)
+        .with_for_update()
+        .first()
+    )
     if not itinerary:
         raise HTTPException(status_code=404, detail="Trip not found")
 
@@ -92,17 +103,33 @@ def create_squad(
         room_code=room_code
     )
     db.add(squad)
-    db.flush()
 
-    # Automatically add trip owner as squad owner
-    owner_member = SquadMember(
-        squad_id=squad.id,
-        user_id=user.id,
-        role="owner"
-    )
-    db.add(owner_member)
-    db.commit()
-    db.refresh(squad)
+    try:
+        db.flush()
+        # Server rule: Creator is unconditionally the squad owner
+        owner_member = SquadMember(
+            squad_id=squad.id,
+            user_id=user.id,
+            role="owner"
+        )
+        db.add(owner_member)
+        db.commit()
+        db.refresh(squad)
+    except IntegrityError:
+        db.rollback()
+        # Handle concurrent race where another transaction created the room
+        existing = db.query(SquadRoom).filter(SquadRoom.itinerary_id == request.itinerary_id).first()
+        if existing:
+            return {
+                "status": "exists",
+                "message": "Squad room already exists for this trip",
+                "squad_id": existing.id,
+                "room_code": existing.room_code
+            }
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Squad room or code conflict occurred during creation."
+        )
 
     return {
         "status": "success",
@@ -169,6 +196,7 @@ def add_squad_member(
     """
     Add a member to the squad room.
     Only squad owner or trip owner can add members.
+    Server rule: invited member role is always 'member' (client role is ignored).
     """
     squad, membership, is_trip_owner = _get_squad_and_membership(squad_id, user, db)
 
@@ -194,14 +222,23 @@ def add_squad_member(
             detail="User is already a member of this squad."
         )
 
+    # Server rule: Client input must NEVER be trusted to assign privileged roles.
+    # Invited member is strictly assigned role="member".
     new_member = SquadMember(
         squad_id=squad.id,
         user_id=request.user_id,
-        role=request.role or "member"
+        role="member"
     )
     db.add(new_member)
-    db.commit()
-    db.refresh(new_member)
+    try:
+        db.commit()
+        db.refresh(new_member)
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="User is already a member of this squad."
+        )
 
     return {
         "status": "success",
@@ -209,6 +246,61 @@ def add_squad_member(
         "user_id": new_member.user_id,
         "role": new_member.role,
         "joined_at": str(new_member.joined_at)
+    }
+
+
+@router.post("/{squad_id}/transfer-ownership")
+def transfer_squad_ownership(
+    squad_id: str,
+    request: TransferOwnershipRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Privileged operation: Transfer squad ownership to another active squad member.
+    Can only be performed by the current squad owner or trip owner.
+    """
+    squad, membership, is_trip_owner = _get_squad_and_membership(squad_id, user, db)
+
+    is_squad_owner = membership and membership.role == "owner"
+    if not is_squad_owner and not is_trip_owner:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the current squad owner or trip owner can transfer ownership."
+        )
+
+    if user.id == request.new_owner_id:
+        return {"status": "success", "message": "User is already the owner"}
+
+    target_member = (
+        db.query(SquadMember)
+        .filter(SquadMember.squad_id == squad_id, SquadMember.user_id == request.new_owner_id)
+        .with_for_update()
+        .first()
+    )
+    if not target_member:
+        raise HTTPException(
+            status_code=404,
+            detail="Target user is not an active member of this squad."
+        )
+
+    # Demote previous squad owners to member
+    current_owners = (
+        db.query(SquadMember)
+        .filter(SquadMember.squad_id == squad_id, SquadMember.role == "owner")
+        .with_for_update()
+        .all()
+    )
+    for owner in current_owners:
+        owner.role = "member"
+
+    target_member.role = "owner"
+    db.commit()
+
+    return {
+        "status": "success",
+        "message": f"Squad ownership successfully transferred to user {request.new_owner_id}",
+        "new_owner_id": request.new_owner_id
     }
 
 

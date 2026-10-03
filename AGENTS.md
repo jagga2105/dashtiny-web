@@ -43,7 +43,7 @@ DashTiny does not treat Explore, Planner, Bookings, and Community as disjointed 
 1. **Explore**: Destination discovery + personalized recommendations + ambient travel radar.
 2. **AI Planner**: The primary differentiator — multi-day itinerary architect generating structured objects.
 3. **Trip Workspace**: The heart of DashTiny. The generated itinerary becomes a persistent, interactive, editable trip canvas.
-4. **Search & Compare**: Live inventory aggregation for flights, stays/hotels, and experiences.
+4. **Search & Compare**: Curated and demo inventory aggregation (`CURATED / DEMO`) for flights, stays/hotels, and experiences via normalized provider schemas (live OTA integrations deferred to later phase).
 5. **Booking Redirect / Partner Deep-linking**: Standardized booking reference capture without carrying full OTA liabilities initially.
 6. **Trip Dashboard**: One unified cockpit for everything attached to the active trip.
 
@@ -250,9 +250,23 @@ The **Trip Workspace** is the heart of DashTiny. It replaces disjointed dashboar
 
 ---
 
-## 14. Conversational / Action API (`POST /ai/query`) Returning Diffs
+## 14. Canonical AI Proposal Lifecycle (`Proposal → Accept → Revision`)
 
-When editing a trip with AI, never regenerate the entire itinerary from scratch. Use an action model that calculates constraints and returns **what changed** (`changes: [...]`).
+In DashTiny, AI never directly mutates a Trip. The single authoritative lifecycle is:
+1. **Proposal Generation (`POST /api/v1/ai/proposals`)**: DAIna generates a structured diff proposal without mutating the Trip or creating history records.
+2. **Review in UI**: The traveler inspects the proposal card showing summary, activity diffs, budget impact, verification provenance, and parent version.
+3. **Acceptance (`POST /api/v1/ai/proposals/{proposal_id}/accept`)**:
+   - Acquires PostgreSQL row lock (`with_for_update()`) on `itineraries`.
+   - Validates `proposal.parent_version == current_version`. If a concurrent change occurred, returns `HTTP 409 Conflict`.
+   - Executes diff via `TripRevisionService`.
+   - Creates append-only `TripRevision` (`version = N + 1`, `action_type = "AI_MODIFY_ITINERARY"`).
+   - Records AI telemetry run and marks proposal accepted.
+   - Commits PostgreSQL transaction atomically.
+4. **Rejection (`POST /api/v1/ai/proposals/{proposal_id}/reject`)**: Discards proposal without modifying Trip or revisions.
+5. **Append-Only History & Multi-Step Undo**:
+   - Snapshots are never mutated or set to `action = "reverted"`.
+   - Undoing (`POST /api/v1/trips/{id}/undo`) creates a new revision `v(N+1)` with `action_type = "UNDO"` restoring `v(target)`. Multiple undos follow the `parent_version` chain backward while appending new records.
+6. **Compatibility Wrapper**: `POST /api/v1/ai/query` behaves as a non-mutating compatibility wrapper returning proposals.
 
 ---
 

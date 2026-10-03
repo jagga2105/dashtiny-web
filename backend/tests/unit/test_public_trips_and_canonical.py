@@ -393,7 +393,12 @@ def test_server_side_trip_undo(client, db_session, test_user):
     db_session.add(initial_act)
     db_session.commit()
 
-    # Modify via AI Query
+    # Record authoritative initial revision v1
+    from app.services.trip_revision_service import record_initial_revision
+    record_initial_revision(db_session, trip.id, test_user.id)
+    db_session.commit()
+
+    # Generate proposal via /ai/query wrapper (trip remains unchanged)
     ai_resp = client.post("/api/v1/ai/query", json={
         "trip_id": trip.id,
         "instruction": "Move the fort visit to sunset"
@@ -401,28 +406,51 @@ def test_server_side_trip_undo(client, db_session, test_user):
     assert ai_resp.status_code == 200
     ai_data = ai_resp.json()
     assert len(ai_data["changes"]) > 0
+    prop_id = ai_data["proposal_id"]
+
+    # Verify trip was NOT yet mutated
+    acts_before_accept = db_session.query(ItineraryActivity).filter(ItineraryActivity.day_id == day.id).all()
+    assert len(acts_before_accept) == 1
+    assert "Amber Fort" in acts_before_accept[0].description
+
+    # Authoritative AI mutation: Accept Proposal -> creates revision v2
+    acc_resp = client.post(f"/api/v1/ai/proposals/{prop_id}/accept")
+    assert acc_resp.status_code == 200
+    assert acc_resp.json()["revision_version"] == 2
 
     # Verify activities table was mutated in DB
+    db_session.expire_all()
     acts_after_ai = db_session.query(ItineraryActivity).filter(ItineraryActivity.day_id == day.id).all()
     assert len(acts_after_ai) > 0
-    # Description changed to slotted sunset
     assert any("Sunset" in a.description or a.time_slot == "05:30 PM" for a in acts_after_ai)
 
-    # Now call POST /api/v1/trips/{trip_id}/undo
+    # Now call POST /api/v1/trips/{trip_id}/undo -> creates append-only revision v3 (restores v1)
     undo_resp = client.post(f"/api/v1/trips/{trip.id}/undo")
     assert undo_resp.status_code == 200
     assert undo_resp.json()["status"] == "success"
+    assert undo_resp.json()["new_revision_version"] == 3
+    assert undo_resp.json()["restored_version"] == 1
 
     # Verify DB restored original initial_act
+    db_session.expire_all()
     restored_acts = db_session.query(ItineraryActivity).filter(ItineraryActivity.day_id == day.id).all()
     assert len(restored_acts) == 1
     assert "Amber Fort" in restored_acts[0].description
     assert float(restored_acts[0].cost_estimate) == 1200.0
 
-    # Calling undo again should fail with 400 since snapshot was popped
+    # Old revisions v1 and v2 remain intact and unmodified (append-only)
+    from app.models.models import TripSnapshot
+    snaps = db_session.query(TripSnapshot).filter(TripSnapshot.trip_id == trip.id).order_by(TripSnapshot.version.asc()).all()
+    assert len(snaps) == 3
+    assert snaps[0].version == 1 and snaps[0].action_type == "INITIAL_CREATION"
+    assert snaps[1].version == 2 and snaps[1].action_type == "AI_PROPOSAL_ACCEPTED"
+    assert snaps[2].version == 3 and snaps[2].action_type == "UNDO"
+    assert all(s.action != "reverted" for s in snaps)
+
+    # Calling undo again fails with 400 because v1 is initial baseline with no prior parent
     undo_resp_again = client.post(f"/api/v1/trips/{trip.id}/undo")
     assert undo_resp_again.status_code == 400
-    assert "no previous trip snapshot" in undo_resp_again.json()["detail"].lower()
+    assert "no previous trip revision available" in undo_resp_again.json()["detail"].lower()
 
 def test_new_user_registration_starts_with_zero_coins(client, db_session):
     """

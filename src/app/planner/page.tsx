@@ -16,6 +16,7 @@ import { usePlannerStore } from '@/store/usePlannerStore';
 import { useAuthStore } from '@/store/useAuthStore';
 import { apiService } from '@/services/api';
 import { parseTravelPrompt } from '@/lib/dainaIntentParser';
+import { Trip } from '@/types/trip';
 
 function PlannerContent() {
   const router = useRouter();
@@ -127,7 +128,7 @@ function PlannerContent() {
     );
   };
 
-  // Initialize or fetch latest itinerary from PostgreSQL
+  // Initialize or fetch requested itinerary from PostgreSQL
   useEffect(() => {
     async function loadLatest() {
       if (paramTripId) {
@@ -138,10 +139,18 @@ function PlannerContent() {
               id: tripDetails.id,
               title: tripDetails.title,
               destination: tripDetails.destination,
+              origin: tripDetails.origin,
               startDate: tripDetails.startDate,
               endDate: tripDetails.endDate,
-              budget: tripDetails.budget,
+              travellers: tripDetails.travellers ?? 1,
+              budget: tripDetails.budget ?? 0,
+              currency: tripDetails.currency || 'INR',
+              persona: tripDetails.persona,
+              vibe: tripDetails.vibe,
               days: tripDetails.days || [],
+              bookings: tripDetails.bookings || [],
+              squad: tripDetails.squad || null,
+              snapshots: tripDetails.snapshots || [],
             });
             const daysCount = tripDetails.days?.length || 4;
             setPromptText(`Plan a ${daysCount}-day trip to ${tripDetails.destination}`);
@@ -169,25 +178,6 @@ function PlannerContent() {
         setPromptText(initialQuery);
       } else if (paramDestination) {
         setPromptText(`Plan a trip to ${paramDestination}${paramDuration ? ` for ${paramDuration} days` : ''}${paramBudget ? ` with budget ₹${parseInt(paramBudget, 10).toLocaleString('en-IN')}` : ''}`);
-      } else if (!currentItinerary) {
-        try {
-          const myTrips = await apiService.getMyTrips();
-          if (myTrips && myTrips.length > 0) {
-            const latest = myTrips[0];
-            setCurrentItinerary({
-              id: latest.id,
-              title: latest.title,
-              destination: latest.destination,
-              startDate: latest.startDate,
-              endDate: latest.endDate,
-              budget: latest.budget,
-              days: latest.days || [],
-            });
-          }
-        } catch (err) {
-          // If offline or first load, do not fail silently with fake data
-          console.warn('Could not fetch existing trips from PostgreSQL:', err);
-        }
       }
     }
     loadLatest();
@@ -251,14 +241,22 @@ function PlannerContent() {
       });
 
       if (res && res.id) {
-        const formatted = {
+        const formatted: Trip = {
           id: res.id,
           title: res.title,
           destination: res.destination,
+          origin: res.origin,
           startDate: res.startDate,
           endDate: res.endDate,
-          budget: res.budget,
-          days: res.days,
+          travellers: res.travellers ?? effectiveTravellers,
+          budget: res.budget ?? budgetVal,
+          currency: res.currency || 'INR',
+          persona: res.persona || effectivePersona,
+          vibe: res.vibe || vibeVal,
+          days: res.days || [],
+          bookings: res.bookings || [],
+          squad: res.squad || null,
+          snapshots: res.snapshots || [],
         };
         addItinerary(formatted);
         setCurrentItinerary(formatted);

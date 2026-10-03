@@ -344,54 +344,64 @@ def test_ai_query_diff_persistence_and_stable_activity_ids(client, db_session, t
     original_act1_id = act1.id
     original_act2_id = act2.id
 
-    # 2. Execute AI query to modify the trip
+    # Record initial revision v1
+    from app.services.trip_revision_service import record_initial_revision
+    record_initial_revision(db_session, trip.id, test_user.id)
+    db_session.commit()
+
+    # 2. Execute AI query -> returns a proposal without mutating the trip
     res_ai = client.post("/api/v1/ai/query", json={
         "trip_id": trip.id,
         "instruction": "Swap the afternoon activity to a seafood cooking masterclass"
     })
     assert res_ai.status_code == 200, res_ai.text
     ai_data = res_ai.json()
-    assert ai_data["status"] == "success"
+    assert "proposal_id" in ai_data
+    prop_id = ai_data["proposal_id"]
 
-    # 3. Verify TripSnapshot has version = 1
-    snapshot = db_session.query(TripSnapshot).filter(
-        TripSnapshot.trip_id == trip.id
-    ).first()
-    assert snapshot is not None
-    assert snapshot.version == 1
-    assert snapshot.action == "ai_query"
+    # Verify trip was NOT yet mutated
+    acts_before = db_session.query(ItineraryActivity).filter(ItineraryActivity.day_id == day.id).all()
+    assert len(acts_before) == 2
+
+    # 3. Accept proposal -> mutates trip and creates revision v2
+    res_acc = client.post(f"/api/v1/ai/proposals/{prop_id}/accept")
+    assert res_acc.status_code == 200
+    assert res_acc.json()["revision_version"] == 2
 
     # 4. Verify stable activity ID: the first activity that wasn't removed should KEEP its original primary key!
+    db_session.expire_all()
     acts_after = db_session.query(ItineraryActivity).filter(
         ItineraryActivity.day_id == day.id
     ).all()
     act_ids_after = [a.id for a in acts_after]
     assert original_act1_id in act_ids_after, f"Expected {original_act1_id} to be preserved in {act_ids_after}"
 
-    # 5. Test snapshot listing endpoint
+    # 5. Test snapshot listing endpoint -> returns v1 and v2
     res_snaps = client.get(f"/api/v1/trips/{trip.id}/snapshots")
     assert res_snaps.status_code == 200
     snaps_data = res_snaps.json()
-    assert len(snaps_data) == 1
-    assert snaps_data[0]["version"] == 1
+    assert len(snaps_data) == 2
+    assert snaps_data[0]["version"] == 2
+    assert snaps_data[1]["version"] == 1
 
-    # 6. Test Undo restores snapshot v1
+    # 6. Test Undo restores snapshot v1, creating append-only revision v3
     res_undo = client.post(f"/api/v1/trips/{trip.id}/undo")
     assert res_undo.status_code == 200
     undo_data = res_undo.json()
     assert undo_data["status"] == "success"
+    assert undo_data["new_revision_version"] == 3
     assert undo_data["restored_version"] == 1
 
-    # Verify act1 and act2 are restored and snapshot is preserved in history as reverted
+    # Verify act1 and act2 are restored and old revisions are never marked 'reverted'
+    db_session.expire_all()
     restored_acts = db_session.query(ItineraryActivity).filter(
         ItineraryActivity.day_id == day.id
     ).all()
     restored_ids = [a.id for a in restored_acts]
     assert original_act1_id in restored_ids
-    assert db_session.query(TripSnapshot).filter(
-        TripSnapshot.trip_id == trip.id,
-        TripSnapshot.action != "reverted"
-    ).count() == 0
-    reverted_snap = db_session.query(TripSnapshot).filter(TripSnapshot.trip_id == trip.id).first()
-    assert reverted_snap is not None
-    assert reverted_snap.action == "reverted"
+    assert original_act2_id in restored_ids
+
+    all_snaps = db_session.query(TripSnapshot).filter(TripSnapshot.trip_id == trip.id).order_by(TripSnapshot.version.asc()).all()
+    assert len(all_snaps) == 3
+    assert [s.version for s in all_snaps] == [1, 2, 3]
+    assert all(s.action != "reverted" for s in all_snaps)

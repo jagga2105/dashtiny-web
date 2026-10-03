@@ -125,7 +125,8 @@ def create_revision(
     model: Optional[str] = None,
     actor_type: str = "USER",
     action: str = "revision",
-    parent_version: Optional[int] = None
+    parent_version: Optional[int] = None,
+    restored_from_version: Optional[int] = None
 ) -> Tuple[TripSnapshot, int]:
     """
     Creates an immutable, versioned revision record for a Trip under a row lock.
@@ -147,6 +148,7 @@ def create_revision(
         trip_id=trip_id,
         version=next_ver,
         parent_version=actual_parent_ver,
+        restored_from_version=restored_from_version,
         user_id=user_id,
         action=action,
         action_type=action_type,
@@ -168,12 +170,16 @@ def apply_activity_diff(
 ) -> None:
     """
     Applies updated days and activities to the database while preserving stable activity IDs.
+    - Explicit field semantics:
+      * field omitted = preserve existing value
+      * field explicitly null/clear = clear existing value
+      * field explicitly supplied = update value
     - Updates matching existing activities in-place.
-    - Inserts new activities with generated IDs.
+    - Inserts new activities with server-generated UUIDs.
     - Deletes removed activities.
     """
     def _parse_iso_dt(val):
-        if not val:
+        if val is None:
             return None
         if isinstance(val, datetime):
             return val
@@ -198,82 +204,117 @@ def apply_activity_diff(
 
             for idx, act in enumerate(day_data.get("activities", [])):
                 act_id = act.get("id")
-                loc_name = act.get("location", trip.destination)
-                coords = get_coordinates(loc_name)
-                act_lat = act.get("lat") or coords.get("lat")
-                act_lng = act.get("lng") or coords.get("lng")
-                act_prov = act.get("provenance") or (coords.get("provenance") if coords.get("found") else "CURATED_UNRESOLVED")
-
-                time_val = act.get("time_slot") or act.get("time") or "10:00 AM"
-                desc_val = act.get("description", "")
-                pt_val = act.get("place_type") or act.get("placeType") or "TA"
-                cost_val = float(act.get("cost_estimate") or act.get("costEstimate") or 0.0)
-                dur_val = act.get("duration_minutes", 60)
-                trans_min_val = act.get("transit_minutes", 0)
-                trans_mode_val = act.get("transit_mode", "WALK")
-                trans_src_val = act.get("transit_source", "ESTIMATED")
-                trans_conf_val = act.get("transit_confidence", "ESTIMATED")
-                start_at_val = _parse_iso_dt(act.get("start_at"))
-                end_at_val = _parse_iso_dt(act.get("end_at"))
-                tz_val = act.get("timezone")
-                why_val = act.get("why_recommended") or act.get("whyRecommended")
-                citation_val = act.get("source_citation") or "DashTiny Spatial Map Engine"
 
                 if act_id and act_id in existing_acts:
-                    # UPDATE existing activity in-place: preserves ID for bookings, comments, references
+                    # UPDATE existing activity in-place (preserves stable activity ID)
                     db_act = existing_acts[act_id]
-                    db_act.time_slot = time_val
-                    db_act.description = desc_val
-                    db_act.location = loc_name
-                    db_act.place_type = pt_val
-                    db_act.cost_estimate = cost_val
-                    db_act.provenance = act_prov
-                    db_act.lat = act_lat
-                    db_act.lng = act_lng
-                    db_act.source_citation = citation_val
-                    if why_val:
-                        db_act.why_recommended = why_val
-                    db_act.duration_minutes = dur_val
-                    db_act.transit_minutes = trans_min_val
-                    db_act.transit_mode = trans_mode_val
-                    db_act.transit_source = trans_src_val
-                    db_act.transit_confidence = trans_conf_val
-                    if tz_val:
-                        db_act.timezone = tz_val
-                    if start_at_val:
-                        db_act.start_at = start_at_val
-                    if end_at_val:
-                        db_act.end_at = end_at_val
-                    if act.get("estimated_transit"):
-                        db_act.estimated_transit = act.get("estimated_transit")
+                    
+                    if "time_slot" in act or "time" in act:
+                        val = act.get("time_slot") if "time_slot" in act else act.get("time")
+                        if val is not None:
+                            db_act.time_slot = val
+                    if "description" in act:
+                        if act["description"] is not None:
+                            db_act.description = act["description"]
+                    if "location" in act:
+                        if act["location"] is not None:
+                            db_act.location = act["location"]
+                            if "lat" not in act and "lng" not in act:
+                                coords = get_coordinates(act["location"])
+                                if coords.get("found"):
+                                    db_act.lat = coords.get("lat")
+                                    db_act.lng = coords.get("lng")
+                    if "place_type" in act or "placeType" in act:
+                        val = act.get("place_type") if "place_type" in act else act.get("placeType")
+                        if val is not None:
+                            db_act.place_type = val
+                    if "cost_estimate" in act or "costEstimate" in act or "cost" in act:
+                        val = act.get("cost_estimate") if "cost_estimate" in act else (act.get("costEstimate") if "costEstimate" in act else act.get("cost"))
+                        db_act.cost_estimate = float(val) if val is not None else 0.0
+                    if "lat" in act:
+                        db_act.lat = act["lat"]
+                    if "lng" in act:
+                        db_act.lng = act["lng"]
+                    if "provenance" in act:
+                        if act["provenance"] is not None:
+                            db_act.provenance = act["provenance"]
+                    if "source_citation" in act:
+                        db_act.source_citation = act["source_citation"]
+                    if "why_recommended" in act or "whyRecommended" in act:
+                        val = act.get("why_recommended") if "why_recommended" in act else act.get("whyRecommended")
+                        db_act.why_recommended = val
+                    if "generation_source" in act or "generationSource" in act:
+                        val = act.get("generation_source") if "generation_source" in act else act.get("generationSource")
+                        db_act.generation_source = val
+                    if "location_source" in act or "locationSource" in act:
+                        val = act.get("location_source") if "location_source" in act else act.get("locationSource")
+                        db_act.location_source = val
+                    if "content_source" in act or "contentSource" in act:
+                        val = act.get("content_source") if "content_source" in act else act.get("contentSource")
+                        db_act.content_source = val
+                    if "duration_minutes" in act or "durationMinutes" in act:
+                        val = act.get("duration_minutes") if "duration_minutes" in act else act.get("durationMinutes")
+                        db_act.duration_minutes = val
+                    if "transit_minutes" in act or "transitMinutes" in act:
+                        val = act.get("transit_minutes") if "transit_minutes" in act else act.get("transitMinutes")
+                        db_act.transit_minutes = val
+                    if "transit_mode" in act or "transitMode" in act:
+                        val = act.get("transit_mode") if "transit_mode" in act else act.get("transitMode")
+                        db_act.transit_mode = val
+                    if "transit_source" in act:
+                        db_act.transit_source = act["transit_source"]
+                    if "transit_confidence" in act:
+                        db_act.transit_confidence = act["transit_confidence"]
+                    if "estimated_transit" in act or "estimatedTransit" in act:
+                        val = act.get("estimated_transit") if "estimated_transit" in act else act.get("estimatedTransit")
+                        db_act.estimated_transit = val
+                    if "crowd_warning" in act or "crowdWarning" in act:
+                        val = act.get("crowd_warning") if "crowd_warning" in act else act.get("crowdWarning")
+                        db_act.crowd_warning = val
+                    if "timezone" in act:
+                        db_act.timezone = act["timezone"]
+                    if "start_at" in act or "startAt" in act:
+                        val = act.get("start_at") if "start_at" in act else act.get("startAt")
+                        db_act.start_at = _parse_iso_dt(val)
+                    if "end_at" in act or "endAt" in act:
+                        val = act.get("end_at") if "end_at" in act else act.get("endAt")
+                        db_act.end_at = _parse_iso_dt(val)
+
                     db_act.sort_order = idx
                     retained_act_ids.add(act_id)
                 else:
-                    # INSERT new activity
+                    # INSERT new activity with server-generated UUID
+                    loc_name = act.get("location") or trip.destination
+                    coords = get_coordinates(loc_name)
+                    act_lat = act.get("lat") or coords.get("lat")
+                    act_lng = act.get("lng") or coords.get("lng")
+                    act_prov = act.get("provenance") or (coords.get("provenance") if coords.get("found") else "CURATED_UNRESOLVED")
+
                     new_act = ItineraryActivity(
+                        id=str(uuid.uuid4()),
                         day_id=db_day.id,
-                        time_slot=time_val,
-                        description=desc_val,
+                        time_slot=act.get("time_slot") or act.get("time") or "10:00 AM",
+                        description=act.get("description", ""),
                         location=loc_name,
-                        place_type=pt_val,
-                        cost_estimate=cost_val,
+                        place_type=act.get("place_type") or act.get("placeType") or "TA",
+                        cost_estimate=float(act.get("cost_estimate") or act.get("costEstimate") or act.get("cost") or 0.0),
                         provenance=act_prov,
                         lat=act_lat,
                         lng=act_lng,
-                        source_citation=citation_val,
-                        why_recommended=why_val,
-                        duration_minutes=dur_val,
-                        transit_minutes=trans_min_val,
-                        transit_mode=trans_mode_val,
-                        transit_source=trans_src_val,
-                        transit_confidence=trans_conf_val,
-                        timezone=tz_val,
-                        start_at=start_at_val,
-                        end_at=end_at_val,
-                        estimated_transit=act.get("estimated_transit"),
-                        generation_source=act.get("generation_source", "AI_GENERATED"),
-                        location_source=act.get("location_source", "GEOCODED"),
-                        content_source=act.get("content_source", "PLANNER_ACTION"),
+                        source_citation=act.get("source_citation") or "DashTiny Spatial Map Engine",
+                        why_recommended=act.get("why_recommended") or act.get("whyRecommended"),
+                        duration_minutes=act.get("duration_minutes") or act.get("durationMinutes") or 60,
+                        transit_minutes=act.get("transit_minutes") or act.get("transitMinutes") or 0,
+                        transit_mode=act.get("transit_mode") or act.get("transitMode") or "WALK",
+                        transit_source=act.get("transit_source") or "ESTIMATED",
+                        transit_confidence=act.get("transit_confidence") or "ESTIMATED",
+                        timezone=act.get("timezone"),
+                        start_at=_parse_iso_dt(act.get("start_at") or act.get("startAt")),
+                        end_at=_parse_iso_dt(act.get("end_at") or act.get("endAt")),
+                        estimated_transit=act.get("estimated_transit") or act.get("estimatedTransit"),
+                        generation_source=act.get("generation_source") or act.get("generationSource") or "AI_GENERATED",
+                        location_source=act.get("location_source") or act.get("locationSource") or "GEOCODED",
+                        content_source=act.get("content_source") or act.get("contentSource") or "PLANNER_ACTION",
                         sort_order=idx
                     )
                     db.add(new_act)
@@ -284,6 +325,33 @@ def apply_activity_diff(
             for act_id, act_obj in existing_acts.items():
                 if act_id not in retained_act_ids:
                     db.delete(act_obj)
+
+
+def record_initial_revision(
+    db: Session,
+    trip_id: str,
+    user_id: str,
+    model: str = "deterministic-planner-v1"
+) -> Tuple[TripSnapshot, int]:
+    """
+    Records the authoritative initial revision v1 for a newly created trip.
+    """
+    trip = db.query(Itinerary).filter(Itinerary.id == trip_id).first()
+    if not trip:
+        raise ValueError(f"Trip {trip_id} not found")
+    days_data = serialize_trip_days(trip)
+    return create_revision(
+        db=db,
+        trip_id=trip_id,
+        user_id=user_id,
+        action_type="INITIAL_CREATION",
+        days_data=days_data,
+        summary="Initial trip creation and itinerary generation",
+        instruction="Initial trip creation",
+        model=model,
+        actor_type="USER",
+        parent_version=None
+    )
 
 
 def record_mutation(
@@ -320,13 +388,33 @@ def restore_revision(
     target_version: Optional[int] = None
 ) -> Tuple[TripSnapshot, int]:
     """
-    Append-Only Undo Implementation.
-    Walks back active revisions sequentially, restores the target days_data,
-    marks the undone snapshot as reverted, and appends a brand NEW revision (type=UNDO).
+    Append-Only Undo Implementation (Requirements 1, 2, 4, 5, 6).
+    
+    Invariants:
+    1. Revisions are strictly append-only. Old revisions are NEVER modified or marked 'reverted'.
+    2. Given current revision vN:
+       - If vN is a normal mutation, target revision to restore is vN.parent_version.
+       - If vN is already an UNDO revision (which restored vK), the next target to restore is vK.parent_version.
+    3. Loads target revision vP (parent/target state).
+    4. Applies vP.days_data to the Trip via apply_activity_diff().
+    5. Appends a brand NEW revision v(N+1):
+       - version = N + 1
+       - parent_version = N
+       - restored_from_version = vP.version
+       - action_type = "UNDO"
+       - action = "undo"
+       - summary = f"Restored trip state to revision {vP.version}"
+       - days_data = vP.days_data
+    6. Commits / flushes atomically under the row lock.
     """
+    # 1. Lock the parent Itinerary row
     trip = db.query(Itinerary).filter(Itinerary.id == trip_id).with_for_update().first()
     if not trip:
         raise ValueError(f"Trip {trip_id} not found")
+
+    curr = get_current_revision(db, trip_id)
+    if not curr:
+        raise ValueError("No trip revisions found for this trip")
 
     if target_version is not None:
         target_snap = (
@@ -337,21 +425,52 @@ def restore_revision(
         if not target_snap:
             raise ValueError(f"Target revision v{target_version} not found")
     else:
+        # Determine target version to restore following the parent_version chain
+        if curr.action_type != "UNDO":
+            target_ver = curr.parent_version
+        else:
+            base_ver = curr.restored_from_version or curr.parent_version
+            if not base_ver:
+                raise ValueError("No previous trip revision available to undo")
+            base_snap = (
+                db.query(TripSnapshot)
+                .filter(TripSnapshot.trip_id == trip_id, TripSnapshot.version == base_ver)
+                .first()
+            )
+            target_ver = base_snap.parent_version if base_snap else None
+
+        if not target_ver or target_ver < 1:
+            raise ValueError("No previous trip revision available to undo")
+
         target_snap = (
             db.query(TripSnapshot)
-            .filter(TripSnapshot.trip_id == trip_id, TripSnapshot.action != "reverted")
-            .order_by(TripSnapshot.version.desc())
+            .filter(TripSnapshot.trip_id == trip_id, TripSnapshot.version == target_ver)
             .first()
         )
         if not target_snap:
-            raise ValueError("No previous trip snapshot available to undo")
+            raise ValueError(f"Target parent revision v{target_ver} not found")
 
-    # 1. Apply target snapshot days_data to the database
+    # 2. Apply target snapshot days_data to the database
     apply_activity_diff(db, trip, target_snap.days_data)
 
-    # 2. Mark snapshot as reverted so sequential undos step backwards
-    restored_version = target_snap.version
-    target_snap.action = "reverted"
-    target_snap.action_type = "AI_MODIFY_ITINERARY_REVERTED"
+    # 3. Create a brand NEW append-only UNDO revision
+    next_ver = curr.version + 1
+    new_undo_snap = TripSnapshot(
+        id=str(uuid.uuid4()),
+        trip_id=trip_id,
+        version=next_ver,
+        parent_version=curr.version,
+        restored_from_version=target_snap.version,
+        user_id=user_id,
+        action="undo",
+        action_type="UNDO",
+        actor_type="USER",
+        instruction=f"Undo to revision {target_snap.version}",
+        model="deterministic-planner-v1",
+        summary=f"Restored trip state to revision {target_snap.version}",
+        days_data=target_snap.days_data
+    )
+    db.add(new_undo_snap)
+    db.flush()
 
-    return target_snap, restored_version
+    return new_undo_snap, target_snap.version

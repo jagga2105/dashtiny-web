@@ -76,13 +76,13 @@ class Itinerary(Base):
     owner_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     title = Column(String(255), nullable=False)
     destination = Column(String(255), nullable=False)
-    start_date = Column(Date, nullable=False)
-    end_date = Column(Date, nullable=False)
-    total_budget = Column(Numeric(12, 2), nullable=False)
+    start_date = Column(Date, nullable=True)
+    end_date = Column(Date, nullable=True)
+    total_budget = Column(Numeric(12, 2), nullable=True, default=0.0)
     currency = Column(String(10), default="INR")
     persona = Column(String(50), default="solo")
     origin = Column(String(100), nullable=True)
-    travellers = Column(Integer, default=2)
+    travellers = Column(Integer, nullable=True, default=2)
     vibe = Column(String(100), nullable=True)
     raw_prompt = Column(Text, nullable=True)
     status = Column(String(50), default="draft")  # draft, upcoming, active, completed, cancelled
@@ -91,9 +91,9 @@ class Itinerary(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (
-        CheckConstraint("travellers >= 1", name="ck_itinerary_travellers"),
-        CheckConstraint("total_budget >= 0", name="ck_itinerary_budget"),
-        CheckConstraint("end_date >= start_date", name="ck_itinerary_dates"),
+        CheckConstraint("travellers IS NULL OR travellers >= 1", name="ck_itinerary_travellers"),
+        CheckConstraint("total_budget IS NULL OR total_budget >= 0", name="ck_itinerary_budget"),
+        CheckConstraint("start_date IS NULL OR end_date IS NULL OR end_date >= start_date", name="ck_itinerary_dates"),
         CheckConstraint("status IN ('draft', 'upcoming', 'active', 'completed', 'cancelled')", name="ck_itinerary_status"),
         Index("ix_itineraries_owner_created", "owner_id", "created_at"),
         Index("ix_itineraries_owner_status_date", "owner_id", "status", "start_date"),
@@ -260,7 +260,7 @@ class Booking(Base):
     title = Column(String(255), nullable=False)
     amount = Column(Numeric(12, 2), nullable=False)
     currency = Column(String(10), default="INR")
-    status = Column(String(50), default="saved_reference")  # draft, saved_reference, pending, confirmed, cancelled
+    status = Column(String(50), default="pending")  # draft, saved_reference, pending, confirmed, cancelled
     pnr_ref = Column(String(50), nullable=True)
     provenance = Column(String(50), default="USER_PROVIDED")  # USER_PROVIDED, CURATED, PARTNER_VERIFIED
     details = Column(JSON, nullable=True)
@@ -517,12 +517,14 @@ class TripSnapshot(Base):
     summary = Column(String(255), nullable=True)
     days_data = Column(JSON, nullable=False)
     parent_version = Column(Integer, nullable=True)
+    restored_from_version = Column(Integer, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (
         UniqueConstraint("trip_id", "version", name="uq_trip_snapshot_version"),
         CheckConstraint("version >= 1", name="ck_snapshot_version"),
         Index("ix_trip_snapshots_trip_ver", "trip_id", "version"),
+        Index("ix_trip_snapshots_trip_created", "trip_id", "created_at"),
     )
 
     trip = relationship("Itinerary", back_populates="snapshots")
@@ -550,6 +552,8 @@ class TripProposal(Base):
         CheckConstraint("status IN ('pending', 'accepted', 'rejected', 'expired')", name="ck_trip_proposal_status"),
         CheckConstraint("parent_version >= 1", name="ck_proposal_parent_version"),
         Index("ix_trip_proposals_trip_status", "trip_id", "status"),
+        Index("ix_trip_proposals_trip_created", "trip_id", "created_at"),
+        Index("ix_trip_proposals_user_created", "user_id", "created_at"),
     )
 
     trip = relationship("Itinerary", backref="proposals")

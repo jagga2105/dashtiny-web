@@ -37,7 +37,8 @@ from app.services.trip_revision_service import (
     get_current_version,
     create_revision,
     apply_activity_diff,
-    validate_revision_parent
+    validate_revision_parent,
+    record_initial_revision
 )
 
 router = APIRouter(prefix="/ai", tags=["DashTiny AI Action & Proposal Engine"])
@@ -119,16 +120,7 @@ def create_ai_proposal(
     # 4. Get current revision version for parent locking
     curr_version = get_current_version(db, trip.id)
     if curr_version == 0:
-        # Create baseline revision so parent_version is established
-        _, curr_version = create_revision(
-            db=db,
-            trip_id=trip.id,
-            user_id=user.id,
-            action_type="INITIAL_CREATION",
-            days_data=before_days,
-            summary="Initial itinerary baseline"
-        )
-        db.commit()
+        curr_version = 1
 
     # 5. Persist TripProposal record (TRIP IS NOT MUTATED)
     proposal = TripProposal(
@@ -207,6 +199,11 @@ def accept_ai_proposal(
 
     # Verify revision concurrency
     current_ver = get_current_version(db, trip.id)
+    if current_ver == 0 and proposal.parent_version == 1:
+        # Trip was created without an initial snapshot (e.g. legacy/test). Record v1 baseline.
+        record_initial_revision(db, trip.id, proposal.user_id)
+        current_ver = 1
+
     if current_ver != proposal.parent_version:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -338,87 +335,12 @@ def ai_query(
     db: Session = Depends(get_db)
 ):
     """
-    Hardened legacy AI Action endpoint:
-    Strictly requires an explicit trip_id (rejects 'latest'/null).
-    Executes changes through the canonical TripRevisionService with row lock.
+    Compatibility wrapper around POST /api/v1/ai/proposals (Requirement 8).
+    DOES NOT directly mutate the Trip.
+    Returns a structured proposal requiring traveler approval before any mutation.
     """
-    if not request.trip_id or request.trip_id.strip() in ["latest", ""]:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="An explicit, valid trip_id is required. Guessing trip or using 'latest' is disabled."
-        )
-
-    trip = db.query(Itinerary).filter(Itinerary.id == request.trip_id.strip()).with_for_update().first()
-    if not trip:
-        raise HTTPException(status_code=404, detail="Trip not found")
-
-    verify_trip_access(trip, user, db)
-
-    start_time = time.time()
-    before_days = serialize_trip_days(trip)
-    action_result = apply_itinerary_action(request.instruction, before_days)
-
-    try:
-        curr_ver = get_current_version(db, trip.id)
-        # Create versioned snapshot of the PREVIOUS state before applying changes
-        snapshot, next_ver = create_revision(
-            db=db,
-            trip_id=trip.id,
-            user_id=user.id,
-            action_type="AI_MODIFY_ITINERARY",
-            days_data=before_days,
-            summary=action_result["summary"],
-            instruction=request.instruction,
-            model="deterministic-planner-v1",
-            actor_type="USER",
-            action="ai_query",
-            parent_version=curr_ver if curr_ver > 0 else None
-        )
-
-        # Apply diff
-        apply_activity_diff(db, trip, action_result["updated_days"])
-
-        latency_ms = int((time.time() - start_time) * 1000)
-        ai_run = AIRun(
-            user_id=user.id,
-            trip_id=trip.id,
-            prompt=request.instruction,
-            model="deterministic-planner-v1",
-            latency_ms=latency_ms,
-            status="success"
-        )
-        db.add(ai_run)
-        db.flush()
-
-        tool_call = AIToolCall(
-            run_id=ai_run.id,
-            tool_name="itinerary.apply_itinerary_action",
-            input_payload={"instruction": request.instruction, "trip_id": trip.id},
-            output_payload={"changes_count": len(action_result["changes"])},
-            provenance="AI_GENERATED",
-            latency_ms=latency_ms
-        )
-        db.add(tool_call)
-        db.commit()
-    except Exception as exc:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=f"Failed to apply AI action: {str(exc)}")
-
-    db.refresh(trip)
-    updated_days = serialize_trip_days(trip)
-    return {
-        "status": "success",
-        "trip_id": trip.id,
-        "revision_version": next_ver,
-        "summary": action_result["summary"],
-        "changes": action_result["changes"],
-        "trip": {
-            "id": trip.id,
-            "title": trip.title,
-            "destination": trip.destination,
-            "startDate": str(trip.start_date),
-            "endDate": str(trip.end_date),
-            "budget": float(trip.total_budget),
-            "days": updated_days
-        }
-    }
+    prop_req = AIProposalRequest(
+        trip_id=request.trip_id,
+        instruction=request.instruction
+    )
+    return create_ai_proposal(request=prop_req, user=user, db=db)

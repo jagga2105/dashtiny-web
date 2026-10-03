@@ -43,7 +43,7 @@ DashTiny does not treat Explore, Planner, Bookings, and Community as disjointed 
 1. **Explore**: Destination discovery + personalized recommendations + ambient travel radar.
 2. **AI Planner**: The primary differentiator — multi-day itinerary architect generating structured objects.
 3. **Trip Workspace**: The heart of DashTiny. The generated itinerary becomes a persistent, interactive, editable trip canvas.
-4. **Search & Compare**: Live inventory aggregation for flights, stays/hotels, and experiences.
+4. **Search & Compare**: Curated and demo inventory aggregation (`CURATED / DEMO`) for flights, stays/hotels, and experiences via normalized provider schemas (live OTA provider integrations deferred to later phase).
 5. **Booking Redirect / Partner Deep-linking**: Standardized booking reference capture without carrying full OTA liabilities initially.
 6. **Trip Dashboard**: One unified cockpit for everything attached to the active trip.
 
@@ -352,29 +352,37 @@ The **Trip Workspace** is the heart of DashTiny. It replaces disjointed dashboar
 
 ---
 
-## 14. Conversational / Action API (`POST /ai/query`) Returning Diffs
+## 14. Canonical AI Proposal Lifecycle (`Proposal → Accept → Revision`)
 
-When editing a trip with AI, never regenerate the entire itinerary from scratch. Use an action model that calculates constraints and returns **what changed**:
+In DashTiny, AI never directly mutates a Trip. AI proposes structured diffs, the traveler reviews them in the UI, and only an explicit Accept action executes an authoritative mutation:
 
-```json
-// POST /api/v1/ai/query
-{
-  "trip_id": "trip_goa_01",
-  "instruction": "Make Day 2 morning more relaxed and move beach to sunset"
-}
-
-// Response:
-{
-  "summary": "Adjusted Day 2: Moved Palolem Beach to sunset (17:00) and replaced morning trek with leisurely brunch at Art Resort Cafe.",
-  "changes": [
-    { "action": "rescheduled", "item": "Palolem Beach Stroll", "from": "09:30", "to": "17:00" },
-    { "action": "added", "item": "Brunch at Art Resort Cafe", "time": "11:00", "duration_minutes": 75 },
-    { "action": "removed", "item": "Butterfly Beach 4-hour Trek" }
-  ],
-  "budget_impact": -800,
-  "updated_day": { ... }
-}
 ```
+User instruction (DAIna)
+         ↓
+POST /api/v1/ai/proposals
+(Trip unchanged, no revision created, TripProposal persisted)
+         ↓
+Traveler inspects proposal card in UI
+(Summary, changes, budget impact, verification provenance, base version)
+         ↓
+    ┌────────────┴────────────┐
+    ↓                         ↓
+[Accept]                  [Reject]
+    ↓                         ↓
+POST /ai/proposals/{id}/accept    POST /ai/proposals/{id}/reject
+1. Lock Trip row (FOR UPDATE)     Mark proposal status = "rejected"
+2. Verify proposal.parent_version == Trip.current_version (409 on conflict)
+3. Apply diff via TripRevisionService
+4. Create append-only TripRevision (version = N+1, action_type = AI_MODIFY_ITINERARY)
+5. Persist AI telemetry run & mark proposal accepted
+6. Commit PostgreSQL transaction
+```
+
+### Append-Only Revision & Multi-Step Undo Model
+1. **Append-Only History**: Historical `TripSnapshot` records are strictly immutable. They are never modified or flagged with `action = "reverted"`.
+2. **Deterministic Versioning**: Every mutation (initial creation, manual activity add/delete/reorder, AI proposal accept) increments the monotonic version $v(N+1)$ with `parent_version = N`.
+3. **Multi-Step Undo**: Undoing creates a brand new revision with `action_type = "UNDO"` and records `restored_from_version = target_version`. Consecutive undos follow the `parent_version` chain backward ($v_4 \to v_3 \to v_2 \to v_1$) while appending new snapshots ($v_5, v_6, v_7$), preserving a 100% complete and auditable history.
+4. **Compatibility Wrapper**: `POST /api/v1/ai/query` behaves strictly as a non-mutating compatibility wrapper around proposal generation, returning `proposal_id` and structured diffs without mutating the database.
 
 ---
 
