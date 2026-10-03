@@ -65,7 +65,7 @@ export function DAInaChatWidget() {
           const parsed = parseTravelPrompt(textToSend);
           const dest = res.itinerary_data.destination || parsed.destination;
           const daysCount = res.itinerary_data.days_count || parsed.days_count || 4;
-          const budget = res.itinerary_data.budget || parsed.budget || 45000;
+          const budget = res.itinerary_data.budget || parsed.budget || 0;
 
           if (dest) {
             try {
@@ -153,7 +153,7 @@ export function DAInaChatWidget() {
     setIsThinking(true);
 
     try {
-      const budgetNum = parseInt(formResult.budget.replace(/[^0-9]/g, ''), 10) || 45000;
+      const budgetNum = formResult.budget ? (parseInt(formResult.budget.replace(/[^0-9]/g, ''), 10) || 0) : 0;
       const travellersNum = parseInt(formResult.groupSize.replace(/[^0-9]/g, ''), 10) || 2;
       const personaVal = formResult.groupSize.toLowerCase().includes('solo')
         ? 'solo'

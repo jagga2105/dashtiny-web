@@ -135,8 +135,10 @@ export default function DashboardPage() {
             setRealActiveTrip({ ...activeTrip, tripState: 'active' });
           } else if (upcomingTrip) {
             setRealActiveTrip({ ...upcomingTrip, tripState: 'upcoming' });
-          } else if (completedTrip || tripsData.length > 0) {
-            setRealActiveTrip({ ...(completedTrip || tripsData[0]), tripState: 'completed' });
+          } else if (completedTrip) {
+            setRealActiveTrip({ ...completedTrip, tripState: 'completed' });
+          } else if (tripsData.length > 0) {
+            setRealActiveTrip({ ...tripsData[0], tripState: 'draft' });
           } else {
             setRealActiveTrip(null);
           }
@@ -552,7 +554,7 @@ export default function DashboardPage() {
                   {realActiveTrip.title}
                 </h3>
                 <p className="text-xs text-slate-600">
-                  {realActiveTrip.destination} · {realActiveTrip.daysCount || realActiveTrip.days?.length || 3} days · ₹{Number(realActiveTrip.budget || 50000).toLocaleString('en-IN')} estimated
+                  {realActiveTrip.destination} · {realActiveTrip.daysCount || realActiveTrip.days?.length || 3} days · {realActiveTrip.budget ? `₹${Number(realActiveTrip.budget).toLocaleString('en-IN')} estimated` : 'Budget not specified'}
                 </p>
               </div>
 

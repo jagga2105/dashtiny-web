@@ -534,7 +534,7 @@ function TripsContent() {
                     <span>{currentTrip.travelers || currentTrip.travellers || 2} travelers</span>
                     <span>•</span>
                     <span className="font-semibold text-slate-900">
-                      ₹{Number(currentTrip.budget || 50000).toLocaleString('en-IN')} est.
+                      {currentTrip.budget ? `₹${Number(currentTrip.budget).toLocaleString('en-IN')} est.` : 'Budget not specified'}
                     </span>
                   </p>
                 </div>
@@ -1498,47 +1498,48 @@ function TripsContent() {
 
             {/* TAB: BUDGET & SPLIT */}
             {activeTab === 'budget' && (() => {
-              const totalBudget = Number(currentTrip.budget || 50000);
-              const staysEst = Math.round(totalBudget * 0.45);
-              const diningEst = Math.round(totalBudget * 0.25);
-              const actsEst = Math.round(totalBudget * 0.18);
-              const transitEst = Math.round(totalBudget * 0.12);
+              const totalBudget = Number(currentTrip.budget || 0);
+              const hasBudget = totalBudget > 0;
+              const staysEst = hasBudget ? Math.round(totalBudget * 0.45) : 0;
+              const diningEst = hasBudget ? Math.round(totalBudget * 0.25) : 0;
+              const actsEst = hasBudget ? Math.round(totalBudget * 0.18) : 0;
+              const transitEst = hasBudget ? Math.round(totalBudget * 0.12) : 0;
 
               const allBookings = currentTripBookings;
               const staysBooked = allBookings.filter((b: any) => b.category === 'hotel').reduce((acc: number, b: any) => acc + (b.amount || 0), 0);
               const flightsBooked = allBookings.filter((b: any) => b.category === 'flight').reduce((acc: number, b: any) => acc + (b.amount || 0), 0);
               const otherBooked = allBookings.filter((b: any) => !['hotel', 'flight'].includes(b.category)).reduce((acc: number, b: any) => acc + (b.amount || 0), 0);
               const totalBooked = staysBooked + flightsBooked + otherBooked;
-              const remainingBudget = Math.max(0, totalBudget - totalBooked);
+              const remainingBudget = hasBudget ? Math.max(0, totalBudget - totalBooked) : 0;
 
               const budgetCategories = [
                 {
                   category: 'Stays & Lodging',
                   estimated: staysEst,
-                  pct: '45%',
+                  pct: hasBudget ? '45%' : '—',
                   booked: staysBooked,
-                  note: staysBooked > 0 ? `₹${staysBooked.toLocaleString('en-IN')} booked` : 'Estimated allocation'
+                  note: staysBooked > 0 ? `₹${staysBooked.toLocaleString('en-IN')} booked` : (hasBudget ? 'Estimated allocation' : 'Pending booking')
                 },
                 {
                   category: 'Dining & Cafes',
                   estimated: diningEst,
-                  pct: '25%',
+                  pct: hasBudget ? '25%' : '—',
                   booked: 0,
                   note: 'Daily meals & cafes'
                 },
                 {
                   category: 'Activities & Tours',
                   estimated: actsEst,
-                  pct: '18%',
+                  pct: hasBudget ? '18%' : '—',
                   booked: otherBooked,
-                  note: otherBooked > 0 ? `₹${otherBooked.toLocaleString('en-IN')} booked` : 'Attractions & passes'
+                  note: otherBooked > 0 ? `₹${otherBooked.toLocaleString('en-IN')} booked` : (hasBudget ? 'Attractions & passes' : 'Pending booking')
                 },
                 {
                   category: 'Transit & Flights',
                   estimated: transitEst,
-                  pct: '12%',
+                  pct: hasBudget ? '12%' : '—',
                   booked: flightsBooked,
-                  note: flightsBooked > 0 ? `₹${flightsBooked.toLocaleString('en-IN')} booked` : 'Corridor transport'
+                  note: flightsBooked > 0 ? `₹${flightsBooked.toLocaleString('en-IN')} booked` : (hasBudget ? 'Corridor transport' : 'Pending booking')
                 },
               ];
 
@@ -1549,16 +1550,20 @@ function TripsContent() {
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                       <div>
                         <h3 className="font-serif-editorial font-bold text-lg text-slate-900">
-                          Starting estimate: Category allocation breakdown based on total trip budget
+                          {hasBudget
+                            ? 'Starting estimate: Category allocation breakdown based on total trip budget'
+                            : 'Track bookings & expenses for your trip'}
                         </h3>
                         <p className="text-xs text-slate-500 font-medium">
-                          Proportional heuristic distribution based on your ₹{totalBudget.toLocaleString('en-IN')} trip budget. Actual spend updates as you save bookings.
+                          {hasBudget
+                            ? `Proportional heuristic distribution based on your ₹${totalBudget.toLocaleString('en-IN')} trip budget. Actual spend updates as you save bookings.`
+                            : 'No target budget specified. Actual spend updates below as you save confirmed bookings.'}
                         </p>
                       </div>
                       <div className="text-left sm:text-right">
                         <span className="text-[11px] text-slate-400 font-semibold uppercase">Total Trip Budget</span>
                         <p className="text-xl font-serif-editorial font-bold text-slate-900">
-                          ₹{totalBudget.toLocaleString('en-IN')}
+                          {hasBudget ? `₹${totalBudget.toLocaleString('en-IN')}` : 'Not specified'}
                         </p>
                       </div>
                     </div>
@@ -1567,7 +1572,7 @@ function TripsContent() {
                     <div className="space-y-1.5 pt-2">
                       <div className="w-full h-2.5 rounded-full bg-slate-100 overflow-hidden flex">
                         <div
-                          style={{ width: `${Math.min(100, Math.round((totalBooked / totalBudget) * 100))}%` }}
+                          style={{ width: `${hasBudget ? Math.min(100, Math.round((totalBooked / totalBudget) * 100)) : (totalBooked > 0 ? 100 : 0)}%` }}
                           className="h-full bg-emerald-500 transition-all duration-500"
                         />
                       </div>
@@ -1577,7 +1582,7 @@ function TripsContent() {
                           ₹{totalBooked.toLocaleString('en-IN')} confirmed bookings
                         </span>
                         <span className="text-slate-500">
-                          ₹{remainingBudget.toLocaleString('en-IN')} remaining
+                          {hasBudget ? `₹${remainingBudget.toLocaleString('en-IN')} remaining` : 'No budget ceiling set'}
                         </span>
                       </div>
                     </div>
