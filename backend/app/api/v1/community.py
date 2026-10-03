@@ -114,7 +114,7 @@ def create_community_post(
         source_trip_id=request.source_trip_id,
         author_name=user.full_name,
         author_avatar=user.avatar_url or "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
-        trust_score=user.trust_score or "98% Verified Explorer",
+        trust_score=user.trust_score_display if hasattr(user, 'trust_score_display') else "95% Verified Explorer",
         getaway_title=request.getaway_title,
         location=request.location,
         image_url=request.image_url,
@@ -123,11 +123,23 @@ def create_community_post(
         companions_needed=request.companions_needed or 0
     )
     db.add(new_post)
+    db.flush()
 
-    # Reward user with +20 Gold Coins for sharing!
-    profile = db.query(UserProfile).filter(UserProfile.user_id == user.id).first()
-    if profile:
-        profile.reward_coins = (profile.reward_coins or 0) + 20
+    # Route reward earning through authoritative ledger with idempotency
+    idempotency_key = f"community_share_{user.id}_{new_post.source_trip_id or new_post.id}"
+    from app.services.reward_service import award_rewards
+    total_coins, was_awarded = award_rewards(
+        db=db,
+        user_id=user.id,
+        delta=20,
+        reward_type="TRIP_SHARED",
+        reason=f"Shared community getaway story: {new_post.getaway_title}",
+        reference_type="community_post",
+        reference_id=new_post.id,
+        idempotency_key=idempotency_key,
+        metadata_json={"post_id": new_post.id, "title": new_post.getaway_title}
+    )
+    coins_earned = 20 if was_awarded else 0
 
     db.commit()
     db.refresh(new_post)
@@ -140,8 +152,8 @@ def create_community_post(
         "author_name": new_post.author_name,
         "getaway_title": new_post.getaway_title,
         "likes_count": new_post.likes_count,
-        "coins_earned": 20,
-        "total_coins": profile.reward_coins if profile else 20
+        "coins_earned": coins_earned,
+        "total_coins": total_coins
     }
 
 @router.post("/posts/{post_id}/like")

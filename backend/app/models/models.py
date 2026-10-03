@@ -140,7 +140,7 @@ class ItineraryActivity(Base):
     # Structured temporal and transit model
     start_at = Column(DateTime(timezone=True), nullable=True)
     end_at = Column(DateTime(timezone=True), nullable=True)
-    timezone = Column(String(50), default="UTC", nullable=True)
+    timezone = Column(String(50), nullable=True, default=None)
     duration_minutes = Column(Integer, default=60, nullable=True)
     transit_minutes = Column(Integer, default=0, nullable=True)
     transit_mode = Column(String(50), default="WALK", nullable=True)
@@ -391,7 +391,7 @@ class RewardVoucher(Base):
     coin_cost = Column(Integer, nullable=False)
     category = Column(String(50), nullable=False)
     logo_url = Column(Text, nullable=True)
-    code = Column(String(50), nullable=False)
+    code = Column(String(50), unique=True, nullable=False)
 
 
 class RewardTransaction(Base):
@@ -455,6 +455,10 @@ class TripSnapshot(Base):
     version = Column(Integer, nullable=False, default=1)
     user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     action = Column(String(50), default="ai_query", nullable=False)
+    action_type = Column(String(50), default="AI_QUERY", nullable=True)
+    actor_type = Column(String(50), default="USER", nullable=True)
+    instruction = Column(Text, nullable=True)
+    model = Column(String(100), default="deterministic-planner-v1", nullable=True)
     summary = Column(String(255), nullable=True)
     days_data = Column(JSON, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

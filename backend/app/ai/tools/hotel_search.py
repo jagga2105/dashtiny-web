@@ -167,8 +167,11 @@ def search_hotels(
     stay dates (check-in/check-out), and room requirements.
     Provenances: CURATED for editorial selections; DEMO for demonstration prototypes.
     """
+    clean_dest = destination.strip() if destination else ""
+    if not clean_dest:
+        return []
     clean_guests = max(1, guests or 2)
-    dest_lower = destination.lower() if destination else ""
+    dest_lower = clean_dest.lower()
     matched_stays = None
 
     nights = 1

@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
@@ -83,6 +84,17 @@ def get_my_trips(user: User = Depends(get_current_user), db: Session = Depends(g
             for b in it.bookings
         ]
 
+        total_days = len(formatted_days)
+        completed_days = 0
+        if it.status == "completed":
+            completed_days = total_days
+        elif it.start_date and it.end_date:
+            today = datetime.now(timezone.utc).date()
+            if today > it.end_date:
+                completed_days = total_days
+            elif today >= it.start_date:
+                completed_days = min(total_days, max(0, (today - it.start_date).days))
+
         results.append({
             "id": it.id,
             "title": it.title,
@@ -100,9 +112,9 @@ def get_my_trips(user: User = Depends(get_current_user), db: Session = Depends(g
             "is_public": bool(it.is_public),
             "source_trip_id": it.source_trip_id,
             "squad_room_code": squad.room_code if squad else "DASH-ROOM",
-            "daysCount": len(formatted_days),
+            "daysCount": total_days,
             "bookingsCount": len(formatted_bookings),
-            "completed_days": 0,
+            "completed_days": completed_days,
             "days": formatted_days,
             "bookings": formatted_bookings
         })
@@ -545,68 +557,121 @@ def undo_trip_change(
     if not snapshot:
         raise HTTPException(status_code=400, detail="No previous trip snapshot available to undo")
 
-    # Restore days_data using diff-based update to maintain stable activity IDs
-    for day_data in snapshot.days_data:
-        db_day = db.query(ItineraryDay).filter(ItineraryDay.id == day_data.get("id")).first()
-        if db_day:
-            existing_acts = {a.id: a for a in db_day.activities}
-            retained_act_ids = set()
+    def _parse_iso_dt(val):
+        if not val:
+            return None
+        try:
+            return datetime.fromisoformat(val)
+        except Exception:
+            return None
 
-            for idx, act in enumerate(day_data.get("activities", [])):
-                act_id = act.get("id")
-                time_val = act.get("time") or act.get("time_slot") or "10:00 AM"
-                desc_val = act.get("description", "")
-                loc_val = act.get("location", it.destination)
-                pt_val = act.get("place_type") or act.get("placeType") or "TA"
-                cost_val = float(act.get("cost_estimate") or act.get("costEstimate") or 0.0)
-                prov_val = act.get("provenance") or "DETERMINISTIC"
-                lat_val = act.get("lat")
-                lng_val = act.get("lng")
-                src_val = act.get("source_citation") or "Restored Snapshot"
-                why_val = act.get("why_recommended") or act.get("whyRecommended")
+    try:
+        # Restore days_data using diff-based update to maintain stable activity IDs
+        for day_data in snapshot.days_data:
+            db_day = db.query(ItineraryDay).filter(ItineraryDay.id == day_data.get("id")).first()
+            if db_day:
+                existing_acts = {a.id: a for a in db_day.activities}
+                retained_act_ids = set()
 
-                if act_id and act_id in existing_acts:
-                    db_act = existing_acts[act_id]
-                    db_act.time_slot = time_val
-                    db_act.description = desc_val
-                    db_act.location = loc_val
-                    db_act.place_type = pt_val
-                    db_act.cost_estimate = cost_val
-                    db_act.provenance = prov_val
-                    db_act.lat = lat_val
-                    db_act.lng = lng_val
-                    db_act.source_citation = src_val
-                    db_act.why_recommended = why_val
-                    db_act.sort_order = act.get("sort_order", idx)
-                    retained_act_ids.add(act_id)
-                else:
-                    new_act = ItineraryActivity(
-                        id=act_id if act_id and len(act_id) > 10 else None,
-                        day_id=db_day.id,
-                        time_slot=time_val,
-                        description=desc_val,
-                        location=loc_val,
-                        place_type=pt_val,
-                        cost_estimate=cost_val,
-                        provenance=prov_val,
-                        lat=lat_val,
-                        lng=lat_val,
-                        source_citation=src_val,
-                        why_recommended=why_val,
-                        sort_order=act.get("sort_order", idx)
-                    )
-                    db.add(new_act)
-                    db.flush()
-                    retained_act_ids.add(new_act.id)
+                for idx, act in enumerate(day_data.get("activities", [])):
+                    act_id = act.get("id")
+                    time_val = act.get("time_slot") or act.get("time") or "10:00 AM"
+                    desc_val = act.get("description", "")
+                    loc_val = act.get("location", it.destination)
+                    pt_val = act.get("place_type") or act.get("placeType") or "TA"
+                    cost_val = float(act.get("cost_estimate") or act.get("costEstimate") or 0.0)
+                    prov_val = act.get("provenance") or "DETERMINISTIC"
+                    lat_val = act.get("lat")
+                    lng_val = act.get("lng")
+                    src_val = act.get("source_citation") or "Restored Snapshot"
+                    why_val = act.get("why_recommended") or act.get("whyRecommended")
+                    start_at_val = _parse_iso_dt(act.get("start_at"))
+                    end_at_val = _parse_iso_dt(act.get("end_at"))
+                    tz_val = act.get("timezone")
+                    dur_val = act.get("duration_minutes", 60)
+                    trans_min_val = act.get("transit_minutes", 0)
+                    trans_mode_val = act.get("transit_mode", "WALK")
+                    trans_src_val = act.get("transit_source", "ESTIMATED")
+                    trans_conf_val = act.get("transit_confidence", "ESTIMATED")
+                    est_trans_val = act.get("estimated_transit")
+                    gen_src_val = act.get("generation_source")
+                    loc_src_val = act.get("location_source")
+                    cnt_src_val = act.get("content_source")
+                    order_val = act.get("sort_order", idx)
 
-            for act_id, act_obj in existing_acts.items():
-                if act_id not in retained_act_ids:
-                    db.delete(act_obj)
+                    if act_id and act_id in existing_acts:
+                        db_act = existing_acts[act_id]
+                        db_act.time_slot = time_val
+                        db_act.description = desc_val
+                        db_act.location = loc_val
+                        db_act.place_type = pt_val
+                        db_act.cost_estimate = cost_val
+                        db_act.provenance = prov_val
+                        db_act.lat = lat_val
+                        db_act.lng = lng_val
+                        db_act.source_citation = src_val
+                        db_act.why_recommended = why_val
+                        db_act.start_at = start_at_val
+                        db_act.end_at = end_at_val
+                        db_act.timezone = tz_val
+                        db_act.duration_minutes = dur_val
+                        db_act.transit_minutes = trans_min_val
+                        db_act.transit_mode = trans_mode_val
+                        db_act.transit_source = trans_src_val
+                        db_act.transit_confidence = trans_conf_val
+                        if est_trans_val:
+                            db_act.estimated_transit = est_trans_val
+                        if gen_src_val:
+                            db_act.generation_source = gen_src_val
+                        if loc_src_val:
+                            db_act.location_source = loc_src_val
+                        if cnt_src_val:
+                            db_act.content_source = cnt_src_val
+                        db_act.sort_order = order_val
+                        retained_act_ids.add(act_id)
+                    else:
+                        new_act = ItineraryActivity(
+                            id=act_id if act_id and len(act_id) > 10 else None,
+                            day_id=db_day.id,
+                            time_slot=time_val,
+                            description=desc_val,
+                            location=loc_val,
+                            place_type=pt_val,
+                            cost_estimate=cost_val,
+                            provenance=prov_val,
+                            lat=lat_val,
+                            lng=lng_val,
+                            source_citation=src_val,
+                            why_recommended=why_val,
+                            start_at=start_at_val,
+                            end_at=end_at_val,
+                            timezone=tz_val,
+                            duration_minutes=dur_val,
+                            transit_minutes=trans_min_val,
+                            transit_mode=trans_mode_val,
+                            transit_source=trans_src_val,
+                            transit_confidence=trans_conf_val,
+                            estimated_transit=est_trans_val,
+                            generation_source=gen_src_val,
+                            location_source=loc_src_val,
+                            content_source=cnt_src_val,
+                            sort_order=order_val
+                        )
+                        db.add(new_act)
+                        db.flush()
+                        retained_act_ids.add(new_act.id)
 
-    # Pop the restored snapshot
-    restored_version = snapshot.version
-    db.delete(snapshot)
-    db.commit()
+                for act_id, act_obj in existing_acts.items():
+                    if act_id not in retained_act_ids:
+                        db.delete(act_obj)
+
+        # Pop the restored snapshot
+        restored_version = snapshot.version
+        db.delete(snapshot)
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to undo trip change: {str(exc)}")
 
     return {
         "status": "success",

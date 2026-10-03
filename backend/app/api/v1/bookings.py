@@ -140,33 +140,28 @@ def create_booking(
 
     # Reward Ledger with Idempotency
     # Only genuine provided PNR references earn coins; drafts without PNR do not earn rewards.
+    # Same provider + PNR can only be rewarded once.
     coins_earned = 0
-    profile = db.query(UserProfile).filter(UserProfile.user_id == user.id).with_for_update().first()
-    if not profile:
-        profile = UserProfile(user_id=user.id, reward_coins=0)
-        db.add(profile)
-        db.flush()
-
+    total_coins = 0
     if pnr_clean and len(pnr_clean) >= 3:
+        from app.services.reward_service import award_rewards
         idempotency_key = f"booking_reward_{request.provider}_{pnr_clean}"
-        existing_tx = db.query(RewardTransaction).filter(
-            RewardTransaction.idempotency_key == idempotency_key
-        ).first()
-        if not existing_tx:
-            profile.reward_coins = (profile.reward_coins or 0) + 50
+        total_coins, was_awarded = award_rewards(
+            db=db,
+            user_id=user.id,
+            delta=50,
+            reward_type="BOOKING_SAVED",
+            reason=f"Saved verified booking reference for {request.provider} ({pnr_clean})",
+            reference_type="booking",
+            reference_id=new_booking.id,
+            idempotency_key=idempotency_key,
+            metadata_json={"provider": request.provider, "pnr_ref": pnr_clean, "booking_id": new_booking.id}
+        )
+        if was_awarded:
             coins_earned = 50
-            tx = RewardTransaction(
-                user_id=user.id,
-                delta=50,
-                balance_after=profile.reward_coins,
-                type="BOOKING_SAVED",
-                reason=f"Saved verified booking reference for {request.provider} ({pnr_clean})",
-                reference_type="booking",
-                reference_id=new_booking.id,
-                idempotency_key=idempotency_key,
-                metadata_json={"provider": request.provider, "pnr_ref": pnr_clean, "booking_id": new_booking.id}
-            )
-            db.add(tx)
+    else:
+        profile = db.query(UserProfile).filter(UserProfile.user_id == user.id).first()
+        total_coins = profile.reward_coins if profile else 0
 
     db.commit()
     db.refresh(new_booking)
@@ -185,7 +180,7 @@ def create_booking(
         "source": "USER_PROVIDED",
         "verification": "UNVERIFIED",
         "coins_earned": coins_earned,
-        "total_coins": profile.reward_coins,
+        "total_coins": total_coins,
         "message": f"Booking reference successfully saved to your trip workspace for {new_booking.provider}!"
     }
 

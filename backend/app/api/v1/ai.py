@@ -68,7 +68,7 @@ def ai_query(
             detail="Access denied. You do not have permission to modify this trip."
         )
 
-    # Serialize current days & activities for rollback snapshot
+    # Serialize current days & activities for rollback snapshot (complete 22 canonical fields)
     current_days = []
     for d in sorted(trip.days, key=lambda x: x.day_number):
         current_days.append({
@@ -79,6 +79,7 @@ def ai_query(
             "activities": [
                 {
                     "id": a.id,
+                    "time_slot": a.time_slot,
                     "time": a.time_slot,
                     "description": a.description,
                     "location": a.location,
@@ -93,111 +94,154 @@ def ai_query(
                     "generation_source": a.generation_source,
                     "location_source": a.location_source,
                     "content_source": a.content_source,
+                    "start_at": a.start_at.isoformat() if a.start_at else None,
+                    "end_at": a.end_at.isoformat() if a.end_at else None,
+                    "timezone": a.timezone,
+                    "duration_minutes": a.duration_minutes,
+                    "transit_minutes": a.transit_minutes,
+                    "transit_mode": a.transit_mode,
+                    "transit_source": a.transit_source,
+                    "transit_confidence": a.transit_confidence,
                     "sort_order": a.sort_order
                 }
                 for a in sorted(d.activities, key=lambda x: x.sort_order)
             ]
         })
 
-    # Save a versioned rollback snapshot prior to applying changes
-    max_ver = db.query(func.max(TripSnapshot.version)).filter(TripSnapshot.trip_id == trip.id).scalar() or 0
-    snapshot = TripSnapshot(
-        trip_id=trip.id,
-        version=max_ver + 1,
-        user_id=user.id,
-        action="ai_query",
-        summary=f"Snapshot v{max_ver + 1} before: {request.instruction[:60]}",
-        days_data=current_days
-    )
-    db.add(snapshot)
-
     # Execute deterministic itinerary action tool
     action_result = apply_itinerary_action(request.instruction, current_days)
-    
-    # Diff-based activity persistence: preserves stable activity identity
-    for day_data in action_result["updated_days"]:
-        db_day = db.query(ItineraryDay).filter(ItineraryDay.id == day_data.get("id")).first()
-        if db_day:
-            existing_acts = {a.id: a for a in db_day.activities}
-            retained_act_ids = set()
 
-            for idx, act in enumerate(day_data.get("activities", [])):
-                act_id = act.get("id")
-                loc_name = act.get("location", trip.destination)
-                coords = get_coordinates(loc_name)
-                act_lat = act.get("lat") or coords.get("lat")
-                act_lng = act.get("lng") or coords.get("lng")
-                act_prov = act.get("provenance") or (coords.get("provenance") if coords.get("found") else "CURATED_UNRESOLVED")
+    try:
+        # Save a versioned rollback snapshot prior to applying changes (atomic transaction boundary)
+        max_ver = db.query(func.max(TripSnapshot.version)).filter(TripSnapshot.trip_id == trip.id).scalar() or 0
+        snapshot = TripSnapshot(
+            trip_id=trip.id,
+            version=max_ver + 1,
+            user_id=user.id,
+            action="ai_query",
+            action_type="AI_MODIFY_ITINERARY",
+            actor_type="USER",
+            instruction=request.instruction,
+            model="deterministic-planner-v1",
+            summary=f"Snapshot v{max_ver + 1} before: {request.instruction[:60]}",
+            days_data=current_days
+        )
+        db.add(snapshot)
 
-                if act_id and act_id in existing_acts:
-                    # UPDATE existing activity in-place: preserves ID for bookings, comments, references
-                    db_act = existing_acts[act_id]
-                    db_act.time_slot = act.get("time", db_act.time_slot or "10:00 AM")
-                    db_act.description = act.get("description", db_act.description)
-                    db_act.location = loc_name
-                    db_act.place_type = act.get("place_type", db_act.place_type or "TA")
-                    db_act.cost_estimate = act.get("cost_estimate", db_act.cost_estimate or 0)
-                    db_act.provenance = act_prov
-                    db_act.lat = act_lat
-                    db_act.lng = act_lng
-                    if act.get("source_citation"):
-                        db_act.source_citation = act.get("source_citation")
-                    if act.get("why_recommended"):
-                        db_act.why_recommended = act.get("why_recommended")
-                    db_act.sort_order = idx
-                    retained_act_ids.add(act_id)
-                else:
-                    # INSERT new activity
-                    new_act = ItineraryActivity(
-                        day_id=db_day.id,
-                        time_slot=act.get("time", "10:00 AM"),
-                        description=act.get("description", ""),
-                        location=loc_name,
-                        place_type=act.get("place_type", "TA"),
-                        cost_estimate=act.get("cost_estimate", 0),
-                        provenance=act_prov,
-                        lat=act_lat,
-                        lng=act_lng,
-                        source_citation=act.get("source_citation") or "DashTiny Spatial Map Engine",
-                        why_recommended=act.get("why_recommended"),
-                        sort_order=idx
-                    )
-                    db.add(new_act)
-                    db.flush()  # assign generated ID
-                    retained_act_ids.add(new_act.id)
+        # Diff-based activity persistence: preserves stable activity identity
+        for day_data in action_result["updated_days"]:
+            db_day = db.query(ItineraryDay).filter(ItineraryDay.id == day_data.get("id")).first()
+            if db_day:
+                existing_acts = {a.id: a for a in db_day.activities}
+                retained_act_ids = set()
 
-            # DELETE removed activities
-            for act_id, act_obj in existing_acts.items():
-                if act_id not in retained_act_ids:
-                    db.delete(act_obj)
+                for idx, act in enumerate(day_data.get("activities", [])):
+                    act_id = act.get("id")
+                    loc_name = act.get("location", trip.destination)
+                    coords = get_coordinates(loc_name)
+                    act_lat = act.get("lat") or coords.get("lat")
+                    act_lng = act.get("lng") or coords.get("lng")
+                    act_prov = act.get("provenance") or (coords.get("provenance") if coords.get("found") else "CURATED_UNRESOLVED")
 
-    latency_ms = int((time.time() - start_time) * 1000)
+                    if act_id and act_id in existing_acts:
+                        # UPDATE existing activity in-place: preserves ID for bookings, comments, references
+                        db_act = existing_acts[act_id]
+                        db_act.time_slot = act.get("time", db_act.time_slot or "10:00 AM")
+                        db_act.description = act.get("description", db_act.description)
+                        db_act.location = loc_name
+                        db_act.place_type = act.get("place_type", db_act.place_type or "TA")
+                        db_act.cost_estimate = act.get("cost_estimate", db_act.cost_estimate or 0)
+                        db_act.provenance = act_prov
+                        db_act.lat = act_lat
+                        db_act.lng = act_lng
+                        if act.get("source_citation"):
+                            db_act.source_citation = act.get("source_citation")
+                        if act.get("why_recommended"):
+                            db_act.why_recommended = act.get("why_recommended")
+                        if "duration_minutes" in act:
+                            db_act.duration_minutes = act.get("duration_minutes")
+                        if "transit_minutes" in act:
+                            db_act.transit_minutes = act.get("transit_minutes")
+                        if "transit_mode" in act:
+                            db_act.transit_mode = act.get("transit_mode")
+                        if "transit_source" in act:
+                            db_act.transit_source = act.get("transit_source")
+                        if "transit_confidence" in act:
+                            db_act.transit_confidence = act.get("transit_confidence")
+                        if "timezone" in act:
+                            db_act.timezone = act.get("timezone")
+                        if "estimated_transit" in act:
+                            db_act.estimated_transit = act.get("estimated_transit")
+                        db_act.sort_order = idx
+                        retained_act_ids.add(act_id)
+                    else:
+                        # INSERT new activity
+                        new_act = ItineraryActivity(
+                            day_id=db_day.id,
+                            time_slot=act.get("time", "10:00 AM"),
+                            description=act.get("description", ""),
+                            location=loc_name,
+                            place_type=act.get("place_type", "TA"),
+                            cost_estimate=act.get("cost_estimate", 0),
+                            provenance=act_prov,
+                            lat=act_lat,
+                            lng=act_lng,
+                            source_citation=act.get("source_citation") or "DashTiny Spatial Map Engine",
+                            why_recommended=act.get("why_recommended"),
+                            duration_minutes=act.get("duration_minutes", 60),
+                            transit_minutes=act.get("transit_minutes", 0),
+                            transit_mode=act.get("transit_mode", "WALK"),
+                            transit_source=act.get("transit_source", "ESTIMATED"),
+                            transit_confidence=act.get("transit_confidence", "ESTIMATED"),
+                            timezone=act.get("timezone"),
+                            estimated_transit=act.get("estimated_transit"),
+                            generation_source=act.get("generation_source", "AI_GENERATED"),
+                            location_source=act.get("location_source", "GEOCODED"),
+                            content_source=act.get("content_source", "PLANNER_ACTION"),
+                            sort_order=idx
+                        )
+                        db.add(new_act)
+                        db.flush()  # assign generated ID
+                        retained_act_ids.add(new_act.id)
 
-    # AI Observability: Single atomic transaction boundary
-    ai_run = AIRun(
-        user_id=user.id,
-        trip_id=trip.id,
-        prompt=request.instruction,
-        model="deterministic-planner-v1",
-        latency_ms=latency_ms,
-        tokens_used=0,
-        status="success"
-    )
-    db.add(ai_run)
-    db.flush()  # Obtain ai_run.id without committing transaction
+                # DELETE removed activities
+                for act_id, act_obj in existing_acts.items():
+                    if act_id not in retained_act_ids:
+                        db.delete(act_obj)
 
-    tool_call = AIToolCall(
-        run_id=ai_run.id,
-        tool_name="itinerary.apply_itinerary_action",
-        input_payload={"instruction": request.instruction, "trip_id": trip.id},
-        output_payload={"changes_count": len(action_result["changes"])},
-        provenance="AI_GENERATED",
-        latency_ms=latency_ms
-    )
-    db.add(tool_call)
+        latency_ms = int((time.time() - start_time) * 1000)
 
-    # Commit snapshot, diff modifications, ai_run, and tool_call in one atomic transaction
-    db.commit()
+        # AI Observability: Single atomic transaction boundary
+        ai_run = AIRun(
+            user_id=user.id,
+            trip_id=trip.id,
+            prompt=request.instruction,
+            model="deterministic-planner-v1",
+            latency_ms=latency_ms,
+            tokens_used=0,
+            status="success"
+        )
+        db.add(ai_run)
+        db.flush()  # Obtain ai_run.id without committing transaction
+
+        tool_call = AIToolCall(
+            run_id=ai_run.id,
+            tool_name="itinerary.apply_itinerary_action",
+            input_payload={"instruction": request.instruction, "trip_id": trip.id},
+            output_payload={"changes_count": len(action_result["changes"])},
+            provenance="AI_GENERATED",
+            latency_ms=latency_ms
+        )
+        db.add(tool_call)
+
+        # Commit snapshot, diff modifications, ai_run, and tool_call in one atomic transaction
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to apply AI mutation: {str(exc)}"
+        )
 
     # Re-fetch updated trip representation
     db.refresh(trip)

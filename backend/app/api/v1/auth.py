@@ -172,12 +172,11 @@ def demo_login(request: DemoLoginRequest = DemoLoginRequest(), db: Session = Dep
             full_name=demo_name,
             account_type="sandbox_demo",
             is_verified=False,  # Honest: Sandbox accounts are NOT marked verified
-            trust_score="Sandbox Demo Explorer",
+            trust_score=90.0,
             avatar_url=avatar
         )
         db.add(user)
-        db.commit()
-        db.refresh(user)
+        db.flush()
 
         profile = UserProfile(
             user_id=user.id,
@@ -186,6 +185,7 @@ def demo_login(request: DemoLoginRequest = DemoLoginRequest(), db: Session = Dep
         )
         db.add(profile)
         db.commit()
+        db.refresh(user)
 
     token = create_access_token({"sub": user.id, "email": user.email})
     return {

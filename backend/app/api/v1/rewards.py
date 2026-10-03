@@ -67,15 +67,25 @@ def redeem_reward_voucher(
     db: Session = Depends(get_db)
 ):
     """
-    Redeem voucher with concurrency protection (row lock via with_for_update)
-    and ledger record persistence.
-    Prevents double redemption and race conditions.
+    Redeem voucher with concurrency protection:
+    Acquires row lock on UserProfile first, checks for duplicate redemptions,
+    validates coin balance, persists RewardRedemption + RewardTransaction,
+    and commits atomically with defensive IntegrityError handling.
     """
+    from sqlalchemy.exc import IntegrityError
+
     voucher = db.query(RewardVoucher).filter(RewardVoucher.id == request.voucher_id).first()
     if not voucher:
         raise HTTPException(status_code=404, detail="Voucher not found")
 
-    # Check if already redeemed by this user
+    # 1. Concurrency safe: acquire row lock on UserProfile FIRST
+    profile = db.query(UserProfile).filter(UserProfile.user_id == user.id).with_for_update().first()
+    if not profile:
+        profile = UserProfile(user_id=user.id, reward_coins=0)
+        db.add(profile)
+        db.flush()
+
+    # 2. Check if already redeemed by this user AFTER acquiring lock
     existing_redemption = db.query(RewardRedemption).filter(
         RewardRedemption.user_id == user.id,
         RewardRedemption.voucher_id == voucher.id
@@ -86,23 +96,17 @@ def redeem_reward_voucher(
             detail=f"You have already redeemed this voucher ({existing_redemption.voucher_code}). Each voucher can only be unlocked once."
         )
 
-    # Concurrency safe: lock user profile row during transaction
-    profile = db.query(UserProfile).filter(UserProfile.user_id == user.id).with_for_update().first()
-    if not profile:
-        profile = UserProfile(user_id=user.id, reward_coins=0)
-        db.add(profile)
-        db.flush()
-
+    # 3. Check sufficient coin balance
     if (profile.reward_coins or 0) < voucher.coin_cost:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Insufficient Gold Coins. You have {profile.reward_coins or 0} coins, but need {voucher.coin_cost} coins."
         )
 
-    # Deduct balance
+    # 4. Deduct balance
     profile.reward_coins -= voucher.coin_cost
 
-    # Persist redemption record
+    # 5. Persist redemption record
     redemption = RewardRedemption(
         user_id=user.id,
         voucher_id=voucher.id,
@@ -112,7 +116,7 @@ def redeem_reward_voucher(
     )
     db.add(redemption)
 
-    # Persist audit ledger transaction
+    # 6. Persist audit ledger transaction
     tx = RewardTransaction(
         user_id=user.id,
         delta=-voucher.coin_cost,
@@ -126,8 +130,15 @@ def redeem_reward_voucher(
     )
     db.add(tx)
 
-    # Single atomic commit for profile, redemption, and transaction ledger
-    db.commit()
+    # 7. Single atomic commit with defensive IntegrityError catch
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"You have already redeemed this voucher. Each voucher can only be unlocked once."
+        )
 
     return {
         "status": "redeemed",

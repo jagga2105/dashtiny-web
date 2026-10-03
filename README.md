@@ -104,8 +104,12 @@ pip install pytest httpx
 cp .env.example .env
 # Edit .env to set your SECRET_KEY and database credentials
 
-# Run database migrations or initial schema
+# Run database migrations with Alembic
+alembic upgrade head
+# Or run init_db.py which executes all Alembic migrations and seeds default vouchers
 python3 init_db.py
+# (Optional) Seed rich catalog getaways and demo user
+python3 seed_data.py
 
 # Start FastAPI server
 uvicorn app.main:app --reload --port 8000
