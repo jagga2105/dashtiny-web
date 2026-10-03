@@ -275,8 +275,8 @@ export const apiService = {
       passengers?: number;
       cabinClass?: string;
       tripType?: string;
-    } = 'BLR',
-    destinationFallback: string = 'GOI'
+    } = '',
+    destinationFallback: string = ''
   ) {
     let params: Record<string, string> = {};
     if (typeof paramsOrOrigin === 'string') {
@@ -286,8 +286,8 @@ export const apiService = {
       };
     } else {
       params = {
-        origin: paramsOrOrigin.origin || 'BLR',
-        destination: paramsOrOrigin.destination || 'GOI',
+        origin: paramsOrOrigin.origin || '',
+        destination: paramsOrOrigin.destination || '',
         departure_date: paramsOrOrigin.departureDate || '',
         return_date: paramsOrOrigin.returnDate || '',
         passengers: String(paramsOrOrigin.passengers || 1),
@@ -308,7 +308,7 @@ export const apiService = {
       checkIn?: string;
       checkOut?: string;
       roomType?: string;
-    } = 'Goa',
+    } = '',
     guestsFallback: number = 2
   ) {
     let params: Record<string, string> = {};
@@ -319,7 +319,7 @@ export const apiService = {
       };
     } else {
       params = {
-        destination: paramsOrDest.destination || 'Goa',
+        destination: paramsOrDest.destination || '',
         guests: String(paramsOrDest.guests || 2),
         check_in: paramsOrDest.checkIn || '',
         check_out: paramsOrDest.checkOut || '',
@@ -352,7 +352,14 @@ export const apiService = {
     return request<any[]>('/community/feed');
   },
 
-  async createCommunityPost(post: { getaway_title: string; location: string; content: string; image_url: string; companions_needed?: number }) {
+  async createCommunityPost(post: {
+    getaway_title: string;
+    location: string;
+    content: string;
+    image_url: string;
+    companions_needed?: number;
+    source_trip_id?: string;
+  }) {
     return request<any>('/community/posts', {
       method: 'POST',
       body: JSON.stringify(post),

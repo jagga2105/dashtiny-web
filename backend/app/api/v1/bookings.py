@@ -147,6 +147,7 @@ def create_booking(
         "source": "USER_PROVIDED",
         "verification": "UNVERIFIED",
         "coins_earned": 50,
+        "total_coins": profile.reward_coins if profile else 50,
         "message": f"Booking reference successfully saved to your trip workspace for {new_booking.provider}!"
     }
 

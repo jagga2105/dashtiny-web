@@ -37,7 +37,7 @@ function BookingsContent() {
   const searchParams = useSearchParams();
   const paramTripId = searchParams.get('tripId');
 
-  const { updateCoins } = useAuthStore();
+  const { setCoins } = useAuthStore();
   const [activeCategory, setActiveCategory] = useState<BookingCategory>('flights');
   const [bookingConfirmed, setBookingConfirmed] = useState<{ title: string; pnr: string; provider: string; tripId?: string } | null>(null);
   const [bookingError, setBookingError] = useState<string | null>(null);
@@ -47,7 +47,7 @@ function BookingsContent() {
   const [selectedTripId, setSelectedTripId] = useState<string>('');
 
   // Flight search states (Clean defaults — populated via selected Trip)
-  const [flightOrigin, setFlightOrigin] = useState('BLR');
+  const [flightOrigin, setFlightOrigin] = useState('');
   const [flightDest, setFlightDest] = useState('');
   const [departureDate, setDepartureDate] = useState('');
   const [returnDate, setReturnDate] = useState('');
@@ -187,8 +187,13 @@ function BookingsContent() {
         const airportCode = getAirportCodeForDestination(dest);
         const cityName = getCityNameForDestination(dest);
         
-        setFlightDest(airportCode);
-        setHotelDest(cityName);
+        setFlightDest(airportCode || dest);
+        setHotelDest(cityName || dest);
+
+        if (match.origin) {
+          const originAirport = getAirportCodeForDestination(match.origin);
+          setFlightOrigin(originAirport || match.origin);
+        }
 
         if (match.startDate) {
           setDepartureDate(match.startDate);
@@ -274,11 +279,6 @@ function BookingsContent() {
     }
   };
 
-  useEffect(() => {
-    loadFlights();
-    loadHotels();
-  }, []);
-
   const categories = [
     { id: 'flights' as BookingCategory, label: 'Flights', icon: Plane },
     { id: 'hotels' as BookingCategory, label: 'Stays & Hotels', icon: Hotel },
@@ -316,7 +316,9 @@ function BookingsContent() {
           provider: res.provider || provider,
           tripId: selectedTripId,
         });
-        updateCoins(50);
+        if (typeof res.total_coins === 'number') {
+          setCoins(res.total_coins);
+        }
       } else {
         setBookingError("Booking reference could not be saved.");
       }
@@ -523,14 +525,14 @@ function BookingsContent() {
                     <label className="text-[10px] font-semibold uppercase text-slate-400">From (Origin)</label>
                     <select
                       value={flightOrigin}
-                      onChange={(e) => {
-                        setFlightOrigin(e.target.value);
-                        loadFlights(e.target.value, flightDest);
-                      }}
+                      onChange={(e) => setFlightOrigin(e.target.value)}
                       className="w-full text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500"
                     >
-                      <option value="BLR">BLR — Bengaluru Kempegowda</option>
+                      {flightOrigin && !['BLR', 'DEL', 'BOM'].includes(flightOrigin) && (
+                        <option value={flightOrigin}>{flightOrigin} — Trip Origin</option>
+                      )}
                       <option value="DEL">DEL — New Delhi Indira Gandhi</option>
+                      <option value="BLR">BLR — Bengaluru Kempegowda</option>
                       <option value="BOM">BOM — Mumbai Chhatrapati Shivaji</option>
                     </select>
                   </div>
@@ -539,12 +541,12 @@ function BookingsContent() {
                     <label className="text-[10px] font-semibold uppercase text-slate-400">To (Destination)</label>
                     <select
                       value={flightDest}
-                      onChange={(e) => {
-                        setFlightDest(e.target.value);
-                        loadFlights(flightOrigin, e.target.value);
-                      }}
+                      onChange={(e) => setFlightDest(e.target.value)}
                       className="w-full text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500"
                     >
+                      {flightDest && !['GOI', 'JAI', 'KUU'].includes(flightDest) && (
+                        <option value={flightDest}>{flightDest} — Trip Destination</option>
+                      )}
                       <option value="GOI">GOI — Goa Dabolim / Mopa</option>
                       <option value="JAI">JAI — Jaipur Sanganer</option>
                       <option value="KUU">KUU — Kullu Manali Bhuntar</option>
@@ -695,12 +697,23 @@ function BookingsContent() {
                       <span className="text-[11px] text-slate-400 block font-normal">per passenger</span>
                     </div>
 
-                    <div className="flex flex-col gap-1.5">
-                      <Button
-                        variant="primary"
-                        size="sm"
-                        isLoading={loading}
-                        className="bg-orange-600 hover:bg-orange-700 text-white font-semibold text-xs shadow-2xs cursor-pointer"
+                    <div className="flex flex-col items-end gap-1.5">
+                      {fl.deep_link ? (
+                        <a
+                          href={fl.deep_link}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl bg-orange-600 hover:bg-orange-700 text-white text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
+                        >
+                          <span>Book on {fl.provider}</span>
+                          <ExternalLink className="w-3.5 h-3.5" />
+                        </a>
+                      ) : (
+                        <span className="text-[11px] text-slate-400 font-medium">Provider direct booking</span>
+                      )}
+
+                      <button
+                        type="button"
                         onClick={() =>
                           handleSaveBookingReference(
                             'flight',
@@ -710,26 +723,39 @@ function BookingsContent() {
                             fl
                           )
                         }
+                        disabled={loading}
+                        className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-500 hover:text-orange-600 transition-colors pt-0.5 cursor-pointer underline underline-offset-2"
                       >
-                        Attach Reference ➔
-                      </Button>
-
-                      {fl.deep_link && (
-                        <a
-                          href={fl.deep_link}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center justify-center gap-1 text-[11px] font-semibold text-slate-500 hover:text-slate-800 transition-colors"
-                        >
-                          <span>Book on {fl.provider}</span>
-                          <ExternalLink className="w-3 h-3 text-slate-400" />
-                        </a>
-                      )}
+                        Already booked? Add confirmation reference
+                      </button>
                     </div>
                   </div>
                 </Card>
               );
             })}
+
+            {flightsList.length === 0 && !isSearchingFlights && !flightError && (
+              <Card className="p-8 rounded-2xl bg-white border border-dashed border-slate-300 text-center space-y-3 shadow-2xs">
+                <div className="w-12 h-12 rounded-full bg-orange-50 border border-orange-200 flex items-center justify-center mx-auto text-orange-600">
+                  <Plane className="w-6 h-6" />
+                </div>
+                <div className="space-y-1">
+                  <h3 className="font-serif-editorial font-bold text-slate-900 text-base">Ready to compare flight options</h3>
+                  <p className="text-xs text-slate-500 max-w-md mx-auto">
+                    Verify your origin, destination, and travel dates above, then click &quot;Search flights&quot; to fetch live provider inventory.
+                  </p>
+                </div>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => loadFlights(flightOrigin, flightDest, departureDate, returnDate, passengers, cabinClass, tripType)}
+                  className="bg-orange-600 hover:bg-orange-700 text-white font-semibold text-xs px-5 py-2 rounded-xl cursor-pointer"
+                >
+                  <Search className="w-3.5 h-3.5 mr-1" />
+                  Search flights
+                </Button>
+              </Card>
+            )}
           </div>
         </section>
       )}
@@ -898,23 +924,26 @@ function BookingsContent() {
                       <span className="text-xs text-slate-400 block">/ night</span>
                     </div>
 
-                    <div className="flex items-center gap-2">
-                      {ht.deep_link && (
+                    <div className="flex flex-col sm:flex-row items-end sm:items-center gap-2">
+                      {ht.deep_link ? (
                         <a
                           href={ht.deep_link}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="p-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-600"
+                          className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl bg-orange-600 hover:bg-orange-700 text-white text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
                           title="Open provider"
                         >
+                          <span>Book on {ht.source || 'Provider'}</span>
                           <ExternalLink className="w-3.5 h-3.5" />
                         </a>
+                      ) : (
+                        <span className="text-[11px] text-slate-400 font-medium">Provider direct booking</span>
                       )}
                       <Button
-                        variant="primary"
+                        variant="outline"
                         size="sm"
                         isLoading={loading}
-                        className="bg-orange-600 hover:bg-orange-700 text-white font-semibold text-xs shadow-2xs cursor-pointer"
+                        className="border-slate-200 text-slate-700 hover:bg-slate-50 font-semibold text-xs cursor-pointer"
                         onClick={() =>
                           handleSaveBookingReference(
                             'hotel',
@@ -925,13 +954,36 @@ function BookingsContent() {
                           )
                         }
                       >
-                        Attach Reference ➔
+                        Already booked? Add reference
                       </Button>
                     </div>
                   </div>
                 </Card>
               ))}
             </div>
+
+            {hotelsList.length === 0 && !isSearchingHotels && !hotelError && (
+              <Card className="p-8 rounded-2xl bg-white border border-dashed border-slate-300 text-center space-y-3 shadow-2xs">
+                <div className="w-12 h-12 rounded-full bg-orange-50 border border-orange-200 flex items-center justify-center mx-auto text-orange-600">
+                  <Hotel className="w-6 h-6" />
+                </div>
+                <div className="space-y-1">
+                  <h3 className="font-serif-editorial font-bold text-slate-900 text-base">Ready to explore stays & hotels</h3>
+                  <p className="text-xs text-slate-500 max-w-md mx-auto">
+                    Verify your destination and travel dates above, then click &quot;Search stays&quot; to compare boutique stays and hotels.
+                  </p>
+                </div>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => loadHotels(hotelDest, hotelGuests, hotelCheckIn, hotelCheckOut)}
+                  className="bg-orange-600 hover:bg-orange-700 text-white font-semibold text-xs px-5 py-2 rounded-xl cursor-pointer"
+                >
+                  <Search className="w-3.5 h-3.5 mr-1" />
+                  Search stays
+                </Button>
+              </Card>
+            )}
           </section>
         )}
 

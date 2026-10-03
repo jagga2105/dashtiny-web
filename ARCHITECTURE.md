@@ -408,3 +408,49 @@ When editing a trip with AI, never regenerate the entire itinerary from scratch.
 ### The DashTiny Moat
 Anyone can build an AI chatbot. DashTiny's enduring moat is:
 $$\text{Moat} = \text{Traveler Memory} + \text{Trip Graph} + \text{Real-time Inventory} + \text{Trust Governance} + \text{Workspace Actions}$$
+
+---
+
+## 16. Canonical Trip Context & Privacy Safety Governance
+
+### 16.1 Canonical `TripSummary` API Contract
+To prevent inconsistent client fallbacks across pages (e.g., guessing origins, assuming 1 or 2 travelers, or missing budget limits), all DashTiny layers communicate via a canonical `TripSummary` DTO:
+
+```typescript
+interface TripSummary {
+  id: string;
+  title: string;
+  destination: string;
+  destination_id?: string;
+  origin?: string;          // e.g., "DEL", "BLR", "BOM"
+  start_date: string;
+  end_date: string;
+  travellers: number;       // Party size (1..N)
+  budget: number;
+  currency: string;
+  persona: string;          // solo, couple, family, nomad, business
+  vibe?: string;            // cultural, beach, adventure, luxury
+  status: 'draft' | 'active' | 'completed';
+  is_public: boolean;       // Privacy boundary enforcement
+  source_trip_id?: string;  // Lineage tracking for adapted itineraries
+  bookingsCount?: number;
+  daysCount?: number;
+}
+```
+All frontend surfaces (`Dashboard`, `Planner`, `Bookings`, `Community`, `Trips`, `DAIna`) consume this singular model.
+
+### 16.2 Public Trip Privacy & Snapshot Safety
+Unauthenticated public access via `GET /api/v1/trips/{trip_id}/public` is strictly governed:
+1. **Privacy Boundary**: An itinerary is only returned if `is_public == True` or explicitly linked as the `source_trip_id` of a published `CommunityPost`. Private, draft, or unshared itineraries return `HTTP 404 Not Found`.
+2. **Safe ORM Serialization**: Relational entities (`ItineraryActivity`) are queried and safely serialized with attribute fallbacks, avoiding `AttributeError` on ORM models.
+3. **Deterministic Identifier Matching**: Querying by destination substring is prohibited; snapshots only resolve against exact database IDs or explicit demo identifiers (`trip_1`, `trip_2`).
+4. **Adaptation Integrity**: The frontend never replaces a failed public trip lookup with hardcoded Kyoto highlights; it surfaces an explicit error state and retry control. Only explicit demo links (`demo=true`) use curated demo highlights.
+
+### 16.3 Booking Flow Truth & Provider Deep-Linking
+1. **Context Continuity**: Navigating to Bookings from a Trip automatically populates `flightOrigin = trip.origin` and `passengers = trip.travellers` without arbitrary hardcoding.
+2. **User-Initiated Search**: Search queries fire on explicit user action ("Search flights" / "Update results"), preventing premature empty-query network errors and keystroke spam.
+3. **Honest Deep-Linking**: Partner offers feature two distinct actions:
+   - `[ Book on Provider ↗ ]`: Opens the third-party booking portal via deep-link.
+   - `[ Already booked? Add confirmation reference ]`: Explicitly acknowledges that booking occurs externally and lets the traveler attach their PNR/confirmation reference to DashTiny.
+4. **Server-Authoritative Rewards**: Booking references and community actions reflect server-calculated reward coin balances (`setCoins(response.total_coins)`), eliminating double-awarding and client-side balance desynchronization.
+

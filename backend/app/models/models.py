@@ -62,6 +62,8 @@ class Itinerary(Base):
     vibe = Column(String(100), nullable=True)
     raw_prompt = Column(Text, nullable=True)
     status = Column(String(50), default="draft")  # draft, active, completed
+    is_public = Column(Boolean, default=False)
+    source_trip_id = Column(String(36), ForeignKey("itineraries.id", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     owner = relationship("User", back_populates="itineraries")
@@ -262,6 +264,8 @@ class CommunityPost(Base):
     __tablename__ = "community_posts"
 
     id = Column(String(36), primary_key=True, default=generate_uuid)
+    author_id = Column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    source_trip_id = Column(String(36), ForeignKey("itineraries.id", ondelete="SET NULL"), nullable=True)
     author_name = Column(String(100), nullable=False)
     author_avatar = Column(Text, nullable=False)
     trust_score = Column(String(50), default="96% Verified")
@@ -272,6 +276,8 @@ class CommunityPost(Base):
     likes_count = Column(Integer, default=42)
     companions_needed = Column(Integer, default=2)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    source_trip = relationship("Itinerary", foreign_keys=[source_trip_id])
 
 class RewardVoucher(Base):
     __tablename__ = "reward_vouchers"

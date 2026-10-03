@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.db.database import get_db
-from app.models.models import Itinerary, ItineraryDay, ItineraryActivity, SquadRoom, SquadMember, Booking, User
+from app.models.models import Itinerary, ItineraryDay, ItineraryActivity, SquadRoom, SquadMember, Booking, User, CommunityPost
 from app.api.deps import get_current_user
 
 router = APIRouter(prefix="/trips", tags=["My Trips & Active Passages"])
@@ -77,14 +77,22 @@ def get_my_trips(user: User = Depends(get_current_user), db: Session = Depends(g
             "id": it.id,
             "title": it.title,
             "destination": it.destination,
+            "destination_id": it.destination.lower().replace(" ", "-"),
+            "origin": it.origin or "",
             "startDate": str(it.start_date),
             "endDate": str(it.end_date),
+            "travellers": it.travellers or 2,
             "budget": float(it.total_budget),
             "currency": it.currency,
             "persona": it.persona,
-            "status": it.status,
+            "vibe": it.vibe or it.persona or "Discovery",
+            "status": it.status or "draft",
+            "is_public": bool(it.is_public),
+            "source_trip_id": it.source_trip_id,
             "squad_room_code": squad.room_code if squad else "DASH-ROOM",
             "daysCount": len(formatted_days),
+            "bookingsCount": len(formatted_bookings),
+            "completed_days": 0,
             "days": formatted_days,
             "bookings": formatted_bookings
         })
@@ -143,25 +151,44 @@ def get_public_trip_snapshot(trip_id: str, db: Session = Depends(get_db)):
     """
     Get public read-only itinerary snapshot for community adaptation/forking.
     Accessible without personal authorization tokens; strips private bookings and user data.
+    Only exposes trips that are explicitly public or linked to a CommunityPost, or known demo IDs.
     """
     if trip_id in COMMUNITY_PUBLIC_SNAPSHOTS:
         return COMMUNITY_PUBLIC_SNAPSHOTS[trip_id]
 
     it = db.query(Itinerary).filter(Itinerary.id == trip_id).first()
     if it:
+        # Enforce public/published privacy boundary
+        is_published = bool(it.is_public)
+        if not is_published:
+            has_community_post = db.query(CommunityPost).filter(CommunityPost.source_trip_id == it.id).first() is not None
+            if has_community_post:
+                is_published = True
+
+        if not is_published:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Public itinerary snapshot not found or not published to community."
+            )
+
         owner = db.query(User).filter(User.id == it.owner_id).first()
         days = db.query(ItineraryDay).filter(ItineraryDay.itinerary_id == it.id).order_by(ItineraryDay.day_number.asc()).all()
         stops = []
         for d in days:
-            acts = d.activities or []
+            acts = db.query(ItineraryActivity).filter(ItineraryActivity.day_id == d.id).order_by(ItineraryActivity.sort_order.asc()).all()
             for idx, a in enumerate(acts):
+                a_id = getattr(a, "id", None) or (a.get("id") if isinstance(a, dict) else None) or f"d{d.day_number}_a{idx}"
+                a_time = getattr(a, "time_slot", None) or (a.get("time") if isinstance(a, dict) else None) or "10:00"
+                a_title = getattr(a, "description", None) or getattr(a, "title", None) or (a.get("description") or a.get("title") if isinstance(a, dict) else None) or "Local Experience"
+                a_location = getattr(a, "location", None) or (a.get("location") if isinstance(a, dict) else None) or it.destination
+                a_tag = getattr(a, "place_type", None) or getattr(a, "tag", None) or (a.get("tag") or a.get("place_type") if isinstance(a, dict) else None) or "Sightseeing"
                 stops.append({
-                    "id": a.get("id", f"d{d.day_number}_a{idx}"),
+                    "id": a_id,
                     "day": d.day_number,
-                    "time": a.get("time", "10:00"),
-                    "title": a.get("description") or a.get("title", "Local Experience"),
-                    "location": a.get("location", it.destination),
-                    "tag": a.get("tag", "Sightseeing"),
+                    "time": a_time,
+                    "title": a_title,
+                    "location": a_location,
+                    "tag": a_tag,
                     "keep": True
                 })
         return {
@@ -170,15 +197,13 @@ def get_public_trip_snapshot(trip_id: str, db: Session = Depends(get_db)):
             "author": owner.full_name if owner else "Community Explorer",
             "author_name": owner.full_name if owner else "Community Explorer",
             "destination": it.destination,
+            "origin": it.origin or "",
+            "travellers": it.travellers or 2,
             "duration_days": len(days) or 3,
             "budget_est": f"₹{int(it.total_budget):,} est." if it.total_budget else "Flexible",
-            "vibe": it.persona or "Discovery",
+            "vibe": it.vibe or it.persona or "Discovery",
             "stops": stops
         }
-
-    for key, snap in COMMUNITY_PUBLIC_SNAPSHOTS.items():
-        if snap["destination"].lower() in trip_id.lower() or trip_id.lower() in snap["destination"].lower():
-            return snap
 
     raise HTTPException(status_code=404, detail="Public itinerary snapshot not found")
 
@@ -218,13 +243,21 @@ def get_trip_details(
         "id": it.id,
         "title": it.title,
         "destination": it.destination,
+        "destination_id": it.destination.lower().replace(" ", "-"),
+        "origin": it.origin or "",
         "startDate": str(it.start_date),
         "endDate": str(it.end_date),
+        "travellers": it.travellers or 2,
         "budget": float(it.total_budget),
         "currency": it.currency,
         "persona": it.persona,
-        "status": it.status,
+        "vibe": it.vibe or it.persona or "Discovery",
+        "status": it.status or "draft",
+        "is_public": bool(it.is_public),
+        "source_trip_id": it.source_trip_id,
         "squad_room_code": squad.room_code if squad else None,
+        "daysCount": len(days),
+        "bookingsCount": len(trip_bookings),
         "bookings": [
             {
                 "id": b.id,

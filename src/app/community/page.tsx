@@ -35,6 +35,8 @@ export default function CommunityPage() {
   const [activeTab, setActiveTab] = useState<'trips' | 'companions'>('trips');
   const [selectedVibeFilter, setSelectedVibeFilter] = useState<string>('All');
   const [dynamicPosts, setDynamicPosts] = useState<any[]>([]);
+  const [userTrips, setUserTrips] = useState<any[]>([]);
+  const [selectedSourceTripId, setSelectedSourceTripId] = useState<string>('');
   const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [publishError, setPublishError] = useState<string | null>(null);
@@ -53,6 +55,14 @@ export default function CommunityPage() {
       }
     } catch (err) {
       console.error('Failed to load community feed:', err);
+    }
+    try {
+      const tripsData = await apiService.getMyTrips();
+      if (tripsData && tripsData.length > 0) {
+        setUserTrips(tripsData);
+      }
+    } catch {
+      // not logged in or offline
     }
   };
 
@@ -84,13 +94,12 @@ export default function CommunityPage() {
     if (likedPosts[postId]) return;
     try {
       await apiService.likeCommunityPost(postId);
-      // Only mutate state and award coins on verified server confirmation
+      // Update state without unbacked local coin inflation
       setLikedPosts((prev) => ({ ...prev, [postId]: true }));
       setLikes((prev) => {
         const current = prev[postId] !== undefined ? prev[postId] : initialLikes;
         return { ...prev, [postId]: current + 1 };
       });
-      updateCoins(5);
     } catch (err) {
       console.error('Failed to like post:', err);
     }
@@ -98,7 +107,11 @@ export default function CommunityPage() {
 
   const handleUsePlan = (trip: any) => {
     const params = new URLSearchParams();
-    if (trip.id) params.set('source_trip_id', String(trip.id));
+    const targetSourceId = trip.source_trip_id || trip.id;
+    if (targetSourceId) params.set('source_trip_id', String(targetSourceId));
+    if (targetSourceId === 'trip_1' || targetSourceId === 'trip_2') {
+      params.set('demo', 'true');
+    }
     if (trip.destination) params.set('destination', trip.destination);
     if (trip.duration) {
       const days = trip.duration.replace(/\D/g, '');
@@ -133,6 +146,7 @@ export default function CommunityPage() {
         content: newContent,
         image_url: newImage,
         companions_needed: 0,
+        source_trip_id: selectedSourceTripId || undefined,
       });
 
       if (res && res.status === 'published') {
@@ -145,6 +159,7 @@ export default function CommunityPage() {
         setNewTitle('');
         setNewLocation('');
         setNewContent('');
+        setSelectedSourceTripId('');
         await loadFeed();
       } else {
         setPublishError('Could not publish your trip. Please try again.');
@@ -223,6 +238,7 @@ export default function CommunityPage() {
   const allTrips = dynamicPosts.length > 0
     ? dynamicPosts.map((p) => ({
         id: p.id,
+        source_trip_id: p.source_trip_id || p.id,
         author_name: p.author_name,
         author_avatar: p.author_name ? p.author_name.charAt(0) : 'E',
         destination: p.getaway_title || p.location,
@@ -303,7 +319,7 @@ export default function CommunityPage() {
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            Trips Taken
+            Shared Trips
           </button>
           <button
             onClick={() => setActiveTab('companions')}
@@ -520,6 +536,35 @@ export default function CommunityPage() {
             )}
 
             <form onSubmit={handlePublishSubmit} className="space-y-3.5 text-xs font-semibold text-slate-700">
+              {userTrips.length > 0 && (
+                <div className="space-y-1">
+                  <label className="text-slate-900 font-bold flex items-center justify-between">
+                    <span>Link to your DashTiny trip</span>
+                    <span className="text-[10px] text-orange-600 font-normal">Enables community adaptation</span>
+                  </label>
+                  <select
+                    value={selectedSourceTripId}
+                    onChange={(e) => {
+                      const tripId = e.target.value;
+                      setSelectedSourceTripId(tripId);
+                      const matched = userTrips.find((t) => t.id === tripId);
+                      if (matched) {
+                        setNewTitle(matched.title || `Trip to ${matched.destination}`);
+                        setNewLocation(matched.destination || '');
+                      }
+                    }}
+                    className="w-full px-3.5 py-2 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:border-orange-500 font-medium text-slate-900 text-xs"
+                  >
+                    <option value="">-- Choose one of your trips (Optional) --</option>
+                    {userTrips.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.title} ({t.destination}) · {t.startDate}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               <div className="space-y-1">
                 <label>Trip Title / Destination</label>
                 <input

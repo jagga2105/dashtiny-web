@@ -3,7 +3,7 @@
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { MapPin, Map, Award, BrainCircuit, Upload, Sparkles, CheckCircle2, Luggage, ArrowRight, AlertTriangle, RefreshCw } from 'lucide-react';
+import { MapPin, Map, Award, BrainCircuit, Upload, Sparkles, CheckCircle2, Luggage, ArrowRight, AlertTriangle, AlertCircle, RefreshCw, Check, Loader2 } from 'lucide-react';
 import { TopNavbar } from '@/components/layout/TopNavbar';
 import { BottomNav } from '@/components/layout/BottomNav';
 import { DAInaChatWidget } from '@/components/layout/DAInaChatWidget';
@@ -41,6 +41,9 @@ function PlannerContent() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [sourceTripData, setSourceTripData] = useState<any>(null);
   const [isLoadingSourceTrip, setIsLoadingSourceTrip] = useState(false);
+  const [sourceTripError, setSourceTripError] = useState<string | null>(null);
+  const [sourceTripReloadKey, setSourceTripReloadKey] = useState(0);
+  const isExplicitDemo = searchParams.get('demo') === 'true' || sourceTripId === 'trip_1' || sourceTripId === 'trip_2';
   const [expandedDays, setExpandedDays] = useState<Record<number, boolean>>({ 1: true });
   const [showUnderstandingDetails, setShowUnderstandingDetails] = useState(false);
 
@@ -79,6 +82,7 @@ function PlannerContent() {
   useEffect(() => {
     async function loadSourceTrip() {
       if (!isAdapting) return;
+      setSourceTripError(null);
       if (sourceTripId) {
         setIsLoadingSourceTrip(true);
         try {
@@ -95,16 +99,24 @@ function PlannerContent() {
             })));
             return;
           }
-        } catch (err) {
-          console.warn('Could not load public trip snapshot, falling back:', err);
+        } catch (err: any) {
+          console.warn('Could not load public trip snapshot:', err);
+          if (!isExplicitDemo) {
+            setSourceTripError("Original itinerary couldn't be loaded. The trip might be private, unpublished, or the server was unreachable.");
+            setSourceHighlights([]);
+            setSourceTripData(null);
+            return;
+          }
         } finally {
           setIsLoadingSourceTrip(false);
         }
       }
-      setSourceHighlights(getFallbackHighlights(paramDestination, sourceTripId));
+      if (isExplicitDemo) {
+        setSourceHighlights(getFallbackHighlights(paramDestination, sourceTripId));
+      }
     }
     loadSourceTrip();
-  }, [isAdapting, sourceTripId, paramDestination]);
+  }, [isAdapting, sourceTripId, paramDestination, isExplicitDemo, sourceTripReloadKey]);
 
   const toggleHighlight = (id: string) => {
     setSourceHighlights((prev) =>
@@ -286,6 +298,31 @@ function PlannerContent() {
           </div>
         )}
 
+        {/* Community Source Trip Loading State */}
+        {isAdapting && isLoadingSourceTrip && (
+          <div className="p-6 rounded-2xl bg-white border border-slate-200 text-center space-y-2 text-xs text-slate-500 animate-pulse">
+            <Loader2 className="w-5 h-5 animate-spin mx-auto text-orange-500" />
+            <p>Loading original trip itinerary from community snapshot...</p>
+          </div>
+        )}
+
+        {/* Community Source Trip Loading Error */}
+        {isAdapting && sourceTripError && (
+          <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs font-semibold flex items-center justify-between gap-3 animate-in fade-in">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+              <span>{sourceTripError}</span>
+            </div>
+            <button
+              onClick={() => setSourceTripReloadKey((k) => k + 1)}
+              className="px-3 py-1 rounded-lg bg-amber-600 text-white font-medium hover:bg-amber-700 flex items-center gap-1 text-xs shrink-0 cursor-pointer"
+            >
+              <RefreshCw className="w-3 h-3" />
+              <span>Retry</span>
+            </button>
+          </div>
+        )}
+
         {/* Community Source Itinerary Preview & Adaptation Card */}
         {isAdapting && sourceHighlights.length > 0 && (
           <section className="p-6 rounded-2xl bg-white border border-orange-200/90 shadow-sm space-y-4 animate-in fade-in">
@@ -314,25 +351,38 @@ function PlannerContent() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
               {sourceHighlights.map((hl) => (
-                <div
+                <button
+                  type="button"
                   key={hl.id}
+                  role="checkbox"
+                  aria-checked={hl.keep}
                   onClick={() => toggleHighlight(hl.id)}
-                  className={`p-3 rounded-xl border text-xs cursor-pointer transition-all flex items-start justify-between gap-2.5 ${
+                  className={`text-left p-3 rounded-xl border text-xs cursor-pointer transition-all flex items-start justify-between gap-2.5 ${
                     hl.keep
-                      ? 'bg-orange-50/40 border-orange-200 text-slate-900 shadow-2xs'
-                      : 'bg-slate-50 border-slate-200 text-slate-400 line-through'
+                      ? 'bg-orange-50/40 border-orange-200 text-slate-900 shadow-2xs hover:border-orange-300'
+                      : 'bg-slate-50 border-slate-200 text-slate-400 line-through opacity-75 hover:bg-slate-100/60'
                   }`}
                 >
-                  <div className="space-y-0.5">
-                    <div className="flex items-center gap-1.5">
-                      <span className="font-mono font-bold text-[10px] text-orange-600">Day {hl.day}</span>
-                      <span className="text-[10px] font-medium px-1.5 py-0.2 rounded bg-white border border-slate-200 text-slate-500">
-                        {hl.tag}
-                      </span>
+                  <div className="flex items-start gap-2.5">
+                    <div className={`mt-0.5 w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${
+                      hl.keep ? 'bg-orange-600 border-orange-600 text-white' : 'border-slate-300 bg-white'
+                    }`}>
+                      {hl.keep && <Check className="w-3 h-3 stroke-[3]" />}
                     </div>
-                    <p className={`font-semibold ${hl.keep ? 'text-slate-800' : 'text-slate-400'}`}>
-                      {hl.title}
-                    </p>
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-mono font-bold text-[10px] text-orange-600">Day {hl.day}</span>
+                        <span className="text-[10px] font-medium px-1.5 py-0.2 rounded bg-white border border-slate-200 text-slate-500">
+                          {hl.tag}
+                        </span>
+                        {hl.location && (
+                          <span className="text-[10px] text-slate-400">· {hl.location}</span>
+                        )}
+                      </div>
+                      <p className={`font-semibold ${hl.keep ? 'text-slate-800' : 'text-slate-400'}`}>
+                        {hl.title}
+                      </p>
+                    </div>
                   </div>
                   <span
                     className={`px-2 py-0.5 rounded text-[10px] font-bold shrink-0 ${
@@ -341,7 +391,7 @@ function PlannerContent() {
                   >
                     {hl.keep ? 'Keep' : 'Omitted'}
                   </span>
-                </div>
+                </button>
               ))}
             </div>
 
@@ -491,10 +541,13 @@ function PlannerContent() {
                   📍 {parsedIntent.destination || paramDestination}
                 </span>
                 <span className="px-2.5 py-1 rounded-lg bg-white border border-orange-200/80 shadow-2xs">
-                  ⏱️ {parsedIntent.days_count || (paramDuration ? `${paramDuration} Days` : '4 Days')}
+                  ⏱️ {parsedIntent.days_count 
+                    ? `${parsedIntent.days_count} Days` 
+                    : (paramDuration ? `${paramDuration} Days` : '4 Days (default recommendation)')}
                 </span>
                 <span className="px-2.5 py-1 rounded-lg bg-white border border-orange-200/80 shadow-2xs">
                   👥 {parsedIntent.travellers} {parsedIntent.travellers === 1 ? 'traveler' : 'travelers'}
+                  {parsedIntent.companionsSource !== 'prompt' && ' (default)'}
                 </span>
                 <span className="px-2.5 py-1 rounded-lg bg-white border border-orange-200/80 shadow-2xs">
                   💰 {(parsedIntent.budget > 0 || (paramBudget && parseInt(paramBudget, 10) > 0))
@@ -506,11 +559,9 @@ function PlannerContent() {
                     🛫 From {parsedIntent.origin}
                   </span>
                 )}
-                {(parsedIntent.vibe || paramVibe) && (
-                  <span className="px-2.5 py-1 rounded-lg bg-white border border-orange-200/80 shadow-2xs">
-                    ✨ {parsedIntent.vibe || paramVibe}
-                  </span>
-                )}
+                <span className="px-2.5 py-1 rounded-lg bg-white border border-orange-200/80 shadow-2xs">
+                  ✨ {parsedIntent.vibe || paramVibe || 'Leisure & Scenic (default style)'}
+                </span>
               </div>
 
               {/* Expandable Explanation for Traveler Understanding */}
@@ -547,9 +598,10 @@ function PlannerContent() {
 
               {showUnderstandingDetails && (
                 <div className="p-3 rounded-lg bg-white/90 border border-orange-200 text-[11px] text-slate-700 space-y-1.5 animate-in fade-in">
+                  <p>• <strong>Trip Duration:</strong> {parsedIntent.days_count ? `${parsedIntent.days_count} days (explicit in request)` : (paramDuration ? `${paramDuration} days` : '4 days (default recommendation — duration not specified)')}</p>
                   <p>• <strong>Travelers:</strong> {parsedIntent.travellers} ({parsedIntent.companionsSource === 'prompt' ? 'explicitly stated in your request' : 'default recommendation for a pair/couple'})</p>
                   <p>• <strong>Budget:</strong> {parsedIntent.budget > 0 ? `₹${parsedIntent.budget.toLocaleString('en-IN')} (explicitly provided)` : 'Not specified — DAIna will create a comfortable mid-range plan and estimate the cost.'}</p>
-                  <p>• <strong>Trip Style:</strong> {parsedIntent.vibe || 'Leisure & Scenic'} (personalized pacing based on your request)</p>
+                  <p>• <strong>Trip Style &amp; Pacing:</strong> {parsedIntent.vibe || 'Leisure & Scenic'} ({parsedIntent.vibe ? 'customized based on your prompt' : 'default recommendation'})</p>
                 </div>
               )}
             </div>

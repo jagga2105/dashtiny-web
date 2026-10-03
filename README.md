@@ -122,17 +122,23 @@ cd backend
 
 ## 📡 API Reference Overview
 
+For full technical specifications and governance rules, consult [ARCHITECTURE.md](file:///Users/kumkumpandey/Applications/dashtiny-web/ARCHITECTURE.md).
+
 | Endpoint | Method | Description |
 | :--- | :--- | :--- |
 | `/api/v1/auth/register` | `POST` | Create a new traveler account |
 | `/api/v1/auth/login` | `POST` | Authenticate with password or sandbox OTP and receive JWT |
-| `/api/v1/planner/generate` | `POST` | Synthesize deterministic, preference-constrained itinerary |
-| `/api/v1/trips` | `GET` | Fetch authenticated user's active and completed trips |
+| `/api/v1/planner/generate` | `POST` | Synthesize multi-day itinerary with hybrid deterministic & optional LLM generation and spatial verification |
+| `/api/v1/trips/my-trips` | `GET` | Fetch authenticated user's trips as canonical `TripSummary` objects |
 | `/api/v1/trips/{id}` | `GET` | Retrieve complete trip workspace with days, activities, and budget |
-| `/api/v1/bookings/flights` | `GET` | Query normalized flight inventory offers |
-| `/api/v1/bookings/hotels` | `GET` | Query normalized stay inventory scaled to party size |
-| `/api/v1/squad/rooms/{code}`| `GET` | Join collaborative squad room and access shared ledger |
-| `/api/v1/ai/action` | `POST` | Execute targeted conversational diff on active itinerary |
+| `/api/v1/trips/{id}/public` | `GET` | Privacy-governed public trip snapshot (strictly requires explicit publication) |
+| `/api/v1/bookings/search/flights` | `GET` | Query normalized flight inventory offers based on origin, dates, and passengers |
+| `/api/v1/bookings/search/hotels` | `GET` | Query normalized stay inventory scaled to party size |
+| `/api/v1/bookings/create` | `POST` | Attach confirmed booking reference to trip with server-authoritative reward coin tracking |
+| `/api/v1/community/feed` | `GET` | Curated community feed with canonical `CommunityTripCard` attributes |
+| `/api/v1/community/posts` | `POST` | Publish travel story linked to an active DashTiny trip (`source_trip_id`) |
+| `/api/v1/squad/rooms/{code}` | `GET` | Join collaborative squad room and access shared ledger |
+| `/api/v1/ai/query` | `POST` | Execute targeted conversational diff on active itinerary |
 
 ---
 
