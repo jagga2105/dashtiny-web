@@ -31,6 +31,8 @@ class User(Base):
 
     __table_args__ = (
         CheckConstraint("trust_score >= 0.0 AND trust_score <= 100.0", name="ck_user_trust_score"),
+        CheckConstraint("trip_completion_count >= 0", name="ck_user_trip_completion_count"),
+        CheckConstraint("verified_booking_count >= 0", name="ck_user_verified_booking_count"),
     )
 
     profile = relationship("UserProfile", back_populates="user", uselist=False, cascade="all, delete-orphan")
@@ -58,6 +60,10 @@ class UserProfile(Base):
     dietary_pref = Column(String(100), nullable=True)
     seat_pref = Column(String(50), default="Window")
     reward_coins = Column(Integer, default=0)
+
+    __table_args__ = (
+        CheckConstraint("reward_coins >= 0", name="ck_user_profile_reward_coins"),
+    )
 
     user = relationship("User", back_populates="profile")
 
@@ -237,6 +243,8 @@ class PriceAlert(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (
+        CheckConstraint("target_price >= 0", name="ck_price_alert_target_price"),
+        CheckConstraint("current_lowest_price >= 0", name="ck_price_alert_current_price"),
         Index("ix_price_alerts_user_active", "user_id", "is_active"),
     )
 
@@ -286,6 +294,8 @@ class AIRun(Base):
 
     __table_args__ = (
         CheckConstraint("status IN ('success', 'failed', 'fallback', 'timeout')", name="ck_airun_status"),
+        CheckConstraint("latency_ms >= 0", name="ck_airun_latency"),
+        CheckConstraint("tokens_used >= 0", name="ck_airun_tokens"),
         Index("ix_ai_runs_trip_created", "trip_id", "created_at"),
     )
 
@@ -303,6 +313,10 @@ class AIToolCall(Base):
     provenance = Column(String(50), default="CURATED")
     latency_ms = Column(Integer, default=0)
     error = Column(Text, nullable=True)
+
+    __table_args__ = (
+        CheckConstraint("latency_ms >= 0", name="ck_aitoolcall_latency"),
+    )
 
     run = relationship("AIRun", back_populates="tool_calls")
 
@@ -355,6 +369,14 @@ class Sanctuary(Base):
     highlights = Column(JSON, nullable=False)
     insider_tips = Column(JSON, nullable=True)
 
+    __table_args__ = (
+        CheckConstraint("price_amount >= 0", name="ck_sanctuary_price_amount"),
+        CheckConstraint("duration_days >= 0", name="ck_sanctuary_duration_days"),
+        CheckConstraint("duration_nights >= 0", name="ck_sanctuary_duration_nights"),
+        CheckConstraint("rating_value >= 0.0 AND rating_value <= 5.0", name="ck_sanctuary_rating_value"),
+        CheckConstraint("review_count >= 0", name="ck_sanctuary_review_count"),
+    )
+
 
 class DriveEscape(Base):
     __tablename__ = "drive_escapes"
@@ -386,6 +408,8 @@ class CommunityPost(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (
+        CheckConstraint("likes_count >= 0", name="ck_community_post_likes"),
+        CheckConstraint("companions_needed >= 0", name="ck_community_post_companions"),
         Index("ix_community_posts_created", "created_at"),
         Index("ix_community_posts_source_trip", "source_trip_id"),
     )
@@ -447,6 +471,7 @@ class RewardRedemption(Base):
 
     __table_args__ = (
         UniqueConstraint("user_id", "voucher_id", name="uq_user_voucher_redemption"),
+        CheckConstraint("coins_spent >= 0", name="ck_reward_redemption_coins_spent"),
         Index("ix_reward_redemptions_user", "user_id", "redeemed_at"),
     )
 

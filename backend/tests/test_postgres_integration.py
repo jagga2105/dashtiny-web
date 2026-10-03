@@ -17,7 +17,8 @@ from alembic import command
 from app.models.models import (
     Base, User, UserProfile, Itinerary, ItineraryDay, ItineraryActivity,
     TripSnapshot, Booking, RewardVoucher, RewardRedemption, RewardTransaction,
-    TravelerMemory, CommunityPost, PostLike, SquadRoom, SquadExpense
+    TravelerMemory, CommunityPost, PostLike, SquadRoom, SquadExpense,
+    PriceAlert, AIRun, AIToolCall, Sanctuary
 )
 from app.services.reward_service import award_rewards
 from app.services.snapshot_service import allocate_and_create_trip_snapshot
@@ -294,15 +295,30 @@ def test_postgres_unique_traveler_memory(pg_session):
 
 def test_postgres_check_constraints_reject_invalid_values(pg_session):
     """
-    Requirement 5: CheckConstraints reject out-of-bound values in PostgreSQL:
-    - User.trust_score: 0 <= trust_score <= 100
-    - TravelerMemory.confidence: 0 <= confidence <= 1
+    CheckConstraints reject out-of-bound and negative values in PostgreSQL:
+    - User.trust_score: 0 <= trust_score <= 100 (both < 0 and > 100 rejected)
+    - User.trip_completion_count: count >= 0
+    - User.verified_booking_count: count >= 0
+    - UserProfile.reward_coins: reward_coins >= 0
+    - TravelerMemory.confidence: 0 <= confidence <= 1 (both < 0 and > 1 rejected)
     - Booking.amount: amount >= 0
     - RewardVoucher.coin_cost: coin_cost >= 0
     - RewardTransaction.balance_after: balance_after >= 0
     - SquadExpense.amount: amount >= 0
     - ItineraryActivity.duration_minutes: duration_minutes >= 0
     - ItineraryActivity.transit_minutes: transit_minutes >= 0
+    - PriceAlert.target_price: target_price >= 0
+    - PriceAlert.current_lowest_price: current_lowest_price >= 0
+    - AIRun.latency_ms: latency_ms >= 0
+    - AIRun.tokens_used: tokens_used >= 0
+    - AIToolCall.latency_ms: latency_ms >= 0
+    - Sanctuary: price_amount >= 0, duration_days >= 0, duration_nights >= 0, 0 <= rating <= 5, review_count >= 0
+    - CommunityPost: likes_count >= 0, companions_needed >= 0
+    - RewardRedemption: coins_spent >= 0
+    
+    Legitimate semantic negative values MUST succeed:
+    - RewardTransaction.delta = -50 (deductions)
+    - ItineraryActivity.lat = -33.8688, lng = -151.2093 (Southern/Western hemispheres)
     """
     user = create_pg_user(pg_session)
     trip = create_pg_trip(pg_session, user.id)
@@ -310,42 +326,77 @@ def test_postgres_check_constraints_reject_invalid_values(pg_session):
     pg_session.add(day)
     pg_session.commit()
 
-    # 1. Invalid trust_score (> 100)
-    u_invalid = User(email=f"bad_trust_{uuid.uuid4().hex[:6]}@test.com", full_name="Bad", trust_score=110.0)
-    pg_session.add(u_invalid)
+    # 1. Invalid trust_score (> 100 and < 0)
+    u_invalid_high = User(email=f"bad_trust_high_{uuid.uuid4().hex[:6]}@test.com", full_name="Bad High", trust_score=110.0)
+    pg_session.add(u_invalid_high)
     with pytest.raises(IntegrityError):
         pg_session.commit()
     pg_session.rollback()
 
-    # 2. Invalid memory confidence (> 1.0)
-    m_invalid = TravelerMemory(user_id=user.id, category="diet", key="pref", value={}, source="ai", confidence=1.5)
-    pg_session.add(m_invalid)
+    u_invalid_low = User(email=f"bad_trust_low_{uuid.uuid4().hex[:6]}@test.com", full_name="Bad Low", trust_score=-5.0)
+    pg_session.add(u_invalid_low)
     with pytest.raises(IntegrityError):
         pg_session.commit()
     pg_session.rollback()
 
-    # 3. Invalid booking amount (< 0)
+    # 2. Invalid User counters (< 0)
+    u_invalid_trips = User(email=f"bad_trips_{uuid.uuid4().hex[:6]}@test.com", full_name="Bad Trips", trip_completion_count=-1)
+    pg_session.add(u_invalid_trips)
+    with pytest.raises(IntegrityError):
+        pg_session.commit()
+    pg_session.rollback()
+
+    u_invalid_bookings = User(email=f"bad_bookings_{uuid.uuid4().hex[:6]}@test.com", full_name="Bad Bookings", verified_booking_count=-1)
+    pg_session.add(u_invalid_bookings)
+    with pytest.raises(IntegrityError):
+        pg_session.commit()
+    pg_session.rollback()
+
+    # 3. Invalid UserProfile reward_coins (< 0)
+    user2 = User(email=f"u2_{uuid.uuid4().hex[:6]}@test.com", full_name="U2")
+    pg_session.add(user2)
+    pg_session.commit()
+    prof_invalid = UserProfile(user_id=user2.id, reward_coins=-50)
+    pg_session.add(prof_invalid)
+    with pytest.raises(IntegrityError):
+        pg_session.commit()
+    pg_session.rollback()
+
+    # 4. Invalid memory confidence (> 1.0 and < 0.0)
+    m_invalid_high = TravelerMemory(user_id=user.id, category="diet", key="pref_high", value={}, source="ai", confidence=1.5)
+    pg_session.add(m_invalid_high)
+    with pytest.raises(IntegrityError):
+        pg_session.commit()
+    pg_session.rollback()
+
+    m_invalid_low = TravelerMemory(user_id=user.id, category="diet", key="pref_low", value={}, source="ai", confidence=-0.2)
+    pg_session.add(m_invalid_low)
+    with pytest.raises(IntegrityError):
+        pg_session.commit()
+    pg_session.rollback()
+
+    # 5. Invalid booking amount (< 0)
     b_invalid = Booking(trip_id=trip.id, user_id=user.id, category="flight", provider="AirAsia", title="Flight", amount=-10.0)
     pg_session.add(b_invalid)
     with pytest.raises(IntegrityError):
         pg_session.commit()
     pg_session.rollback()
 
-    # 4. Invalid voucher coin_cost (< 0)
+    # 6. Invalid voucher coin_cost (< 0)
     v_invalid = RewardVoucher(brand="Test", discount="10%", coin_cost=-5, category="Stays", code=f"BAD_{uuid.uuid4().hex[:6]}")
     pg_session.add(v_invalid)
     with pytest.raises(IntegrityError):
         pg_session.commit()
     pg_session.rollback()
 
-    # 5. Invalid reward transaction balance_after (< 0)
+    # 7. Invalid reward transaction balance_after (< 0)
     tx_invalid = RewardTransaction(user_id=user.id, delta=-50, balance_after=-10, type="PENALTY", reason="Bad balance")
     pg_session.add(tx_invalid)
     with pytest.raises(IntegrityError):
         pg_session.commit()
     pg_session.rollback()
 
-    # 6. Invalid squad expense amount (< 0)
+    # 8. Invalid squad expense amount (< 0)
     room = SquadRoom(itinerary_id=trip.id, room_code=f"R_{uuid.uuid4().hex[:6]}")
     pg_session.add(room)
     pg_session.commit()
@@ -355,19 +406,126 @@ def test_postgres_check_constraints_reject_invalid_values(pg_session):
         pg_session.commit()
     pg_session.rollback()
 
-    # 7. Invalid activity duration_minutes (< 0)
+    # 9. Invalid activity duration_minutes (< 0)
     act_dur_invalid = ItineraryActivity(day_id=day.id, time_slot="Morning", description="Walk", duration_minutes=-10)
     pg_session.add(act_dur_invalid)
     with pytest.raises(IntegrityError):
         pg_session.commit()
     pg_session.rollback()
 
-    # 8. Invalid activity transit_minutes (< 0)
+    # 10. Invalid activity transit_minutes (< 0)
     act_trans_invalid = ItineraryActivity(day_id=day.id, time_slot="Morning", description="Walk", transit_minutes=-15)
     pg_session.add(act_trans_invalid)
     with pytest.raises(IntegrityError):
         pg_session.commit()
     pg_session.rollback()
+
+    # 11. Invalid PriceAlert (< 0)
+    pa_invalid_target = PriceAlert(user_id=user.id, origin="DEL", destination="BOM", target_price=-100.0, current_lowest_price=5000.0)
+    pg_session.add(pa_invalid_target)
+    with pytest.raises(IntegrityError):
+        pg_session.commit()
+    pg_session.rollback()
+
+    pa_invalid_current = PriceAlert(user_id=user.id, origin="DEL", destination="BOM", target_price=4000.0, current_lowest_price=-50.0)
+    pg_session.add(pa_invalid_current)
+    with pytest.raises(IntegrityError):
+        pg_session.commit()
+    pg_session.rollback()
+
+    # 12. Invalid AIRun latency (< 0) and tokens (< 0)
+    run_invalid_lat = AIRun(user_id=user.id, trip_id=trip.id, prompt="Test", latency_ms=-100)
+    pg_session.add(run_invalid_lat)
+    with pytest.raises(IntegrityError):
+        pg_session.commit()
+    pg_session.rollback()
+
+    run_invalid_tokens = AIRun(user_id=user.id, trip_id=trip.id, prompt="Test", tokens_used=-20)
+    pg_session.add(run_invalid_tokens)
+    with pytest.raises(IntegrityError):
+        pg_session.commit()
+    pg_session.rollback()
+
+    # 13. Invalid AIToolCall latency (< 0)
+    valid_run = AIRun(user_id=user.id, trip_id=trip.id, prompt="Valid Run", latency_ms=150)
+    pg_session.add(valid_run)
+    pg_session.commit()
+    tool_invalid_lat = AIToolCall(run_id=valid_run.id, tool_name="flight_search", latency_ms=-50)
+    pg_session.add(tool_invalid_lat)
+    with pytest.raises(IntegrityError):
+        pg_session.commit()
+    pg_session.rollback()
+
+    # 14. Invalid Sanctuary constraints (price < 0, days < 0, rating > 5)
+    sanc_invalid_price = Sanctuary(
+        title="Bad Sanc", location="Goa", vibe="Beach", duration="3D", price="INR",
+        price_amount=-500.0, image="img.jpg", tag="tag", highlights=[]
+    )
+    pg_session.add(sanc_invalid_price)
+    with pytest.raises(IntegrityError):
+        pg_session.commit()
+    pg_session.rollback()
+
+    sanc_invalid_rating = Sanctuary(
+        title="Bad Rating", location="Goa", vibe="Beach", duration="3D", price="INR",
+        price_amount=1000.0, rating_value=6.5, image="img.jpg", tag="tag", highlights=[]
+    )
+    pg_session.add(sanc_invalid_rating)
+    with pytest.raises(IntegrityError):
+        pg_session.commit()
+    pg_session.rollback()
+
+    # 15. Invalid CommunityPost likes (< 0)
+    post_invalid_likes = CommunityPost(
+        author_id=user.id, author_name="Tester", author_avatar="av.png",
+        getaway_title="Post", location="Goa", image_url="img.jpg", content="Cont", likes_count=-5
+    )
+    pg_session.add(post_invalid_likes)
+    with pytest.raises(IntegrityError):
+        pg_session.commit()
+    pg_session.rollback()
+
+    # 16. Invalid RewardRedemption coins_spent (< 0)
+    voucher = RewardVoucher(brand="Cafe", discount="15%", coin_cost=100, category="Food", code=f"CAF_{uuid.uuid4().hex[:6]}")
+    pg_session.add(voucher)
+    pg_session.commit()
+    redemption_invalid = RewardRedemption(user_id=user.id, voucher_id=voucher.id, coins_spent=-10, voucher_code="CODE")
+    pg_session.add(redemption_invalid)
+    with pytest.raises(IntegrityError):
+        pg_session.commit()
+    pg_session.rollback()
+
+    # 17. Verify semantic negative values SUCCEED:
+    # A. RewardTransaction delta = -50 (deduction/penalty/voucher redemption)
+    tx_valid_deduction = RewardTransaction(user_id=user.id, delta=-50, balance_after=150, type="VOUCHER_REDEEMED", reason="Redeemed voucher")
+    pg_session.add(tx_valid_deduction)
+    pg_session.commit()
+    assert tx_valid_deduction.delta == -50
+
+    # B. Geographic negative latitude & longitude (e.g. Sydney, Australia: lat -33.8688, lng 151.2093; Los Angeles: lat 34.0522, lng -118.2437)
+    act_southern = ItineraryActivity(
+        day_id=day.id,
+        time_slot="Morning",
+        description="Sydney Opera House Tour",
+        lat=-33.8688,
+        lng=151.2093,
+        duration_minutes=90,
+        transit_minutes=20
+    )
+    act_western = ItineraryActivity(
+        day_id=day.id,
+        time_slot="Afternoon",
+        description="Santa Monica Pier Stroll",
+        lat=34.0522,
+        lng=-118.2437,
+        duration_minutes=120,
+        transit_minutes=35
+    )
+    pg_session.add(act_southern)
+    pg_session.add(act_western)
+    pg_session.commit()
+    assert act_southern.lat == -33.8688
+    assert act_western.lng == -118.2437
 
 
 def test_postgres_foreign_key_cascades(pg_session):
