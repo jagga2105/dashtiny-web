@@ -60,16 +60,22 @@ def get_community_feed(db: Session = Depends(get_db)):
             trip_style = [snap.get("vibe", "Culture")]
             is_completed = True
 
-        # Genuinely check author identity verification state from User.is_verified
+        # Genuinely derive author identity verification and trust score from current User record
         is_verified = bool(p.author.is_verified) if p.author else False
+        author_trust_score = float(p.author.trust_score) if (p.author and p.author.trust_score is not None) else 95.0
+        trust_display = p.author.trust_score_display if p.author else "Community Explorer"
+
+        author_name = p.author.full_name if p.author else p.author_name
+        author_avatar = p.author.avatar_url if (p.author and p.author.avatar_url) else p.author_avatar
 
         results.append({
             "id": p.id,
             "author_id": p.author_id,
             "source_trip_id": source_trip_id,
-            "author_name": p.author_name,
-            "author_avatar": p.author_avatar,
-            "trust_score": p.trust_score if is_verified else "Community Explorer",
+            "author_name": author_name,
+            "author_avatar": author_avatar,
+            "trust_score": trust_display,
+            "author_trust_score": author_trust_score,
             "getaway_title": p.getaway_title,
             "destination": p.getaway_title,
             "location": p.location,
@@ -114,7 +120,6 @@ def create_community_post(
         source_trip_id=request.source_trip_id,
         author_name=user.full_name,
         author_avatar=user.avatar_url or "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
-        trust_score=user.trust_score_display if hasattr(user, 'trust_score_display') else "95% Verified Explorer",
         getaway_title=request.getaway_title,
         location=request.location,
         image_url=request.image_url,

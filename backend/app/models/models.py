@@ -398,7 +398,6 @@ class CommunityPost(Base):
     source_trip_id = Column(String(36), ForeignKey("itineraries.id", ondelete="SET NULL"), nullable=True)
     author_name = Column(String(100), nullable=False)
     author_avatar = Column(Text, nullable=False)
-    trust_score = Column(String(50), default="96% Verified")
     getaway_title = Column(String(255), nullable=False)
     location = Column(String(255), nullable=False)
     image_url = Column(Text, nullable=False)
@@ -416,6 +415,18 @@ class CommunityPost(Base):
 
     source_trip = relationship("Itinerary", foreign_keys=[source_trip_id])
     author = relationship("User", foreign_keys=[author_id])
+
+    @property
+    def trust_score(self) -> str:
+        """Derive author trust display dynamically from the author User record."""
+        if self.author:
+            return self.author.trust_score_display
+        return "Community Explorer"
+
+    @trust_score.setter
+    def trust_score(self, value):
+        # Deprecated: Do not store duplicate formatted trust strings on post
+        pass
 
 
 class RewardVoucher(Base):

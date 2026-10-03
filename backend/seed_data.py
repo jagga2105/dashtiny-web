@@ -134,9 +134,9 @@ def seed():
         if db.query(CommunityPost).count() == 0:
             cp1 = CommunityPost(
                 id="post_01",
-                author_name="Ananya Roy",
+                author_id="usr_dash_01",
+                author_name="Kumkum Pandey",
                 author_avatar="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
-                trust_score="98% Verified",
                 getaway_title="4-Day Gokarna Coastal Trek & Beach Camping",
                 location="Gokarna, Karnataka",
                 image_url="https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=800&auto=format&fit=crop&q=80",

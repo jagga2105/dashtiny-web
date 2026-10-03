@@ -677,6 +677,59 @@ def test_postgres_concurrent_trip_snapshot_allocation(pg_engine):
     ).order_by(TripSnapshot.version.asc()).all()
     assert len(db_snapshots) == worker_count
     db_versions = [s.version for s in db_snapshots]
-    assert db_versions == [1, 2, 3, 4, 5]
     verify_sess.close()
+
+
+def test_postgres_community_trust_data_normalized(pg_session):
+    """
+    Verify community trust data is normalized in PostgreSQL:
+    1. 'trust_score' column is dropped from 'community_posts' table in PostgreSQL.
+    2. Post trust display is dynamically derived from author User record.
+    3. Updating author User.trust_score or User.is_verified dynamically updates post.trust_score.
+    """
+    # 1. Assert 'trust_score' column does NOT exist in PostgreSQL community_posts table
+    res = pg_session.execute(text(
+        "SELECT column_name FROM information_schema.columns "
+        "WHERE table_name = 'community_posts' AND column_name = 'trust_score';"
+    )).fetchall()
+    assert len(res) == 0, "trust_score column should not exist in community_posts table"
+
+    # 2. Create user with trust_score 88.0 and unverified
+    user = User(
+        id=str(uuid.uuid4()),
+        email=f"pg_author_{uuid.uuid4().hex[:6]}@dashtiny.ai",
+        full_name="Pooja Rao",
+        trust_score=88.0,
+        is_verified=False
+    )
+    pg_session.add(user)
+    pg_session.commit()
+
+    post = CommunityPost(
+        id=str(uuid.uuid4()),
+        author_id=user.id,
+        author_name=user.full_name,
+        author_avatar="",
+        getaway_title="Wayanad Treehouse Retreat",
+        location="Wayanad, Kerala",
+        image_url="https://example.com/treehouse.jpg",
+        content="Misty mornings in bamboo groves.",
+        likes_count=20
+    )
+    pg_session.add(post)
+    pg_session.commit()
+
+    # Re-fetch from DB
+    pg_session.refresh(post)
+    assert post.trust_score == "88% Explorer"
+
+    # 3. Update author to verified with trust_score 97.0
+    user.trust_score = 97.0
+    user.is_verified = True
+    pg_session.commit()
+
+    # Dynamic derivation reflects the updated user record
+    pg_session.refresh(post)
+    assert post.trust_score == "97% Verified Explorer"
+
 

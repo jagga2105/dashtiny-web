@@ -1,6 +1,7 @@
+import uuid
 import pytest
 from datetime import date
-from app.models.models import Itinerary, ItineraryDay, ItineraryActivity, CommunityPost, UserProfile
+from app.models.models import Itinerary, ItineraryDay, ItineraryActivity, CommunityPost, UserProfile, User
 
 def test_canonical_trip_summary_in_my_trips(client, db_session, test_user):
     """
@@ -288,6 +289,66 @@ def test_community_feed_truthful_identity_verification(client, db_session, test_
     found2 = next((p for p in feed2 if p["id"] == "unverified-author-post"), None)
     assert found2 is not None
     assert found2["is_identity_verified"] is True
+
+
+def test_community_feed_trust_data_derived_from_user_record(client, db_session):
+    """
+    Verify community trust data is normalized:
+    1. Does not store or rely on a static formatted trust string on CommunityPost.
+    2. Derives trust_score and is_identity_verified dynamically from author User record.
+    3. When author's User.trust_score or User.is_verified changes, feed reflects changes immediately.
+    """
+    author = User(
+        email=f"author_{uuid.uuid4().hex[:6]}@dashtiny.ai",
+        full_name="Aarav Sharma",
+        trust_score=92.0,
+        is_verified=False
+    )
+    db_session.add(author)
+    db_session.commit()
+
+    post = CommunityPost(
+        id=f"post-{uuid.uuid4().hex[:6]}",
+        author_id=author.id,
+        author_name=author.full_name,
+        author_avatar="https://images.unsplash.com/photo-1534528741775-53994a69daeb",
+        getaway_title="Coorg Coffee Estate Escape",
+        location="Coorg, Karnataka",
+        image_url="https://images.unsplash.com/photo-1507525428034-b723cf961d3e",
+        content="Serene walking through organic Robusta plantations.",
+        likes_count=10
+    )
+    db_session.add(post)
+    db_session.commit()
+
+    # Initial feed state: unverified author with 92% trust score
+    res1 = client.get("/api/v1/community/feed")
+    assert res1.status_code == 200
+    feed1 = res1.json()
+    card1 = next((p for p in feed1 if p["id"] == post.id), None)
+    assert card1 is not None
+    assert card1["author_id"] == author.id
+    assert card1["is_identity_verified"] is False
+    assert card1["author_trust_score"] == 92.0
+    assert card1["trust_score"] == "92% Explorer"
+    assert card1["author_name"] == "Aarav Sharma"
+
+    # Update User record in database (verify, change trust_score to 84.0, update full_name)
+    author.trust_score = 84.0
+    author.is_verified = True
+    author.full_name = "Aarav Sharma (Verified)"
+    db_session.commit()
+
+    # Second feed fetch: values MUST come from current User record without altering post
+    res2 = client.get("/api/v1/community/feed")
+    assert res2.status_code == 200
+    feed2 = res2.json()
+    card2 = next((p for p in feed2 if p["id"] == post.id), None)
+    assert card2 is not None
+    assert card2["is_identity_verified"] is True
+    assert card2["author_trust_score"] == 84.0
+    assert card2["trust_score"] == "84% Verified Explorer"
+    assert card2["author_name"] == "Aarav Sharma (Verified)"
 
 def test_server_side_trip_undo(client, db_session, test_user):
     """

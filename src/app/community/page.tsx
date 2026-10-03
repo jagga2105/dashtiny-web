@@ -14,8 +14,11 @@ import { apiService } from '@/services/api';
 
 interface CommunityTripPost {
   id: string;
+  author_id?: string;
   author_name: string;
   author_avatar: string;
+  trust_score?: string;
+  author_trust_score?: number;
   destination: string;
   duration: string;
   budget_est: string;
