@@ -382,10 +382,16 @@ def test_ai_query_diff_persistence_and_stable_activity_ids(client, db_session, t
     assert undo_data["status"] == "success"
     assert undo_data["restored_version"] == 1
 
-    # Verify act1 and act2 are restored and snapshot is popped
+    # Verify act1 and act2 are restored and snapshot is preserved in history as reverted
     restored_acts = db_session.query(ItineraryActivity).filter(
         ItineraryActivity.day_id == day.id
     ).all()
     restored_ids = [a.id for a in restored_acts]
     assert original_act1_id in restored_ids
-    assert db_session.query(TripSnapshot).filter(TripSnapshot.trip_id == trip.id).count() == 0
+    assert db_session.query(TripSnapshot).filter(
+        TripSnapshot.trip_id == trip.id,
+        TripSnapshot.action != "reverted"
+    ).count() == 0
+    reverted_snap = db_session.query(TripSnapshot).filter(TripSnapshot.trip_id == trip.id).first()
+    assert reverted_snap is not None
+    assert reverted_snap.action == "reverted"

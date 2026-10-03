@@ -1,5 +1,5 @@
 import pytest
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date
 from sqlalchemy.exc import IntegrityError
 from app.models.models import (
     User, UserProfile, Itinerary, ItineraryDay, ItineraryActivity,
@@ -715,6 +715,208 @@ def test_failed_ai_mutation_rolls_back_fully(db_session, test_user):
     ).order_by(TripSnapshot.version.asc()).all()
     assert len(final_snaps) == 2
     assert [s.version for s in final_snaps] == [1, 2]
+
+
+def test_undo_multi_step_revisions_a_b_c_b_a(client, db_session, test_user):
+    """
+    Test server-side undo multi-step revision semantics:
+    Initial: State A
+    AI Change 1: Snapshot A (v1), State B
+    AI Change 2: Snapshot B (v2), State C
+    Undo: Restores State B, marks Snapshot B reverted
+    Undo again: Restores State A, marks Snapshot A reverted
+    Undo again: Fails with 400 (no previous snapshot available)
+    Undo must NOT repeatedly restore the same snapshot.
+    """
+    # 1. Initial State A: 1 activity (Morning Yoga)
+    trip = Itinerary(
+        title="Kyoto Zen Multi-Undo Tour",
+        destination="Kyoto",
+        owner_id=test_user.id,
+        total_budget=60000.0,
+        currency="INR",
+        start_date=date(2026, 11, 10),
+        end_date=date(2026, 11, 12)
+    )
+    db_session.add(trip)
+    db_session.commit()
+
+    day1 = ItineraryDay(itinerary_id=trip.id, day_number=1, title="Day 1: Arrival")
+    db_session.add(day1)
+    db_session.commit()
+
+    act_a = ItineraryActivity(
+        day_id=day1.id,
+        time_slot="08:00 AM",
+        description="Activity A: Morning Yoga in Bamboo Grove",
+        location="Arashiyama",
+        place_type="TA",
+        cost_estimate=500.0,
+        sort_order=0
+    )
+    db_session.add(act_a)
+    db_session.commit()
+    act_a_id = act_a.id
+
+    # Verify State A in DB
+    acts_a = db_session.query(ItineraryActivity).filter(ItineraryActivity.day_id == day1.id).all()
+    assert len(acts_a) == 1
+    assert "Morning Yoga" in acts_a[0].description
+
+    # 2. AI Change 1 -> State B: Add nearby walk
+    res_b = client.post("/api/v1/ai/query", json={
+        "trip_id": trip.id,
+        "instruction": "I have 2 hours free in the afternoon, add a nearby walk"
+    })
+    assert res_b.status_code == 200, res_b.text
+    db_session.expire_all()
+    acts_b = db_session.query(ItineraryActivity).filter(ItineraryActivity.day_id == day1.id).order_by(ItineraryActivity.sort_order).all()
+    assert len(acts_b) >= 2
+    assert any("Heritage Photography Walk" in a.description for a in acts_b)
+
+    # 3. AI Change 2 -> State C: Add relaxing spa siesta
+    res_c = client.post("/api/v1/ai/query", json={
+        "trip_id": trip.id,
+        "instruction": "Make the schedule more relaxing and chill with a spa"
+    })
+    assert res_c.status_code == 200, res_c.text
+    db_session.expire_all()
+    acts_c = db_session.query(ItineraryActivity).filter(ItineraryActivity.day_id == day1.id).order_by(ItineraryActivity.sort_order).all()
+    assert len(acts_c) >= 3
+    assert any("Siesta & Spa" in a.description for a in acts_c)
+
+    # Verify snapshots v1 and v2 exist with action == "ai_query"
+    snaps_c = db_session.query(TripSnapshot).filter(TripSnapshot.trip_id == trip.id).order_by(TripSnapshot.version.asc()).all()
+    assert len(snaps_c) == 2
+    assert snaps_c[0].version == 1 and snaps_c[0].action == "ai_query"
+    assert snaps_c[1].version == 2 and snaps_c[1].action == "ai_query"
+
+    # --- Step 4: First Undo -> Restores State B ---
+    undo_1 = client.post(f"/api/v1/trips/{trip.id}/undo")
+    assert undo_1.status_code == 200, undo_1.text
+    u1_data = undo_1.json()
+    assert u1_data["status"] == "success"
+    assert u1_data["restored_version"] == 2
+    assert u1_data["remaining_active_revisions"] == 1
+
+    # Verify DB activities match State B (Siesta & Spa is gone, Heritage Photography Walk remains)
+    db_session.expire_all()
+    acts_after_u1 = db_session.query(ItineraryActivity).filter(ItineraryActivity.day_id == day1.id).all()
+    assert not any("Siesta & Spa" in a.description for a in acts_after_u1)
+    assert any("Heritage Photography Walk" in a.description for a in acts_after_u1)
+
+    # Verify snapshot 2 is marked 'reverted' and snapshot 1 remains 'ai_query'
+    snap_v2 = db_session.query(TripSnapshot).filter(TripSnapshot.trip_id == trip.id, TripSnapshot.version == 2).first()
+    assert snap_v2.action == "reverted"
+    snap_v1 = db_session.query(TripSnapshot).filter(TripSnapshot.trip_id == trip.id, TripSnapshot.version == 1).first()
+    assert snap_v1.action == "ai_query"
+
+    # --- Step 5: Second Undo -> Restores State A ---
+    undo_2 = client.post(f"/api/v1/trips/{trip.id}/undo")
+    assert undo_2.status_code == 200, undo_2.text
+    u2_data = undo_2.json()
+    assert u2_data["status"] == "success"
+    assert u2_data["restored_version"] == 1
+    assert u2_data["remaining_active_revisions"] == 0
+
+    # Verify DB activities match State A (both Siesta & Spa and Heritage Walk are gone, only Morning Yoga remains)
+    db_session.expire_all()
+    acts_after_u2 = db_session.query(ItineraryActivity).filter(ItineraryActivity.day_id == day1.id).all()
+    assert len(acts_after_u2) == 1
+    assert "Morning Yoga" in acts_after_u2[0].description
+    assert acts_after_u2[0].id == act_a_id
+
+    # Verify both snapshots are marked 'reverted'
+    all_reverted = db_session.query(TripSnapshot).filter(TripSnapshot.trip_id == trip.id).all()
+    assert len(all_reverted) == 2
+    assert all(s.action == "reverted" for s in all_reverted)
+
+    # --- Step 6: Third Undo -> Fails with 400 (Does NOT repeatedly restore the same snapshot) ---
+    undo_3 = client.post(f"/api/v1/trips/{trip.id}/undo")
+    assert undo_3.status_code == 400
+    assert "no previous trip snapshot available to undo" in undo_3.json()["detail"].lower()
+
+    # State A remains strictly intact
+    db_session.expire_all()
+    acts_final = db_session.query(ItineraryActivity).filter(ItineraryActivity.day_id == day1.id).all()
+    assert len(acts_final) == 1
+    assert "Morning Yoga" in acts_final[0].description
+
+
+def test_undo_history_behavior_and_audit_trail(client, db_session, test_user):
+    """
+    Test A -> B -> undo -> history behavior:
+    1. Revisions are NOT deleted on undo; they remain in audit history.
+    2. GET /trips/{trip_id}/snapshots reflects is_reverted=True for reverted revisions.
+    3. New AI mutation after undo starts from restored state and advances version chain.
+    """
+    trip = Itinerary(
+        title="Hakone Springs Revision History",
+        destination="Hakone",
+        owner_id=test_user.id,
+        total_budget=50000.0,
+        currency="INR",
+        start_date=date(2026, 12, 5),
+        end_date=date(2026, 12, 7)
+    )
+    db_session.add(trip)
+    db_session.commit()
+
+    day1 = ItineraryDay(itinerary_id=trip.id, day_number=1, title="Day 1")
+    db_session.add(day1)
+    db_session.commit()
+
+    act1 = ItineraryActivity(
+        day_id=day1.id,
+        time_slot="10:00 AM",
+        description="State A: Onsen Soak",
+        location="Hakone Yumoto",
+        place_type="TA",
+        sort_order=0
+    )
+    db_session.add(act1)
+    db_session.commit()
+
+    # AI change to State B
+    res_b = client.post("/api/v1/ai/query", json={
+        "trip_id": trip.id,
+        "instruction": "State B: Add Lake Ashi pirate boat cruise"
+    })
+    assert res_b.status_code == 200
+
+    # History before undo shows active snapshot v1
+    history_pre = client.get(f"/api/v1/trips/{trip.id}/snapshots").json()
+    assert len(history_pre) == 1
+    assert history_pre[0]["version"] == 1
+    assert history_pre[0]["action"] == "ai_query"
+    assert history_pre[0]["is_reverted"] is False
+
+    # Undo
+    undo_res = client.post(f"/api/v1/trips/{trip.id}/undo")
+    assert undo_res.status_code == 200
+
+    # History AFTER undo: snapshot v1 is still present in history, marked is_reverted=True
+    history_post = client.get(f"/api/v1/trips/{trip.id}/snapshots").json()
+    assert len(history_post) == 1
+    assert history_post[0]["version"] == 1
+    assert history_post[0]["action"] == "reverted"
+    assert history_post[0]["is_reverted"] is True
+
+    # New AI mutation to State C
+    res_c = client.post("/api/v1/ai/query", json={
+        "trip_id": trip.id,
+        "instruction": "State C: Add Mt. Fuji ropeway ride"
+    })
+    assert res_c.status_code == 200
+
+    # History now has 2 revisions: v2 (active) and v1 (reverted)
+    history_c = client.get(f"/api/v1/trips/{trip.id}/snapshots").json()
+    assert len(history_c) == 2
+    assert history_c[0]["version"] == 2
+    assert history_c[0]["is_reverted"] is False
+    assert history_c[1]["version"] == 1
+    assert history_c[1]["is_reverted"] is True
+
 
 
 

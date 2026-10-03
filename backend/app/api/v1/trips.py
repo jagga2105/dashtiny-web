@@ -518,7 +518,9 @@ def get_trip_snapshots(
             "id": s.id,
             "version": s.version,
             "action": s.action,
+            "action_type": s.action_type,
             "summary": s.summary,
+            "is_reverted": (s.action == "reverted"),
             "created_at": str(s.created_at)
         }
         for s in snapshots
@@ -532,7 +534,10 @@ def undo_trip_change(
 ):
     """
     Rolls back the most recent AI modification for the specified trip by restoring
-    the highest version TripSnapshot and applying diff updates to preserve stable activity references.
+    the immediately previous active TripSnapshot revision and applying diff updates
+    to preserve stable activity references.
+    Revisions are preserved in history and marked as 'reverted' so undo advances
+    sequentially backwards through revisions without repeatedly restoring the same snapshot.
     """
     it = db.query(Itinerary).filter(Itinerary.id == trip_id).with_for_update().first()
     if not it:
@@ -550,8 +555,10 @@ def undo_trip_change(
     if not is_owner and not is_member:
         raise HTTPException(status_code=403, detail="Not authorized to modify this trip")
 
+    # Find the latest active revision that has not been reverted
     snapshot = db.query(TripSnapshot).filter(
-        TripSnapshot.trip_id == it.id
+        TripSnapshot.trip_id == it.id,
+        TripSnapshot.action != "reverted"
     ).order_by(TripSnapshot.version.desc(), TripSnapshot.created_at.desc()).first()
 
     if not snapshot:
@@ -665,18 +672,25 @@ def undo_trip_change(
                     if act_id not in retained_act_ids:
                         db.delete(act_obj)
 
-        # Pop the restored snapshot
+        # Mark this snapshot revision as reverted rather than deleting it
         restored_version = snapshot.version
-        db.delete(snapshot)
+        snapshot.action = "reverted"
+        snapshot.action_type = "AI_MODIFY_ITINERARY_REVERTED"
         db.commit()
     except Exception as exc:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to undo trip change: {str(exc)}")
 
+    remaining_active = db.query(TripSnapshot).filter(
+        TripSnapshot.trip_id == it.id,
+        TripSnapshot.action != "reverted"
+    ).count()
+
     return {
         "status": "success",
         "message": f"Trip successfully reverted to snapshot v{restored_version}",
         "trip_id": it.id,
-        "restored_version": restored_version
+        "restored_version": restored_version,
+        "remaining_active_revisions": remaining_active
     }
 
