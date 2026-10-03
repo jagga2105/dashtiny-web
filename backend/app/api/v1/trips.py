@@ -534,7 +534,7 @@ def undo_trip_change(
     Rolls back the most recent AI modification for the specified trip by restoring
     the highest version TripSnapshot and applying diff updates to preserve stable activity references.
     """
-    it = db.query(Itinerary).filter(Itinerary.id == trip_id).first()
+    it = db.query(Itinerary).filter(Itinerary.id == trip_id).with_for_update().first()
     if not it:
         raise HTTPException(status_code=404, detail="Trip not found")
 

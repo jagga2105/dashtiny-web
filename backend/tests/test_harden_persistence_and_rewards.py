@@ -11,6 +11,7 @@ from app.services.reward_service import (
     InsufficientRewardBalanceError,
     InsufficientCreditsError
 )
+from app.services.snapshot_service import allocate_and_create_trip_snapshot
 
 def test_multiple_trip_snapshots_versioning_and_reason(client, db_session, test_user):
     """
@@ -82,7 +83,27 @@ def test_multiple_trip_snapshots_versioning_and_reason(client, db_session, test_
     assert snap2.version == 2
     assert snap2.action_type == "AI_MODIFY_ITINERARY"
 
-    # 3. Verify stable activity ID was retained for the existing activity
+    # 3. Third AI edit -> must increment to version 3 sequentially
+    res3 = client.post(
+        "/api/v1/ai/query",
+        json={"trip_id": trip.id, "instruction": "Add matcha tea ceremony at Uji"}
+    )
+    assert res3.status_code == 200, res3.text
+    snap3 = db_session.query(TripSnapshot).filter(
+        TripSnapshot.trip_id == trip.id,
+        TripSnapshot.version == 3
+    ).first()
+    assert snap3 is not None
+    assert snap3.version == 3
+    assert snap3.action_type == "AI_MODIFY_ITINERARY"
+
+    # Verify all snapshots for this trip are strictly sequential [1, 2, 3] with NO duplicates
+    all_snaps = db_session.query(TripSnapshot).filter(
+        TripSnapshot.trip_id == trip.id
+    ).order_by(TripSnapshot.version.asc()).all()
+    assert [s.version for s in all_snaps] == [1, 2, 3]
+
+    # 4. Verify stable activity ID was retained for the existing activity
     db_session.expire_all()
     retained_act = db_session.query(ItineraryActivity).filter(ItineraryActivity.id == original_act_id).first()
     assert retained_act is not None
@@ -583,5 +604,118 @@ def test_negative_reward_deduction_validation_suite(db_session, test_user):
 
     profile_final = db_session.query(UserProfile).filter(UserProfile.user_id == user_id).first()
     assert profile_final.reward_coins == 50
+
+
+def test_failed_ai_mutation_rolls_back_fully(db_session, test_user):
+    """
+    Verify that an error occurring during an AI mutation:
+    1. Rolls back the newly allocated TripSnapshot.
+    2. Rolls back any activity modifications.
+    3. Rolls back any AI run and tool call telemetry.
+    4. Leaves database clean so subsequent mutations allocate the correct version.
+    """
+    trip = Itinerary(
+        title="Osaka Food Odyssey",
+        destination="Osaka",
+        owner_id=test_user.id,
+        total_budget=30000.0,
+        currency="INR",
+        start_date=datetime(2026, 12, 1).date(),
+        end_date=datetime(2026, 12, 3).date()
+    )
+    db_session.add(trip)
+    db_session.flush()
+
+    day1 = ItineraryDay(itinerary_id=trip.id, day_number=1, title="Day 1: Dotonbori")
+    db_session.add(day1)
+    db_session.flush()
+
+    act1 = ItineraryActivity(
+        day_id=day1.id,
+        time_slot="12:00 PM",
+        description="Takoyaki Tasting",
+        location="Dotonbori",
+        place_type="TA",
+        sort_order=0
+    )
+    db_session.add(act1)
+    db_session.flush()
+
+    # 1. Create initial snapshot v1
+    snap1, v1 = allocate_and_create_trip_snapshot(
+        db=db_session,
+        trip_id=trip.id,
+        user_id=test_user.id,
+        days_data=[{"day": 1, "activity": "Takoyaki Tasting"}]
+    )
+    db_session.commit()
+    assert v1 == 1
+
+    # 2. Simulate failing AI mutation with savepoint rollback
+    try:
+        with db_session.begin_nested() as sp:
+            # Step A: snapshot v2 allocated
+            snap2, v2 = allocate_and_create_trip_snapshot(
+                db=db_session,
+                trip_id=trip.id,
+                user_id=test_user.id,
+                days_data=[{"day": 1, "activity": "Takoyaki Tasting"}]
+            )
+            assert v2 == 2
+
+            # Step B: Activity modified
+            act1.description = "Uncommitted Partial Edit"
+
+            # Step C: Telemetry added
+            ai_run = AIRun(
+                user_id=test_user.id,
+                trip_id=trip.id,
+                prompt="Failing edit",
+                model="deterministic-planner-v1",
+                latency_ms=10.0,
+                status="failed"
+            )
+            db_session.add(ai_run)
+
+            # Step D: Mid-transaction failure occurs before commit
+            raise RuntimeError("Simulated crash during action execution")
+    except RuntimeError:
+        pass
+
+    # Verify atomic rollback:
+    # 1. Snapshot v2 was NOT persisted
+    all_snaps = db_session.query(TripSnapshot).filter(TripSnapshot.trip_id == trip.id).all()
+    assert len(all_snaps) == 1
+    assert all_snaps[0].version == 1
+
+    # 2. Activity was NOT mutated
+    db_session.expire_all()
+    fresh_act = db_session.query(ItineraryActivity).filter(ItineraryActivity.id == act1.id).first()
+    assert fresh_act.description == "Takoyaki Tasting"
+
+    # 3. AI run was NOT persisted
+    failed_runs = db_session.query(AIRun).filter(
+        AIRun.trip_id == trip.id,
+        AIRun.prompt == "Failing edit"
+    ).all()
+    assert len(failed_runs) == 0
+
+    # 4. Subsequent mutation allocates version 2 cleanly without duplicate or collision
+    snap_success, v_success = allocate_and_create_trip_snapshot(
+        db=db_session,
+        trip_id=trip.id,
+        user_id=test_user.id,
+        days_data=[{"day": 1, "activity": "Kuromon Market Breakfast"}]
+    )
+    db_session.commit()
+    assert v_success == 2
+
+    final_snaps = db_session.query(TripSnapshot).filter(
+        TripSnapshot.trip_id == trip.id
+    ).order_by(TripSnapshot.version.asc()).all()
+    assert len(final_snaps) == 2
+    assert [s.version for s in final_snaps] == [1, 2]
+
+
 
 

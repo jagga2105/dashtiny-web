@@ -20,6 +20,7 @@ from app.models.models import (
     TravelerMemory, CommunityPost, PostLike, SquadRoom, SquadExpense
 )
 from app.services.reward_service import award_rewards
+from app.services.snapshot_service import allocate_and_create_trip_snapshot
 
 # Determine PostgreSQL test database URL
 POSTGRES_URL = os.environ.get(
@@ -458,3 +459,66 @@ def test_postgres_concurrent_reward_awards(pg_engine):
     ).count()
     assert tx_count == 1
     verify_sess.close()
+
+
+def test_postgres_concurrent_trip_snapshot_allocation(pg_engine):
+    """
+    Test concurrent snapshot version allocation on PostgreSQL using parent trip row locking:
+    - 5 concurrent threads attempting to allocate a snapshot for the SAME trip.
+    - Serializes version allocation per trip.
+    - Ensures no duplicate versions occur.
+    - Produces sequential versions [1, 2, 3, 4, 5].
+    - UNIQUE(trip_id, version) is respected with 0 integrity errors.
+    """
+    Session = sessionmaker(bind=pg_engine, autocommit=False, autoflush=False)
+    setup_session = Session()
+    user = create_pg_user(setup_session)
+    trip = create_pg_trip(setup_session, user.id)
+    trip_id = trip.id
+    user_id = user.id
+    setup_session.commit()
+    setup_session.close()
+
+    def attempt_snapshot(thread_id):
+        sess = Session()
+        try:
+            snapshot, allocated_ver = allocate_and_create_trip_snapshot(
+                db=sess,
+                trip_id=trip_id,
+                user_id=user_id,
+                days_data=[{"day": 1, "note": f"Thread {thread_id}"}],
+                instruction=f"Instruction from thread {thread_id}"
+            )
+            sess.commit()
+            return allocated_ver, None
+        except Exception as e:
+            sess.rollback()
+            return None, str(e)
+        finally:
+            sess.close()
+
+    worker_count = 5
+    with concurrent.futures.ThreadPoolExecutor(max_workers=worker_count) as executor:
+        futures = [executor.submit(attempt_snapshot, i) for i in range(worker_count)]
+        results = [f.result() for f in futures]
+
+    # Verify no unhandled exceptions occurred
+    for ver, err in results:
+        assert err is None, f"Concurrent snapshot creation failed: {err}"
+        assert ver is not None
+
+    # Verify that all 5 versions are distinct and strictly sequential [1, 2, 3, 4, 5]
+    allocated_versions = [ver for ver, _ in results]
+    assert len(allocated_versions) == worker_count
+    assert len(set(allocated_versions)) == worker_count  # NO duplicate versions!
+
+    # Query database to confirm all 5 snapshots exist with versions 1..5
+    verify_sess = Session()
+    db_snapshots = verify_sess.query(TripSnapshot).filter(
+        TripSnapshot.trip_id == trip_id
+    ).order_by(TripSnapshot.version.asc()).all()
+    assert len(db_snapshots) == worker_count
+    db_versions = [s.version for s in db_snapshots]
+    assert db_versions == [1, 2, 3, 4, 5]
+    verify_sess.close()
+

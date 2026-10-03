@@ -20,6 +20,7 @@ from app.ai.tools.hotel_search import search_hotels
 from app.ai.tools.flight_search import search_flights
 from app.ai.tools.maps import get_coordinates
 from app.api.deps import get_current_user
+from app.services.snapshot_service import allocate_and_create_trip_snapshot
 
 router = APIRouter(prefix="/ai", tags=["DashTiny AI Action & Diff Engine"])
 
@@ -43,10 +44,10 @@ def ai_query(
     """
     start_time = time.time()
     
-    trip = db.query(Itinerary).filter(Itinerary.id == request.trip_id).first()
+    trip = db.query(Itinerary).filter(Itinerary.id == request.trip_id).with_for_update().first()
     if not trip:
         if request.trip_id in ["latest", "", None]:
-            trip = db.query(Itinerary).filter(Itinerary.owner_id == user.id).order_by(Itinerary.created_at.desc()).first()
+            trip = db.query(Itinerary).filter(Itinerary.owner_id == user.id).order_by(Itinerary.created_at.desc()).with_for_update().first()
         else:
             raise HTTPException(status_code=404, detail="Trip not found")
     
@@ -112,21 +113,18 @@ def ai_query(
     action_result = apply_itinerary_action(request.instruction, current_days)
 
     try:
-        # Save a versioned rollback snapshot prior to applying changes (atomic transaction boundary)
-        max_ver = db.query(func.max(TripSnapshot.version)).filter(TripSnapshot.trip_id == trip.id).scalar() or 0
-        snapshot = TripSnapshot(
+        # Save a concurrency-safe versioned rollback snapshot prior to applying changes
+        snapshot, next_ver = allocate_and_create_trip_snapshot(
+            db=db,
             trip_id=trip.id,
-            version=max_ver + 1,
             user_id=user.id,
+            days_data=current_days,
             action="ai_query",
             action_type="AI_MODIFY_ITINERARY",
             actor_type="USER",
             instruction=request.instruction,
-            model="deterministic-planner-v1",
-            summary=f"Snapshot v{max_ver + 1} before: {request.instruction[:60]}",
-            days_data=current_days
+            model="deterministic-planner-v1"
         )
-        db.add(snapshot)
 
         # Diff-based activity persistence: preserves stable activity identity
         for day_data in action_result["updated_days"]:
