@@ -43,7 +43,9 @@ export interface PlannerRequest {
 export interface ParsedTravelPrompt extends PlannerRequest {
   isItinerary: boolean;
   budgetFormatted: string;
+  isBudgetSpecified: boolean;
   companions: number; // backward compatibility
+  companionsSource: 'prompt' | 'url' | 'default';
   source?: string; // backward compatibility
   rawPrompt: string; // backward compatibility
 }
@@ -186,21 +188,21 @@ export function parseInterestsFromText(text: string): string[] {
  * - "80k" -> 80000
  * - "₹1,50,000" -> 150000
  */
-export function parseBudgetFromText(text: string, daysCount: number = 4, isInternational: boolean = false): { budget: number; formatted: string } {
+export function parseBudgetFromText(text: string, daysCount: number = 4, isInternational: boolean = false): { budget: number; formatted: string; isSpecified: boolean } {
   const lower = text.toLowerCase();
 
   // Pattern 1: Lakhs (e.g. "1.5 lakh", "2 lakhs", "1.5L", "2lac")
   const lakhMatch = lower.match(/(?:₹|rs\.?|inr|under|budget\s*(?:of)?|around)?\s*([0-9]+(?:\.[0-9]+)?)\s*(?:lakh|lakhs|lac|lacs|l\b)/i);
   if (lakhMatch && lakhMatch[1]) {
     const val = parseFloat(lakhMatch[1]) * 100000;
-    return { budget: Math.round(val), formatted: `₹${val.toLocaleString('en-IN')}` };
+    return { budget: Math.round(val), formatted: `₹${val.toLocaleString('en-IN')}`, isSpecified: true };
   }
 
   // Pattern 2: Thousands with 'k' (e.g. "50k", "85k")
   const kMatch = lower.match(/(?:₹|rs\.?|inr|under|budget\s*(?:of)?|around)?\s*([0-9]+)\s*k\b/i);
   if (kMatch && kMatch[1]) {
     const val = parseInt(kMatch[1], 10) * 1000;
-    return { budget: val, formatted: `₹${val.toLocaleString('en-IN')}` };
+    return { budget: val, formatted: `₹${val.toLocaleString('en-IN')}`, isSpecified: true };
   }
 
   // Pattern 3: Standard currency numbers (e.g. "₹1,50,000", "75000")
@@ -208,14 +210,12 @@ export function parseBudgetFromText(text: string, daysCount: number = 4, isInter
   if (numMatch && numMatch[1]) {
     const cleanNum = parseInt(numMatch[1].replace(/,/g, ''), 10);
     if (!isNaN(cleanNum) && cleanNum >= 5000) {
-      return { budget: cleanNum, formatted: `₹${cleanNum.toLocaleString('en-IN')}` };
+      return { budget: cleanNum, formatted: `₹${cleanNum.toLocaleString('en-IN')}`, isSpecified: true };
     }
   }
 
-  // Fallback: Dynamic estimation based on trip length & destination category
-  const dailyRate = isInternational ? 20000 : 9000;
-  const estimated = dailyRate * Math.max(1, daysCount);
-  return { budget: estimated, formatted: `₹${estimated.toLocaleString('en-IN')} (Estimated)` };
+  // Not specified by traveler
+  return { budget: 0, formatted: 'Not specified', isSpecified: false };
 }
 
 /**
@@ -352,33 +352,49 @@ export function parseTravelPrompt(prompt: string): ParsedTravelPrompt {
   const internationalKeywords = ['japan', 'tokyo', 'kyoto', 'paris', 'france', 'bali', 'indonesia', 'vietnam', 'dubai', 'uae', 'thailand', 'singapore', 'europe', 'switzerland', 'italy', 'london', 'uk'];
   const isInternational = internationalKeywords.some((k) => destination.toLowerCase().includes(k));
 
-  const { budget, formatted: budgetFormatted } = parseBudgetFromText(prompt, days_count, isInternational);
+  const { budget, formatted: budgetFormatted, isSpecified: isBudgetSpecified } = parseBudgetFromText(prompt, days_count, isInternational);
 
   // Companions & Persona
   let companions = 2;
+  let companionsSource: 'prompt' | 'url' | 'default' = 'default';
   let persona = 'solo';
   let vibe = 'Leisure & Scenic';
 
-  if (lower.includes('solo') || lower.includes('alone') || lower.includes('myself')) {
+  const countMatch = lower.match(/(?:for\s+)?(\d+)\s*(?:people|persons|travellers|travelers|guests|adults|friends|of us)\b/i);
+  const wordCountMatch = lower.match(/\b(?:for\s+)?(two|three|four|five|six)\s+(?:people|persons|travellers|travelers|guests|adults|friends|of us)\b/i);
+  const wordMap: Record<string, number> = { two: 2, three: 3, four: 4, five: 5, six: 6 };
+
+  if (countMatch && countMatch[1]) {
+    companions = parseInt(countMatch[1], 10);
+    companionsSource = 'prompt';
+  } else if (wordCountMatch && wordCountMatch[1]) {
+    companions = wordMap[wordCountMatch[1].toLowerCase()] || 2;
+    companionsSource = 'prompt';
+  } else if (lower.includes('solo') || lower.includes('alone') || lower.includes('myself')) {
     companions = 1;
     persona = 'solo';
     vibe = 'Solo Backpacking & Discovery';
+    companionsSource = 'prompt';
   } else if (lower.includes('partner') || lower.includes('couple') || lower.includes('romantic') || lower.includes('wife') || lower.includes('husband') || lower.includes('girlfriend') || lower.includes('boyfriend')) {
     companions = 2;
     persona = 'couple';
     vibe = 'Romantic Escapes & Fine Dining';
+    companionsSource = 'prompt';
   } else if (lower.includes('family') || lower.includes('kids') || lower.includes('children') || lower.includes('parents')) {
     companions = 4;
     persona = 'family';
     vibe = 'Family Comfort & Nature';
+    companionsSource = 'prompt';
   } else if (lower.includes('squad') || lower.includes('friends') || lower.includes('gang') || lower.includes('buddies')) {
     companions = 4;
     persona = 'squad';
     vibe = 'Squad Adventures & Nightlife';
+    companionsSource = 'prompt';
   } else if (lower.includes('nomad') || lower.includes('workation') || lower.includes('wifi') || lower.includes('coworking')) {
     companions = 1;
     persona = 'nomad';
     vibe = 'Digital Nomad & Cafe Hop';
+    companionsSource = 'prompt';
   }
 
   if (lower.includes('luxury') || lower.includes('5-star') || lower.includes('resort') || lower.includes('villa')) {
@@ -401,9 +417,11 @@ export function parseTravelPrompt(prompt: string): ParsedTravelPrompt {
     days_count,
     budget,
     budgetFormatted,
+    isBudgetSpecified,
     currency: 'INR',
     travellers: companions,
     companions,
+    companionsSource,
     persona,
     vibe,
     interests,

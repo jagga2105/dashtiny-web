@@ -114,17 +114,32 @@ export default function DashboardPage() {
         }
         if (tripsData && tripsData.length > 0) {
           const today = new Date().toISOString().split('T')[0];
-          // Find an active trip (dates spanning today), or next upcoming trip
+          // 1. Active: trip spans today
           const activeTrip = tripsData.find((t: any) => {
             const start = t.startDate || t.start_date;
             const end = t.endDate || t.end_date;
             return start && end && start <= today && end >= today;
           });
+          // 2. Upcoming: trip starts in the future
           const upcomingTrip = tripsData.find((t: any) => {
             const start = t.startDate || t.start_date;
             return start && start > today;
           });
-          setRealActiveTrip(activeTrip || upcomingTrip || tripsData[0]);
+          // 3. Completed only: past trips
+          const completedTrip = tripsData.find((t: any) => {
+            const end = t.endDate || t.end_date;
+            return end && end < today;
+          });
+
+          if (activeTrip) {
+            setRealActiveTrip({ ...activeTrip, tripState: 'active' });
+          } else if (upcomingTrip) {
+            setRealActiveTrip({ ...upcomingTrip, tripState: 'upcoming' });
+          } else if (completedTrip || tripsData.length > 0) {
+            setRealActiveTrip({ ...(completedTrip || tripsData[0]), tripState: 'completed' });
+          } else {
+            setRealActiveTrip(null);
+          }
         } else {
           setRealActiveTrip(null);
         }
@@ -408,17 +423,16 @@ export default function DashboardPage() {
   const today = new Date().toISOString().split('T')[0];
   const activeTripContext = (() => {
     if (!realActiveTrip) return null;
-    const start = realActiveTrip.startDate || realActiveTrip.start_date;
-    const end = realActiveTrip.endDate || realActiveTrip.end_date;
-    if (start && end && start <= today && end >= today) {
+    const state = realActiveTrip.tripState;
+    if (state === 'active') {
       return {
-        sectionHeading: "Today's Active Trip",
+        sectionHeading: 'Active Trip',
         badge: 'Active Trip',
         color: 'text-emerald-700 bg-emerald-50 border-emerald-200',
-        cta: "Continue today's trip →",
+        cta: 'Continue trip →',
       };
     }
-    if (start && start > today) {
+    if (state === 'upcoming') {
       return {
         sectionHeading: 'Your Next Trip',
         badge: 'Upcoming Trip',
@@ -426,19 +440,19 @@ export default function DashboardPage() {
         cta: 'Continue planning →',
       };
     }
-    if (end && end < today) {
+    if (state === 'completed') {
       return {
-        sectionHeading: 'Past Trip Memories',
-        badge: 'Past Trip',
+        sectionHeading: 'Past Trip',
+        badge: 'Completed Trip',
         color: 'text-slate-600 bg-slate-100 border-slate-200',
-        cta: 'View trip →',
+        cta: 'Revisit a trip →',
       };
     }
     return {
       sectionHeading: 'Trip in Planning',
       badge: 'Draft Trip',
       color: 'text-orange-700 bg-orange-50 border-orange-200',
-      cta: 'Finish planning →',
+      cta: 'Continue planning →',
     };
   })();
 

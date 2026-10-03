@@ -39,43 +39,72 @@ function PlannerContent() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [sourceTripData, setSourceTripData] = useState<any>(null);
+  const [isLoadingSourceTrip, setIsLoadingSourceTrip] = useState(false);
+  const [expandedDays, setExpandedDays] = useState<Record<number, boolean>>({ 1: true });
+  const [showUnderstandingDetails, setShowUnderstandingDetails] = useState(false);
 
-  // Structured Source Template Highlights for true adaptation flow
-  const getSourceTemplateHighlights = (dest: string, sourceId: string) => {
+  // Fallback stops only when source trip ID is not provided or network is offline
+  const getFallbackHighlights = (dest: string, sourceId: string) => {
     const d = (dest || '').toLowerCase();
     if (sourceId === 'trip_1' || d.includes('kyoto') || d.includes('japan')) {
       return [
-        { id: 'h1', day: 1, title: 'Evening Gion Lantern Walk & Pontocho Dining', tag: 'Culture & Dining', keep: true },
-        { id: 'h2', day: 2, title: 'Early Fushimi Inari (Zero Crowds) & Tofuku-ji Zen Gardens', tag: 'Iconic & Sacred', keep: true },
-        { id: 'h3', day: 3, title: 'Nishiki Market Food Crawl & Philosopher’s Path Walk', tag: 'Gastronomy & Stroll', keep: true },
-        { id: 'h4', day: 4, title: 'Arashiyama Bamboo Grove & Tenryu-ji Temple Morning', tag: 'Nature & Heritage', keep: true },
-        { id: 'h5', day: 5, title: 'Day Excursion to Uji: Byodoin Phoenix Hall & Matcha Tasting', tag: 'Artisanal Excursion', keep: true },
-        { id: 'h6', day: 6, title: 'Kiyomizu-dera Panoramic Terrace & Pottery Lane Departure', tag: 'Scenic & Farewell', keep: true },
+        { id: 'h1', day: 1, title: 'Check-in at Machiya Townhouse & Gion Evening Stroll', tag: 'Culture & Arrival', location: 'Gion, Kyoto', keep: true },
+        { id: 'h2', day: 2, title: 'Early Fushimi Inari (Zero Crowds) & Tofuku-ji Zen Gardens', tag: 'Iconic & Sacred', location: 'Southern Kyoto', keep: true },
+        { id: 'h3', day: 3, title: 'Nishiki Market Food Crawl & Philosopher’s Path Walk', tag: 'Gastronomy & Stroll', location: 'Central Kyoto', keep: true },
+        { id: 'h4', day: 4, title: 'Arashiyama Bamboo Grove & Tenryu-ji Temple Morning', tag: 'Nature & Heritage', location: 'Arashiyama', keep: true },
+        { id: 'h5', day: 5, title: 'Day Excursion to Uji: Byodoin Phoenix Hall & Matcha Tasting', tag: 'Artisanal Excursion', location: 'Uji', keep: true },
+        { id: 'h6', day: 6, title: 'Kiyomizu-dera Panoramic Terrace & Pottery Lane Departure', tag: 'Scenic & Farewell', location: 'Higashiyama', keep: true },
       ];
     }
     if (sourceId === 'trip_2' || d.includes('goa')) {
       return [
-        { id: 'h1', day: 1, title: 'Check-in at Cliffside Sanctuary & Palolem Sunset Walk', tag: 'Relaxed Arrival', keep: true },
-        { id: 'h2', day: 2, title: 'Agonda Beach Kayaking & Authentic Goan Seafood Thali', tag: 'Coastal & Dining', keep: true },
-        { id: 'h3', day: 3, title: 'Cabo de Rama Historic Fort & Cliff Cafe Golden Hour', tag: 'Scenic Heritage', keep: true },
-        { id: 'h4', day: 4, title: 'Galgibaga Turtle Sanctuary & Old Bakery Breakfast', tag: 'Slow Travel', keep: true },
+        { id: 'h1', day: 1, title: 'Check-in at Cliffside Sanctuary & Palolem Sunset Walk', tag: 'Relaxed Arrival', location: 'Palolem Beach', keep: true },
+        { id: 'h2', day: 2, title: 'Agonda Beach Kayaking & Authentic Goan Seafood Thali', tag: 'Coastal & Dining', location: 'Agonda', keep: true },
+        { id: 'h3', day: 3, title: 'Cabo de Rama Historic Fort & Cliff Cafe Golden Hour', tag: 'Scenic Heritage', location: 'Cabo de Rama', keep: true },
+        { id: 'h4', day: 4, title: 'Galgibaga Turtle Sanctuary & Old Bakery Breakfast', tag: 'Slow Travel', location: 'South Goa', keep: true },
       ];
     }
     return [
-      { id: 'h1', day: 1, title: `Arrival, Check-in & Scenic Neighborhood Walk in ${dest || 'Destination'}`, tag: 'Arrival', keep: true },
-      { id: 'h2', day: 2, title: `Iconic Landmark Tour & Verified Local Gastronomy in ${dest || 'Destination'}`, tag: 'Highlights', keep: true },
-      { id: 'h3', day: 3, title: `Cultural Immersion & Hidden Local Sanctuary in ${dest || 'Destination'}`, tag: 'Discovery', keep: true },
-      { id: 'h4', day: 4, title: `Golden Hour Scenic Spot & Farewell Dining Experience`, tag: 'Departure', keep: true },
+      { id: 'h1', day: 1, title: `Arrival, Check-in & Scenic Neighborhood Walk in ${dest || 'Destination'}`, tag: 'Arrival', location: dest || 'Local center', keep: true },
+      { id: 'h2', day: 2, title: `Iconic Landmark Tour & Verified Local Gastronomy in ${dest || 'Destination'}`, tag: 'Highlights', location: dest || 'Old town', keep: true },
+      { id: 'h3', day: 3, title: `Cultural Immersion & Hidden Local Sanctuary in ${dest || 'Destination'}`, tag: 'Discovery', location: dest || 'Artisan quarter', keep: true },
+      { id: 'h4', day: 4, title: `Golden Hour Scenic Spot & Farewell Dining Experience`, tag: 'Departure', location: dest || 'Panoramic viewpoint', keep: true },
     ];
   };
 
   const [sourceHighlights, setSourceHighlights] = useState<any[]>([]);
 
+  // Load real public trip itinerary snapshot from server
   useEffect(() => {
-    if (isAdapting) {
-      setSourceHighlights(getSourceTemplateHighlights(paramDestination, sourceTripId));
+    async function loadSourceTrip() {
+      if (!isAdapting) return;
+      if (sourceTripId) {
+        setIsLoadingSourceTrip(true);
+        try {
+          const snapshot = await apiService.getPublicTrip(sourceTripId);
+          if (snapshot && Array.isArray(snapshot.stops) && snapshot.stops.length > 0) {
+            setSourceTripData(snapshot);
+            setSourceHighlights(snapshot.stops.map((s: any) => ({
+              id: s.id,
+              day: s.day,
+              title: s.title,
+              tag: s.tag,
+              location: s.location,
+              keep: true,
+            })));
+            return;
+          }
+        } catch (err) {
+          console.warn('Could not load public trip snapshot, falling back:', err);
+        } finally {
+          setIsLoadingSourceTrip(false);
+        }
+      }
+      setSourceHighlights(getFallbackHighlights(paramDestination, sourceTripId));
     }
-  }, [isAdapting, paramDestination, sourceTripId]);
+    loadSourceTrip();
+  }, [isAdapting, sourceTripId, paramDestination]);
 
   const toggleHighlight = (id: string) => {
     setSourceHighlights((prev) =>
@@ -134,7 +163,7 @@ function PlannerContent() {
     }
 
     const days = parsed.days_count || (paramDuration ? parseInt(paramDuration, 10) : 4);
-    const budgetVal = parsed.budget || (paramBudget ? parseInt(paramBudget, 10) : 45000);
+    const budgetVal = parsed.budget || (paramBudget ? parseInt(paramBudget, 10) : 0);
     const vibeVal = parsed.vibe || paramVibe || 'culture';
     const interestsVal = parsed.interests && parsed.interests.length > 0 ? parsed.interests : (paramInterests ? paramInterests.split(',') : ['culture', 'sightseeing']);
 
@@ -147,9 +176,11 @@ function PlannerContent() {
 
     // Adapt source itinerary stops into DAIna generation prompt
     const keptHighlights = sourceHighlights.filter((h) => h.keep).map((h) => h.title);
+    const authorName = sourceTripData?.author || paramAuthor || 'community';
+    const budgetNotice = budgetVal === 0 ? "You didn't specify a budget. Create a comfortable mid-range plan and estimate the cost." : '';
     const finalPrompt = (isAdapting && keptHighlights.length > 0)
-      ? `${textToUse || `Trip to ${dest}`}. Adapting ${paramAuthor || 'community'} source itinerary. Keep core stops: ${keptHighlights.join('; ')}. Personalize pacing, stays, and budget for ${effectivePersona}.`
-      : (textToUse || `Trip to ${dest}`);
+      ? `${textToUse || `Trip to ${dest}`}. Adapting ${authorName}'s source itinerary. Keep core stops: ${keptHighlights.join('; ')}. Personalize pacing, stays, and budget for ${effectivePersona}. ${budgetNotice}`
+      : `${textToUse || `Trip to ${dest}`}. ${budgetNotice}`;
 
     try {
       const res = await apiService.generateItinerary({
@@ -180,7 +211,7 @@ function PlannerContent() {
         };
         addItinerary(formatted);
         setCurrentItinerary(formatted);
-        setSaveSuccessMsg(`✦ Itinerary saved to your Trip Workspace! Room Code: ${res.squad_room_code}`);
+        setSaveSuccessMsg(`✦ Your trip is ready! Room Code: ${res.squad_room_code}`);
       }
     } catch (err: any) {
       console.error('Failed to generate itinerary:', err);
@@ -250,8 +281,7 @@ function PlannerContent() {
               onClick={() => router.push(activeItinerary?.id ? `/trips?tripId=${activeItinerary.id}` : '/trips')}
               className="px-3.5 py-1.5 rounded-lg bg-emerald-600 text-white font-semibold hover:bg-emerald-700 flex items-center gap-1.5 text-xs cursor-pointer"
             >
-              <span>Open in Trip Workspace</span>
-              <ArrowRight className="w-3.5 h-3.5" />
+              <span>Open your trip →</span>
             </button>
           </div>
         )}
@@ -263,10 +293,10 @@ function PlannerContent() {
               <div className="space-y-0.5">
                 <div className="flex items-center gap-2">
                   <span className="px-2 py-0.5 rounded-full bg-orange-100 text-orange-800 text-[10px] font-bold uppercase tracking-wider">
-                    Source Template
+                    {sourceTripData?.author || paramAuthor ? `From ${sourceTripData?.author || paramAuthor}'s trip` : 'Original itinerary'}
                   </span>
                   <span className="text-xs text-slate-500 font-medium">
-                    by {paramAuthor || 'Community Traveler'}
+                    {sourceTripData?.title || (paramDestination ? `${paramDestination} Journey` : 'Community Journey')}
                   </span>
                 </div>
                 <h3 className="text-base font-serif-editorial font-bold text-slate-900">
@@ -279,7 +309,7 @@ function PlannerContent() {
             </div>
 
             <p className="text-xs text-slate-600">
-              Keep the highlights you love from this {paramDestination || 'getaway'}, remove stops you don&apos;t want, and DAIna will optimize the schedule and verified bookings for you:
+              Keep the highlights you love from this {sourceTripData?.destination || paramDestination || 'getaway'}, remove stops you don&apos;t want, and DAIna will optimize the schedule and help you find suitable travel options:
             </p>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
@@ -445,7 +475,7 @@ function PlannerContent() {
             </div>
           )}
 
-          {/* Conversational Confirmation Card with Inferred vs Explicit Indicators */}
+          {/* Conversational Confirmation Card with Clean Traveler Summary */}
           {parsedIntent && (parsedIntent.destination || paramDestination) && (
             <div className="mt-4 p-4 rounded-xl bg-orange-50/70 border border-orange-200 space-y-3">
               <div className="flex items-center justify-between">
@@ -459,54 +489,69 @@ function PlannerContent() {
               <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-800">
                 <span className="px-2.5 py-1 rounded-lg bg-white border border-orange-200/80 shadow-2xs">
                   📍 {parsedIntent.destination || paramDestination}
-                  <span className="text-[10px] text-slate-400 font-normal ml-1">· {parsedIntent.destination ? 'from prompt' : 'destination'}</span>
                 </span>
                 <span className="px-2.5 py-1 rounded-lg bg-white border border-orange-200/80 shadow-2xs">
                   ⏱️ {parsedIntent.days_count || (paramDuration ? `${paramDuration} Days` : '4 Days')}
-                  <span className="text-[10px] text-slate-400 font-normal ml-1">· {parsedIntent.days_count ? 'explicit' : 'suggested'}</span>
                 </span>
                 <span className="px-2.5 py-1 rounded-lg bg-white border border-orange-200/80 shadow-2xs">
                   👥 {parsedIntent.travellers} {parsedIntent.travellers === 1 ? 'traveler' : 'travelers'}
-                  <span className="text-[10px] text-slate-400 font-normal ml-1">· {parsedIntent.travellers !== 2 ? 'explicit' : 'inferred'}</span>
                 </span>
                 <span className="px-2.5 py-1 rounded-lg bg-white border border-orange-200/80 shadow-2xs">
-                  💰 ₹{(parsedIntent.budget || (paramBudget ? parseInt(paramBudget, 10) : 45000)).toLocaleString('en-IN')}
-                  <span className="text-[10px] text-slate-400 font-normal ml-1">· {parsedIntent.budget ? 'explicit' : 'estimated'}</span>
+                  💰 {(parsedIntent.budget > 0 || (paramBudget && parseInt(paramBudget, 10) > 0))
+                    ? `₹${(parsedIntent.budget || parseInt(paramBudget || '0', 10)).toLocaleString('en-IN')}`
+                    : 'Budget: Not specified'}
                 </span>
                 {parsedIntent.origin && (
                   <span className="px-2.5 py-1 rounded-lg bg-white border border-orange-200/80 shadow-2xs">
                     🛫 From {parsedIntent.origin}
-                    <span className="text-[10px] text-slate-400 font-normal ml-1">· explicit</span>
                   </span>
                 )}
                 {(parsedIntent.vibe || paramVibe) && (
                   <span className="px-2.5 py-1 rounded-lg bg-white border border-orange-200/80 shadow-2xs">
                     ✨ {parsedIntent.vibe || paramVibe}
-                    <span className="text-[10px] text-slate-400 font-normal ml-1">· inferred</span>
                   </span>
                 )}
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-orange-200/60">
+              {/* Expandable Explanation for Traveler Understanding */}
+              <div className="flex items-center justify-between pt-2 border-t border-orange-200/60 text-xs">
                 <button
                   type="button"
-                  onClick={() => setShowArchitect(true)}
-                  className="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 cursor-pointer"
+                  onClick={() => setShowUnderstandingDetails(!showUnderstandingDetails)}
+                  className="text-[11px] text-orange-800 hover:text-orange-950 font-medium underline cursor-pointer"
                 >
-                  Edit details
+                  {showUnderstandingDetails ? 'Hide details' : 'ⓘ How DAIna understood your request'}
                 </button>
-                <Button
-                  type="button"
-                  variant="primary"
-                  size="sm"
-                  onClick={() => handleBuildPlan()}
-                  isLoading={isGenerating}
-                  className="bg-orange-600 hover:bg-orange-700 text-white font-semibold text-xs px-4 py-1.5 cursor-pointer shadow-xs"
-                >
-                  <Sparkles className="w-3.5 h-3.5 mr-1" />
-                  {isAdapting ? 'Adapt & create trip →' : 'Create my trip →'}
-                </Button>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowArchitect(true)}
+                    className="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 cursor-pointer"
+                  >
+                    Edit details
+                  </button>
+                  <Button
+                    type="button"
+                    variant="primary"
+                    size="sm"
+                    onClick={() => handleBuildPlan()}
+                    isLoading={isGenerating}
+                    className="bg-orange-600 hover:bg-orange-700 text-white font-semibold text-xs px-4 py-1.5 cursor-pointer shadow-xs"
+                  >
+                    <Sparkles className="w-3.5 h-3.5 mr-1" />
+                    {isAdapting ? 'Adapt & create trip →' : 'Create my trip →'}
+                  </Button>
+                </div>
               </div>
+
+              {showUnderstandingDetails && (
+                <div className="p-3 rounded-lg bg-white/90 border border-orange-200 text-[11px] text-slate-700 space-y-1.5 animate-in fade-in">
+                  <p>• <strong>Travelers:</strong> {parsedIntent.travellers} ({parsedIntent.companionsSource === 'prompt' ? 'explicitly stated in your request' : 'default recommendation for a pair/couple'})</p>
+                  <p>• <strong>Budget:</strong> {parsedIntent.budget > 0 ? `₹${parsedIntent.budget.toLocaleString('en-IN')} (explicitly provided)` : 'Not specified — DAIna will create a comfortable mid-range plan and estimate the cost.'}</p>
+                  <p>• <strong>Trip Style:</strong> {parsedIntent.vibe || 'Leisure & Scenic'} (personalized pacing based on your request)</p>
+                </div>
+              )}
             </div>
           )}
 
@@ -568,44 +613,57 @@ function PlannerContent() {
               <Button
                 variant="primary"
                 size="md"
-                className="bg-orange-500 hover:bg-orange-600 text-white font-semibold text-xs px-5 py-2.5 rounded-xl shrink-0 cursor-pointer"
+                className="bg-orange-500 hover:bg-orange-600 text-white font-semibold text-xs px-5 py-2.5 rounded-xl shrink-0 cursor-pointer shadow-xs"
                 onClick={() => router.push(activeItinerary?.id ? `/trips?tripId=${activeItinerary.id}` : '/trips')}
               >
                 <Luggage className="w-4 h-4 mr-1.5" />
-                Manage in Trip Workspace →
+                Open your trip →
               </Button>
             </div>
 
             <div className="space-y-4">
-              {activeItinerary.days.map((day: any) => (
-                <div key={day.dayNumber} className="p-5 rounded-2xl bg-white border border-slate-200 space-y-4 shadow-2xs">
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                    <div className="space-y-0.5">
-                      <span className="text-[11px] font-bold text-orange-600 uppercase tracking-wider">Day {day.dayNumber}</span>
-                      <h3 className="text-lg font-semibold text-slate-900">{day.title}</h3>
+              {activeItinerary.days.map((day: any) => {
+                const isExpanded = expandedDays[day.dayNumber] ?? (day.dayNumber === 1);
+                return (
+                  <div key={day.dayNumber} className="rounded-2xl bg-white border border-slate-200 overflow-hidden shadow-2xs">
+                    <div
+                      onClick={() => setExpandedDays((prev) => ({ ...prev, [day.dayNumber]: !isExpanded }))}
+                      className="p-5 flex items-center justify-between cursor-pointer hover:bg-slate-50/70 transition-colors"
+                    >
+                      <div className="space-y-0.5">
+                        <span className="text-[11px] font-bold text-orange-600 uppercase tracking-wider">Day {day.dayNumber}</span>
+                        <h3 className="text-lg font-semibold text-slate-900">{day.title}</h3>
+                        <p className="text-xs text-slate-500 font-medium">
+                          {day.weather || 'Pleasant 🌤️'} · {day.activities?.length || 0} stops planned
+                        </p>
+                      </div>
+                      <span className="px-3 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold shrink-0">
+                        {isExpanded ? 'Collapse' : 'Expand day'}
+                      </span>
                     </div>
-                    <span className="text-xs text-slate-500 font-medium">{day.weather || 'Pleasant 🌤️'}</span>
-                  </div>
 
-                  <div className="space-y-2.5">
-                    {day.activities?.map((act: any, aIdx: number) => {
-                      const tagLabel = act.placeType === 'H' ? 'Hotel' : act.placeType === 'R' ? 'Dining' : 'Activity';
-                      return (
-                        <div key={aIdx} className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 flex items-start justify-between gap-3 text-xs">
-                          <div className="space-y-0.5">
-                            <span className="font-mono text-[11px] font-semibold text-orange-600">{act.time}</span>
-                            <p className="font-semibold text-slate-900">{act.description}</p>
-                            <p className="text-[11px] text-slate-500">{act.location}</p>
-                          </div>
-                          <span className="px-2 py-0.5 rounded-md bg-white border border-slate-200 text-slate-700 text-[10px] font-medium shrink-0">
-                            {tagLabel}
-                          </span>
-                        </div>
-                      );
-                    })}
+                    {isExpanded && (
+                      <div className="p-5 pt-0 space-y-2.5 border-t border-slate-100">
+                        {day.activities?.map((act: any, aIdx: number) => {
+                          const tagLabel = act.placeType === 'H' ? 'Hotel' : act.placeType === 'R' ? 'Dining' : 'Activity';
+                          return (
+                            <div key={aIdx} className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 flex items-start justify-between gap-3 text-xs">
+                              <div className="space-y-0.5">
+                                <span className="font-mono text-[11px] font-semibold text-orange-600">{act.time}</span>
+                                <p className="font-semibold text-slate-900">{act.description}</p>
+                                <p className="text-[11px] text-slate-500">{act.location}</p>
+                              </div>
+                              <span className="px-2 py-0.5 rounded-md bg-white border border-slate-200 text-slate-700 text-[10px] font-medium shrink-0">
+                                {tagLabel}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </section>
         )}

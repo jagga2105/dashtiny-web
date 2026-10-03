@@ -426,8 +426,8 @@ export default function CommunityPage() {
                     </Button>
                   </div>
 
-                  <span className="text-xs text-slate-400">
-                    {trip.comments_count} comments
+                  <span className="text-[11px] text-slate-400 font-medium select-none">
+                    {trip.comments_count ? `${trip.comments_count} notes & tips` : 'Traveler notes'}
                   </span>
                 </div>
               </Card>

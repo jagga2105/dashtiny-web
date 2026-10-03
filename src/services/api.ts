@@ -248,6 +248,10 @@ export const apiService = {
     return request<any>(`/trips/${tripId}`);
   },
 
+  async getPublicTrip(tripId: string) {
+    return request<any>(`/trips/${tripId}/public`);
+  },
+
   async removeTripActivity(tripId: string, activityId: string) {
     return request<any>(`/trips/${tripId}/activities/${activityId}`, {
       method: 'DELETE',

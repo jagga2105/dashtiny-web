@@ -21,7 +21,7 @@ interface VoucherItem {
 }
 
 export default function RewardsPage() {
-  const { user, updateCoins } = useAuthStore();
+  const { user, updateCoins, setCoins } = useAuthStore();
   const [redeemed, setRedeemed] = useState<string | null>(null);
   const [unlockedCode, setUnlockedCode] = useState<string | null>(null);
   const [isRedeeming, setIsRedeeming] = useState(false);
@@ -57,6 +57,9 @@ export default function RewardsPage() {
     async function loadVault() {
       try {
         const data = await apiService.getRewardVault();
+        if (data && typeof data.gold_coins === 'number') {
+          setCoins(data.gold_coins);
+        }
         if (data && data.vouchers && data.vouchers.length > 0) {
           setVouchersList(
             data.vouchers.map((v: any) => ({
@@ -75,7 +78,7 @@ export default function RewardsPage() {
       }
     }
     loadVault();
-  }, []);
+  }, [setCoins]);
 
   const handleRedeem = async (vouchId: string, cost: number) => {
     setErrorMsg(null);
@@ -89,7 +92,14 @@ export default function RewardsPage() {
     try {
       const res = await apiService.redeemRewardVoucher(vouchId);
       if (res && res.status === 'redeemed') {
-        updateCoins(-cost);
+        // Server-authoritative balance update
+        if (typeof res.remaining_credits === 'number') {
+          setCoins(res.remaining_credits);
+        } else if (typeof res.remaining_coins === 'number') {
+          setCoins(res.remaining_coins);
+        } else {
+          updateCoins(-cost);
+        }
         setRedeemed(vouchId);
         setUnlockedCode(res.voucher_code || 'UNLOCKED');
       } else {
@@ -104,7 +114,8 @@ export default function RewardsPage() {
     }
   };
 
-  const travelCredits = user?.coins ?? 250;
+  const numericCoins = user?.coins ?? 0;
+  const travelCredits = user ? (user.coins ?? 0) : 'Loading...';
 
   return (
     <div className="min-h-screen pb-24 md:pb-12 flex flex-col bg-[#FAFAF9] text-slate-900 font-sans selection:bg-orange-500 selection:text-white">
@@ -144,7 +155,7 @@ export default function RewardsPage() {
               <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 font-bold font-mono text-[11px]">
                 +50
               </span>
-              <span className="font-medium">Save a verified booking to a trip</span>
+              <span className="font-medium">Save a booking reference to a trip</span>
             </div>
             <div className="flex items-center gap-2.5 p-3 rounded-xl bg-slate-50/80 border border-slate-100">
               <span className="px-2 py-0.5 rounded-md bg-sky-100 text-sky-800 font-bold font-mono text-[11px]">
@@ -226,17 +237,17 @@ export default function RewardsPage() {
                     </div>
                   ) : (
                     <Button
-                      variant={travelCredits >= vouch.cost ? 'primary' : 'outline'}
+                      variant={numericCoins >= vouch.cost ? 'primary' : 'outline'}
                       size="sm"
                       className="w-full text-xs font-semibold cursor-pointer"
                       onClick={() => handleRedeem(vouch.id, vouch.cost)}
-                      disabled={travelCredits < vouch.cost || isRedeeming}
+                      disabled={numericCoins < vouch.cost || isRedeeming}
                     >
                       {isRedeeming && redeemed === vouch.id
                         ? 'Unlocking Perk...'
-                        : travelCredits >= vouch.cost
+                        : numericCoins >= vouch.cost
                         ? `Redeem Perk (${vouch.cost} Credits) →`
-                        : `Need ${vouch.cost - travelCredits} More Credits`}
+                        : `Need ${vouch.cost - numericCoins} More Credits`}
                     </Button>
                   )}
                 </div>

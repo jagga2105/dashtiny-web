@@ -157,18 +157,24 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   updateCoins: (delta: number) =>
-    set((state) => ({
-      user: state.user
-        ? { ...state.user, coins: Math.max(0, state.user.coins + delta) }
-        : null,
-    })),
+    set((state) => {
+      if (!state.user) return { user: null };
+      const updated = { ...state.user, coins: Math.max(0, state.user.coins + delta) };
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('dashtiny_user', JSON.stringify(updated));
+      }
+      return { user: updated };
+    }),
 
   setCoins: (amount: number) =>
-    set((state) => ({
-      user: state.user
-        ? { ...state.user, coins: Math.max(0, amount) }
-        : null,
-    })),
+    set((state) => {
+      if (!state.user) return { user: null };
+      const updated = { ...state.user, coins: Math.max(0, amount) };
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('dashtiny_user', JSON.stringify(updated));
+      }
+      return { user: updated };
+    }),
 
   openAuthModal: (reason, onAuthSuccess) => {
     set({

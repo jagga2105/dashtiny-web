@@ -91,6 +91,97 @@ def get_my_trips(user: User = Depends(get_current_user), db: Session = Depends(g
 
     return results
 
+COMMUNITY_PUBLIC_SNAPSHOTS = {
+    "trip_1": {
+        "id": "trip_1",
+        "title": "Kyoto Cultural & Gastronomy Getaway",
+        "author": "Rohan Sharma",
+        "author_name": "Rohan Sharma",
+        "destination": "Kyoto, Japan",
+        "duration_days": 6,
+        "budget_est": "₹72,000",
+        "vibe": "culture",
+        "stops": [
+            {"id": "s1", "day": 1, "time": "08:30", "title": "Fushimi Inari Taisha Dawn Shrine Walk", "location": "Fushimi, Kyoto", "tag": "Historic Shrine", "keep": True},
+            {"id": "s2", "day": 1, "time": "14:00", "title": "Tofuku-ji Hojo Zen Rock Garden", "location": "Higashiyama, Kyoto", "tag": "Zen Sanctuary", "keep": True},
+            {"id": "s3", "day": 2, "time": "10:00", "title": "Gion Shirakawa Historic District Stroll", "location": "Gion, Kyoto", "tag": "Cultural Walk", "keep": True},
+            {"id": "s4", "day": 2, "time": "17:30", "title": "Traditional Ochaya Tea Ceremony Experience", "location": "Kennin-ji area", "tag": "Artisanal Tasting", "keep": True},
+            {"id": "s5", "day": 3, "time": "11:30", "title": "Nishiki Market Culinary Tastings & Matcha Crawl", "location": "Central Kyoto", "tag": "Gastronomy", "keep": True},
+            {"id": "s6", "day": 3, "time": "16:00", "title": "Philosopher’s Path Scenic Canal Walk", "location": "Sakyo Ward", "tag": "Scenic Walk", "keep": True},
+            {"id": "s7", "day": 4, "time": "07:30", "title": "Arashiyama Bamboo Grove Sunrise Access", "location": "Arashiyama", "tag": "Nature & Photography", "keep": True},
+            {"id": "s8", "day": 4, "time": "10:30", "title": "Tenryu-ji Sogenchi Landscape Garden", "location": "Arashiyama", "tag": "UNESCO Heritage", "keep": True},
+            {"id": "s9", "day": 5, "time": "09:30", "title": "Uji Day Excursion: Byodoin Phoenix Hall", "location": "Uji, Kyoto", "tag": "Artisanal Excursion", "keep": True},
+            {"id": "s10", "day": 5, "time": "15:00", "title": "Tsuen Tea Oldest Matcha Roastery Tasting", "location": "Uji Riverbank", "tag": "Culinary Heritage", "keep": True},
+            {"id": "s11", "day": 6, "time": "09:00", "title": "Kiyomizu-dera Panoramic Wooden Stage", "location": "Higashiyama", "tag": "Scenic Panorama", "keep": True},
+            {"id": "s12", "day": 6, "time": "13:00", "title": "Sannenzaka & Ninenzaka Pottery Lane Stroll", "location": "Higashiyama", "tag": "Artisanal Craft", "keep": True}
+        ]
+    },
+    "trip_2": {
+        "id": "trip_2",
+        "title": "South Goa Slow Coastal & Seafood Escape",
+        "author": "Ananya Verma",
+        "author_name": "Ananya Verma",
+        "destination": "Palolem & Agonda, Goa",
+        "duration_days": 4,
+        "budget_est": "₹28,000",
+        "vibe": "beach",
+        "stops": [
+            {"id": "s1", "day": 1, "time": "12:00", "title": "Check-in at Secluded Cliffside Eco-Villa", "location": "Canacona, South Goa", "tag": "Arrival Sanctuary", "keep": True},
+            {"id": "s2", "day": 1, "time": "17:30", "title": "Palolem Beach Golden Hour & Sundowner", "location": "Palolem Beach", "tag": "Coastal Sunset", "keep": True},
+            {"id": "s3", "day": 2, "time": "07:30", "title": "Agonda Backwater Kayaking & Mangrove Birding", "location": "Agonda River", "tag": "Water Exploration", "keep": True},
+            {"id": "s4", "day": 2, "time": "13:30", "title": "Authentic Saraswat Seafood Thali at Hidden Shack", "location": "Agonda Beach Road", "tag": "Authentic Culinary", "keep": True},
+            {"id": "s5", "day": 3, "time": "10:30", "title": "Cabo de Rama Historic Portuguese Fort Exploration", "location": "Cabo de Rama Cliff", "tag": "Scenic Heritage", "keep": True},
+            {"id": "s6", "day": 3, "time": "16:30", "title": "Cliffside Artisan Cafe Espresso & Sunset Lookout", "location": "Cabo de Rama", "tag": "Slow Living", "keep": True},
+            {"id": "s7", "day": 4, "time": "08:00", "title": "Galgibaga Olive Ridley Turtle Sanctuary Morning Walk", "location": "Galgibaga Beach", "tag": "Nature Sanctuary", "keep": True},
+            {"id": "s8", "day": 4, "time": "12:00", "title": "Traditional Goan Poee & Organic Cashew Farm Visit", "location": "Canacona Hinterland", "tag": "Farewell Heritage", "keep": True}
+        ]
+    }
+}
+
+@router.get("/{trip_id}/public")
+def get_public_trip_snapshot(trip_id: str, db: Session = Depends(get_db)):
+    """
+    Get public read-only itinerary snapshot for community adaptation/forking.
+    Accessible without personal authorization tokens; strips private bookings and user data.
+    """
+    if trip_id in COMMUNITY_PUBLIC_SNAPSHOTS:
+        return COMMUNITY_PUBLIC_SNAPSHOTS[trip_id]
+
+    it = db.query(Itinerary).filter(Itinerary.id == trip_id).first()
+    if it:
+        owner = db.query(User).filter(User.id == it.owner_id).first()
+        days = db.query(ItineraryDay).filter(ItineraryDay.itinerary_id == it.id).order_by(ItineraryDay.day_number.asc()).all()
+        stops = []
+        for d in days:
+            acts = d.activities or []
+            for idx, a in enumerate(acts):
+                stops.append({
+                    "id": a.get("id", f"d{d.day_number}_a{idx}"),
+                    "day": d.day_number,
+                    "time": a.get("time", "10:00"),
+                    "title": a.get("description") or a.get("title", "Local Experience"),
+                    "location": a.get("location", it.destination),
+                    "tag": a.get("tag", "Sightseeing"),
+                    "keep": True
+                })
+        return {
+            "id": it.id,
+            "title": it.title,
+            "author": owner.full_name if owner else "Community Explorer",
+            "author_name": owner.full_name if owner else "Community Explorer",
+            "destination": it.destination,
+            "duration_days": len(days) or 3,
+            "budget_est": f"₹{int(it.total_budget):,} est." if it.total_budget else "Flexible",
+            "vibe": it.persona or "Discovery",
+            "stops": stops
+        }
+
+    for key, snap in COMMUNITY_PUBLIC_SNAPSHOTS.items():
+        if snap["destination"].lower() in trip_id.lower() or trip_id.lower() in snap["destination"].lower():
+            return snap
+
+    raise HTTPException(status_code=404, detail="Public itinerary snapshot not found")
+
 @router.get("/{trip_id}")
 def get_trip_details(
     trip_id: str,

@@ -692,5 +692,33 @@ def test_explore_sanctuaries_taxonomy(client):
     weekend_items = res_weekend.json()
     assert len(weekend_items) > 0
 
+def test_public_trip_snapshot_endpoint(client):
+    """
+    Test GET /api/v1/trips/{trip_id}/public returns real source itinerary snapshot with stops.
+    """
+    res = client.get("/api/v1/trips/trip_1/public")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["id"] == "trip_1"
+    assert data["author"] == "Rohan Sharma"
+    assert "Kyoto" in data["destination"]
+    assert len(data["stops"]) == 12
+    assert data["stops"][0]["title"] == "Fushimi Inari Taisha Dawn Shrine Walk"
 
+    res_goa = client.get("/api/v1/trips/trip_2/public")
+    assert res_goa.status_code == 200
+    data_goa = res_goa.json()
+    assert data_goa["id"] == "trip_2"
+    assert len(data_goa["stops"]) == 8
 
+def test_rewards_authoritative_redemption(client):
+    """
+    Test POST /api/v1/rewards/redeem returns authoritative remaining balance in remaining_credits and remaining_coins.
+    """
+    res = client.post("/api/v1/rewards/redeem", json={"voucher_id": "vch_01"})
+    assert res.status_code == 200
+    data = res.json()
+    assert data["status"] == "redeemed"
+    assert "remaining_coins" in data
+    assert "remaining_credits" in data
+    assert data["remaining_coins"] == data["remaining_credits"]

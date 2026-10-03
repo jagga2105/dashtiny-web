@@ -119,5 +119,6 @@ def redeem_reward_voucher(
         "brand": voucher.brand,
         "discount": voucher.discount,
         "remaining_coins": profile.reward_coins,
+        "remaining_credits": profile.reward_coins,
         "message": f"Voucher unlocked! Use promo code {voucher.code} at checkout."
     }

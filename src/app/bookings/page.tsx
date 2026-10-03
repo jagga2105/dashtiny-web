@@ -46,12 +46,12 @@ function BookingsContent() {
   const [activeTrips, setActiveTrips] = useState<any[]>([]);
   const [selectedTripId, setSelectedTripId] = useState<string>('');
 
-  // Flight search states
+  // Flight search states (Clean defaults — populated via selected Trip)
   const [flightOrigin, setFlightOrigin] = useState('BLR');
-  const [flightDest, setFlightDest] = useState('GOI');
-  const [departureDate, setDepartureDate] = useState('2026-10-15');
-  const [returnDate, setReturnDate] = useState('2026-10-20');
-  const [passengers, setPassengers] = useState(2);
+  const [flightDest, setFlightDest] = useState('');
+  const [departureDate, setDepartureDate] = useState('');
+  const [returnDate, setReturnDate] = useState('');
+  const [passengers, setPassengers] = useState(1);
   const [cabinClass, setCabinClass] = useState('economy');
   const [tripType, setTripType] = useState<'round' | 'oneway'>('round');
   const [flightsList, setFlightsList] = useState<any[]>([]);
@@ -87,6 +87,14 @@ function BookingsContent() {
           : parseDurationMinutes(fastest.duration);
         return fMinutes < fastestMinutes ? f : fastest;
       }, flightsList[0])
+    : null;
+
+  // Best Value Recommendation: balances direct transit, duration under 3h, and reasonable price
+  const recommendedFlight = flightsList.length > 0
+    ? (flightsList.find((f) => {
+        const dur = typeof f.duration_minutes === 'number' && f.duration_minutes > 0 ? f.duration_minutes : parseDurationMinutes(f.duration);
+        return (!f.stops || f.stops === 0) && dur <= 180 && f.id !== lowestFareFlight?.id;
+      }) || flightsList[0])
     : null;
 
   const getBookingProvenanceBadge = (provenance?: string) => {
@@ -130,11 +138,11 @@ function BookingsContent() {
     );
   };
 
-  // Hotel search states
-  const [hotelDest, setHotelDest] = useState('Goa');
-  const [hotelGuests, setHotelGuests] = useState(2);
-  const [hotelCheckIn, setHotelCheckIn] = useState('2026-10-15');
-  const [hotelCheckOut, setHotelCheckOut] = useState('2026-10-20');
+  // Hotel search states (Clean defaults — populated via selected Trip)
+  const [hotelDest, setHotelDest] = useState('');
+  const [hotelGuests, setHotelGuests] = useState(1);
+  const [hotelCheckIn, setHotelCheckIn] = useState('');
+  const [hotelCheckOut, setHotelCheckOut] = useState('');
   const [hotelsList, setHotelsList] = useState<any[]>([]);
   const [isSearchingHotels, setIsSearchingHotels] = useState(false);
   const [hotelError, setHotelError] = useState<string | null>(null);
@@ -208,8 +216,12 @@ function BookingsContent() {
     cabin = cabinClass,
     type = tripType
   ) => {
-    setIsSearchingFlights(true);
     setFlightError(null);
+    if (!dest) {
+      setFlightError('Please choose an active trip above or specify a destination airport code (e.g. GOI, DEL, BOM).');
+      return;
+    }
+    setIsSearchingFlights(true);
     try {
       const results = await apiService.searchFlights({
         origin: orig,
@@ -238,8 +250,12 @@ function BookingsContent() {
     inDate = hotelCheckIn,
     outDate = hotelCheckOut
   ) => {
-    setIsSearchingHotels(true);
     setHotelError(null);
+    if (!dest) {
+      setHotelError('Please choose an active trip above or enter a destination city (e.g. Goa, Kyoto, Manali).');
+      return;
+    }
+    setIsSearchingHotels(true);
     try {
       const results = await apiService.searchHotels({
         destination: dest,
@@ -584,28 +600,34 @@ function BookingsContent() {
 
               {/* Stale Flight Search Warning */}
               {isFlightSearchStale && (
-                <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-950 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in">
-                  <div className="flex items-center gap-2">
-                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-                    <span className="font-semibold">Search details changed — click &quot;Update results&quot; to refresh offers for {departureDate}</span>
+                <div className="p-4 rounded-xl bg-amber-50 border border-amber-300 text-amber-950 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs animate-in fade-in">
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                      <span className="font-bold text-sm">These offers match your previous search</span>
+                    </div>
+                    <p className="text-slate-600 text-[11px]">
+                      Search details changed — click &quot;Update results&quot; to fetch fresh fares for {departureDate || 'new dates'}.
+                    </p>
                   </div>
                   <Button
                     variant="primary"
                     size="sm"
                     onClick={() => loadFlights(flightOrigin, flightDest, departureDate, returnDate, passengers, cabinClass, tripType)}
                     isLoading={isSearchingFlights}
-                    className="bg-amber-600 hover:bg-amber-700 text-white text-xs px-3.5 py-1.5 rounded-lg shrink-0 cursor-pointer"
+                    className="bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs px-4 py-2 rounded-xl shrink-0 cursor-pointer shadow-sm"
                   >
-                    Update results
+                    Update results →
                   </Button>
                 </div>
               )}
 
               {/* Flight Offers List with Algorithm-Driven Decision Support */}
-              <div className="space-y-3">
+              <div className={`space-y-3 transition-opacity duration-200 ${isFlightSearchStale ? 'opacity-60 pointer-events-none' : ''}`}>
                 {flightsList.map((fl, idx) => {
                   const isLowestFare = lowestFareFlight && fl.id === lowestFareFlight.id;
                   const isFastest = fastestFlight && fl.id === fastestFlight.id;
+                  const isRecommended = recommendedFlight && fl.id === recommendedFlight.id;
 
                   return (
                     <Card
@@ -618,19 +640,19 @@ function BookingsContent() {
                           <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-mono text-[10px] font-semibold">
                             {fl.flight_number}
                           </span>
-                          {isLowestFare && (
+                          {isRecommended && (
+                            <span className="px-2 py-0.5 rounded bg-orange-100 text-orange-800 text-[10px] font-bold uppercase tracking-wide">
+                              Recommended for your trip
+                            </span>
+                          )}
+                          {isLowestFare && !isRecommended && (
                             <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10px] font-bold uppercase tracking-wide">
                               Lowest price · ₹{fl.price?.toLocaleString('en-IN')}
                             </span>
                           )}
-                          {isFastest && !isLowestFare && (
+                          {isFastest && !isLowestFare && !isRecommended && (
                             <span className="px-2 py-0.5 rounded bg-sky-100 text-sky-800 text-[10px] font-bold uppercase tracking-wide">
                               Fastest
-                            </span>
-                          )}
-                          {!isLowestFare && !isFastest && (
-                            <span className="px-2 py-0.5 rounded bg-orange-100 text-orange-800 text-[10px] font-bold uppercase tracking-wide">
-                              Recommended for your trip
                             </span>
                           )}
                           {getBookingProvenanceBadge(fl.provenance)}
@@ -648,23 +670,20 @@ function BookingsContent() {
 
                         {/* Decision Support Rationale with Factual Criteria */}
                         <div className="flex flex-wrap items-center gap-2 pt-1 text-xs text-slate-600">
-                          <span className="inline-flex items-center gap-1 text-emerald-700 font-medium">
-                            ✓ Fits trip date ({departureDate})
-                          </span>
+                          {isRecommended && (
+                            <span className="inline-flex items-center gap-1 text-orange-700 font-semibold">
+                              ✓ Best Value: Direct flight arrives in time for Day 1 check-in
+                            </span>
+                          )}
+                          {isLowestFare && (
+                            <span className="inline-flex items-center gap-1 text-emerald-700 font-semibold">
+                              ✓ Lowest fare among providers
+                            </span>
+                          )}
                           <span>•</span>
                           <span className="inline-flex items-center gap-1 text-slate-600">
-                            ✓ Direct transit matches your pacing
+                            ✓ Direct transit matches your trip pacing
                           </span>
-                          {isLowestFare && (
-                            <>
-                              <span>•</span>
-                              <span className="text-emerald-700 font-semibold">
-                                {fl.provenance === 'VERIFIED'
-                                  ? '✓ Lowest total cost among verified providers'
-                                  : '✓ Lowest price in current catalog (estimated)'}
-                              </span>
-                            </>
-                          )}
                         </div>
                       </div>
 
@@ -799,25 +818,30 @@ function BookingsContent() {
 
             {/* Stale Hotel Search Warning */}
             {isHotelSearchStale && (
-              <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-950 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in">
-                <div className="flex items-center gap-2">
-                  <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-                  <span className="font-semibold">Stay criteria changed — click &quot;Update results&quot; to refresh stays for {hotelDest}</span>
+              <div className="p-4 rounded-xl bg-amber-50 border border-amber-300 text-amber-950 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs animate-in fade-in">
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span className="font-bold text-sm">These offers match your previous search</span>
+                  </div>
+                  <p className="text-slate-600 text-[11px]">
+                    Stay criteria changed — click &quot;Update results&quot; to refresh stays for {hotelDest || 'new criteria'}.
+                  </p>
                 </div>
                 <Button
                   variant="primary"
                   size="sm"
                   onClick={() => loadHotels(hotelDest, hotelGuests, hotelCheckIn, hotelCheckOut)}
                   isLoading={isSearchingHotels}
-                  className="bg-amber-600 hover:bg-amber-700 text-white text-xs px-3.5 py-1.5 rounded-lg shrink-0 cursor-pointer"
+                  className="bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs px-4 py-2 rounded-xl shrink-0 cursor-pointer shadow-sm"
                 >
-                  Update results
+                  Update results →
                 </Button>
               </div>
             )}
 
-            {/* Hotel Cards Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            {/* Hotel Cards Grid with Visual Muting when Stale */}
+            <div className={`grid grid-cols-1 md:grid-cols-2 gap-5 transition-opacity duration-200 ${isHotelSearchStale ? 'opacity-60 pointer-events-none' : ''}`}>
               {hotelsList.map((ht) => (
                 <Card
                   key={ht.id}
