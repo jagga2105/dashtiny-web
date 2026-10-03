@@ -60,9 +60,11 @@ export const AIRPORT_REGISTRY: Record<string, AirportMapping> = {
 };
 
 /**
- * Resolves destination or free text to standard 3-letter IATA code
+ * Resolves destination or free text to standard 3-letter IATA code.
+ * Temporary client-side compatibility helper (authoritative search is via /locations/search).
+ * Unknown destinations remain unresolved (empty string) instead of silently mapping to Goa.
  */
-export function getAirportCodeForDestination(destination: string, fallbackCode: string = 'GOI'): string {
+export function getAirportCodeForDestination(destination: string, fallbackCode: string = ''): string {
   if (!destination) return fallbackCode;
   
   const cleaned = destination.trim().toLowerCase();
@@ -90,7 +92,7 @@ export function getAirportCodeForDestination(destination: string, fallbackCode: 
 /**
  * Resolves a friendly city name from destination string
  */
-export function getCityNameForDestination(destination: string, fallbackCity: string = 'Goa'): string {
+export function getCityNameForDestination(destination: string, fallbackCity: string = ''): string {
   if (!destination) return fallbackCity;
   const cleaned = destination.trim().toLowerCase();
 
@@ -106,5 +108,5 @@ export function getCityNameForDestination(destination: string, fallbackCity: str
     return parts[0];
   }
 
-  return destination;
+  return destination || fallbackCity;
 }

@@ -86,5 +86,15 @@ Every single data element presented in the DashTiny interface carries its proven
 4. **Canonical Types & Zero Fallbacks**:
    - Unified `@/types/trip` models (`Trip`, `TripDay`, `TripActivity`, `TripRevision`, `TripProposal`) used across all frontend stores and views.
    - Removed misleading client and backend fallbacks (`travellers or 2`, `duration or 3`, `"DASH-ROOM"`, "latest trip").
-5. **Inventory Honesty**:
-   - Search & compare inventory explicitly designated as `CURATED / DEMO` offers, never disguised as live OTA inventory.
+5. **Inventory Honesty & Provider Abstraction**:
+   - Search & compare inventory explicitly designated as `CURATED` offers with `ESTIMATED` availability and catalog pricing, never disguised as live OTA inventory. Live external OTA integrations are not yet active.
+   - Provider abstraction layer (`FlightProvider`, `HotelProvider`) wires directly to `CuratedFlightProvider` and `CuratedHotelProvider`.
+6. **Location Domain & PostgreSQL Airports**:
+   - Replaced client-side airport registry as source of truth with PostgreSQL `airports` table and APIs (`/locations/search`, `/locations/airports/{iata_code}`).
+   - Unknown destination codes remain clean (`""`); no silent fallback to Goa (`GOI`).
+7. **Modular Trip Workspace Extraction**:
+   - Extracted `src/app/trips/page.tsx` into modular domain subcomponents in `@/components/trip`: `TripHeader`, `TripDayTimeline`, `TripActivityCard`, `TripCopilot`, `TripProposalCard`, `TripMap`, `TripBookings`, `TripBudget`, `TripChecklist`, `TripHistory`.
+   - Zero change to API contracts or UI behavior; pure maintainability and structural clarity.
+8. **Pure PostgreSQL Mutations**:
+   - External lookups (e.g., geocoding) moved strictly to proposal/research layer (`create_ai_proposal`). Database transactions inside `TripRevisionService` execute with zero external network dependencies.
+   - Revision state semantics unified: `TripRevision N` captures canonical resulting Trip state **AFTER** mutation $N$.

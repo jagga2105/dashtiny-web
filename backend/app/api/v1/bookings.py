@@ -12,10 +12,17 @@ from app.db.database import get_db
 from app.models.models import Booking, User, UserProfile, Itinerary, SquadRoom, SquadMember, RewardTransaction
 from app.api.deps import get_current_user
 
-from app.ai.tools.flight_search import search_flights
-from app.ai.tools.hotel_search import search_hotels
+from app.services.providers import (
+    FlightProvider,
+    HotelProvider,
+    CuratedFlightProvider,
+    CuratedHotelProvider,
+)
 
 router = APIRouter(prefix="/bookings", tags=["Booking Aggregator & Reservations"])
+
+_flight_provider: FlightProvider = CuratedFlightProvider()
+_hotel_provider: HotelProvider = CuratedHotelProvider()
 
 class CreateBookingRequest(BaseModel):
     category: str  # flight, hotel, train, bus, cab
@@ -38,13 +45,15 @@ def search_flights_endpoint(
     trip_type: str = "roundtrip"
 ):
     """
-    Search and normalize live flight inventory into FlightOffer schema.
+    Search curated travel catalog flight offers normalized into FlightOffer schema.
+    Returns current catalog pricing and estimated availability with explicit CURATED provenance.
+    Live OTA provider integrations are deferred to future phases.
     Requires explicit search intent: origin and destination.
     """
-    return search_flights(
+    return _flight_provider.search_flights(
         origin=origin,
         destination=destination,
-        date=departure_date,
+        departure_date=departure_date,
         return_date=return_date,
         passengers=passengers,
         cabin_class=cabin_class,
@@ -60,10 +69,12 @@ def search_hotels_endpoint(
     room_type: Optional[str] = None
 ):
     """
-    Search and normalize live stays inventory into HotelOffer schema.
+    Search curated travel catalog stays offers normalized into HotelOffer schema.
+    Returns current catalog pricing and estimated availability with explicit CURATED provenance.
+    Live OTA provider integrations are deferred to future phases.
     Requires explicit search intent: destination.
     """
-    return search_hotels(
+    return _hotel_provider.search_hotels(
         destination=destination,
         guests=guests,
         check_in=check_in,

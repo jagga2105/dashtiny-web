@@ -41,12 +41,36 @@ DashTiny never presents hallucinated inventory, fabricated coordinates, or disgu
 
 | Tier | Category | Examples | UI Treatment |
 | :--- | :--- | :--- | :--- |
-| **`VERIFIED`** | Provider Inventory, Official Policy, Coordinates | Real airline flights, partner hotel inventory, geocoded GPS | Green verification badge, partner citation, exact timestamp |
-| **`CURATED`** | Editorial Catalog & Demo Offers | Hand-selected local sanctuaries, heritage dining, demo flight/stay comparisons (explicitly labeled `CURATED / DEMO`, never disguised as live OTA inventory) | Curated badge, editorial review note, estimated fare pill |
-| **`AI GENERATED`** | Pacing, Narrative, Route Optimization | Daily narrative, activity sequencing, slot allocation | Subtle AI aura, editable pills, "Why recommended" tooltip |
+| **`VERIFIED`** | Official Policy, Geocoded Coordinates | Visa requirements, official embassy advisories, verified geocoded GPS | Green verification badge, official source citation, exact timestamp |
+| **`CURATED`** | Curated Travel Catalog & Demo Inventory | Hand-selected local sanctuaries, heritage dining, catalog flight and stay offers (explicitly labeled `CURATED`, estimated availability, catalog pricing; **live external OTA provider integrations are not yet active**) | Curated badge, editorial review note, estimated fare pill |
+| **`AI GENERATED`** | Pacing, Narrative, Route Optimization | Daily narrative, activity sequencing, slot allocation proposals | Subtle AI aura, editable pills, "Why recommended" tooltip |
 | **`USER GENERATED`** | Community Posts, Traveler Reviews | Tips from fellow travelers, squad memories | Explorer trust score, traveler avatar |
 
+> **Inventory Status Notice**: Live OTA provider connections (Booking.com, Skyscanner, Airbnb) are deferred to later phases. Current search endpoints query DashTiny's normalized provider abstraction (`CuratedFlightProvider`, `CuratedHotelProvider`) returning curated catalog offers.
+
 ---
+
+## 🤖 Canonical AI Mutation Flow: Single Path Governance
+
+DashTiny enforces exactly one authoritative mutation path for all AI adjustments:
+
+```
+Traveler Action / Copilot Prompt
+             ↓
+  POST /api/v1/ai/proposals
+  (Calculates diffs, verifies geocodes in research layer; Trip remains UNTOUCHED)
+             ↓
+  Traveler inspects Proposal Card in UI
+  (Summary, itemized additions/replacements, budget impact, parent version)
+             ↓
+  POST /api/v1/ai/proposals/{id}/accept
+  (Row lock on Trip -> verifies parent version -> executes diff via TripRevisionService -> commits append-only TripRevision -> returns resulting Trip)
+```
+
+- Direct mutation from `POST /api/v1/ai/query` is completely disabled; it functions strictly as a non-mutating compatibility wrapper returning proposals.
+- External API calls (such as geocoding) are strictly kept out of database mutation transactions; coordinates are resolved during proposal synthesis.
+- Initial Trip creation immediately registers version 1 (`INITIAL_CREATION`), removing lazy baseline creation.
+
 
 ## ⚡ Tech Stack
 
@@ -145,7 +169,10 @@ For full technical specifications and governance rules, consult [ARCHITECTURE.md
 | `/api/v1/trips/my-trips` | `GET` | Fetch authenticated user's trips as canonical `TripSummary` objects |
 | `/api/v1/trips/{id}` | `GET` | Retrieve complete trip workspace with days, activities, and budget (eagerly loaded) |
 | `/api/v1/trips/{id}/public` | `GET` | Privacy-governed public trip snapshot (strictly requires explicit publication) |
+| `/api/v1/trips/{id}/revisions` | `GET` | List versioned append-only Trip snapshots for audit and undo |
 | `/api/v1/trips/{id}/undo` | `POST` | Server-authoritative append-only revision rollback |
+| `/api/v1/locations/search` | `GET` | Autocomplete airports and hubs from PostgreSQL location domain |
+| `/api/v1/locations/airports/{iata_code}` | `GET` | Retrieve airport metadata by IATA code |
 | `/api/v1/ai/proposals` | `POST` | Generate structured diff proposal without mutating Trip |
 | `/api/v1/ai/proposals/{id}/accept` | `POST` | Atomically lock Trip row, verify parent version, apply diff, create TripRevision, and record telemetry |
 | `/api/v1/ai/proposals/{id}/reject` | `POST` | Mark proposal rejected without mutating Trip |

@@ -561,3 +561,43 @@ def test_postgres_squad_creator_owner_and_member_unprivileged(pg_engine, pg_sess
         pg_session.commit()
     pg_session.rollback()
 
+
+def test_postgres_airports_domain_search_and_lookup(pg_engine, pg_session):
+    """
+    Location domain tests on real PostgreSQL:
+    - Verifies Airport persistence and indexing
+    - Verifies search by IATA and city
+    - Verifies unique constraint on iata_code
+    """
+    from app.models.models import Airport
+    from app.db.seed_airports import seed_airports
+
+    # Seed airports
+    seeded_count = seed_airports(pg_session)
+    assert seeded_count > 0
+
+    # Search by IATA code
+    goi = pg_session.query(Airport).filter(Airport.iata_code == "GOI").first()
+    assert goi is not None
+    assert "Goa" in goi.city
+    assert goi.country == "India"
+
+    # Search by city substring
+    delhi_airports = pg_session.query(Airport).filter(Airport.city.ilike("%delhi%")).all()
+    assert len(delhi_airports) >= 1
+    assert any(a.iata_code == "DEL" for a in delhi_airports)
+
+    # Unique constraint on iata_code rejects duplicate
+    dup_airport = Airport(
+        id=str(uuid.uuid4()),
+        iata_code="DEL",
+        name="Duplicate Delhi",
+        city="Delhi",
+        country="India"
+    )
+    pg_session.add(dup_airport)
+    with pytest.raises(IntegrityError):
+        pg_session.commit()
+    pg_session.rollback()
+
+

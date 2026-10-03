@@ -722,7 +722,7 @@ export default function DashboardPage() {
               className="border-sky-200 text-sky-700 hover:bg-sky-50 text-xs font-bold shrink-0 hover:scale-105 transition-all"
               onClick={() => router.push('/bookings')}
             >
-              Compare Live Rates →
+              Compare Catalog Rates →
             </Button>
           </div>
 

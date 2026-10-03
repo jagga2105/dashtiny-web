@@ -271,6 +271,10 @@ export const apiService = {
     });
   },
 
+  async getTripRevisions(tripId: string) {
+    return request<any[]>(`/trips/${tripId}/revisions`);
+  },
+
   // Bookings API
   async searchFlights(
     paramsOrOrigin: string | {

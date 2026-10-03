@@ -225,20 +225,45 @@ class CuratedHotelProvider(HotelProvider):
                 }
             ]
 
+        clean_guests = max(1, guests or 2)
+        nights = 1
+        if check_in and check_out:
+            try:
+                d_in = datetime.fromisoformat(str(check_in).strip().split('T')[0])
+                d_out = datetime.fromisoformat(str(check_out).strip().split('T')[0])
+                delta = (d_out - d_in).days
+                if delta > 0:
+                    nights = delta
+            except Exception:
+                nights = 1
+
         results = []
         for s in stays:
+            r_type = s["room_type"]
+            if room_type:
+                r_type = f"{room_type} — {s['room_type']}"
+            price_night = float(s["price_per_night"])
+            total_price = price_night * nights
+
             results.append({
                 "offer_id": s["id"],
                 "id": s["id"],
                 "name": s["name"],
                 "provider": s["provider"],
                 "destination": dest_clean,
-                "price": float(s["price_per_night"]),
-                "price_per_night": float(s["price_per_night"]),
+                "price": total_price,
+                "price_per_night": price_night,
+                "nightly_rate": price_night,
+                "total_price": total_price,
+                "total_amount": total_price,
                 "currency": "INR",
                 "rating": s["rating"],
                 "review_count": s["review_count"],
-                "room_type": s["room_type"],
+                "room_type": r_type,
+                "guests_capacity": clean_guests,
+                "check_in": str(check_in) if check_in else None,
+                "check_out": str(check_out) if check_out else None,
+                "nights": nights,
                 "amenities": s["amenities"],
                 "cancellation": s["cancellation"],
                 "image": s["image"],

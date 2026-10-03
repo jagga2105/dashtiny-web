@@ -110,17 +110,32 @@ def create_ai_proposal(
     for d in action_result.get("updated_days", []):
         for act in d.get("activities", []):
             loc = act.get("location") or trip.destination
-            coords = get_coordinates(loc)
-            if not coords.get("found"):
-                spatial_verified = False
+            if act.get("lat") is None or act.get("lng") is None:
+                coords = get_coordinates(loc)
+                if coords.get("found"):
+                    act["lat"] = coords.get("lat")
+                    act["lng"] = coords.get("lng")
+                    if not act.get("provenance") or act.get("provenance") == "DETERMINISTIC":
+                        act["provenance"] = coords.get("provenance", "GEOCODED")
+                    act["location_source"] = "GEOCODED"
+                else:
+                    spatial_verified = False
+                    if not act.get("provenance"):
+                        act["provenance"] = "CURATED_UNRESOLVED"
+                    act["location_source"] = "UNRESOLVED"
+            else:
+                act.setdefault("location_source", "GEOCODED")
 
     weather_profile = get_destination_weather(trip.destination)
     weather_condition = weather_profile.get("condition") or "Weather unavailable"
 
-    # 4. Get current revision version for parent locking
+    # 4. Get current revision version for parent locking (every Trip starts at v1)
     curr_version = get_current_version(db, trip.id)
     if curr_version == 0:
-        curr_version = 1
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Trip has not been initialized with baseline revision v1."
+        )
 
     # 5. Persist TripProposal record (TRIP IS NOT MUTATED)
     proposal = TripProposal(
@@ -199,11 +214,6 @@ def accept_ai_proposal(
 
     # Verify revision concurrency
     current_ver = get_current_version(db, trip.id)
-    if current_ver == 0 and proposal.parent_version == 1:
-        # Trip was created without an initial snapshot (e.g. legacy/test). Record v1 baseline.
-        record_initial_revision(db, trip.id, proposal.user_id)
-        current_ver = 1
-
     if current_ver != proposal.parent_version:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -214,16 +224,24 @@ def accept_ai_proposal(
         )
 
     try:
-        # Apply diff to database while preserving stable activity IDs
+        # Apply diff to database while preserving stable activity IDs (pure PostgreSQL mutation)
         apply_activity_diff(db, trip, proposal.after_state)
+        db.flush()
+        db.expire_all()
 
-        # Create append-only revision
+        # Reload trip to get freshly flushed activities
+        trip = db.query(Itinerary).filter(Itinerary.id == proposal.trip_id).first()
+
+        # Serialize authoritative resulting canonical state AFTER mutation
+        resulting_days = serialize_trip_days(trip)
+
+        # Create append-only revision containing RESULTING STATE
         snapshot, next_ver = create_revision(
             db=db,
             trip_id=trip.id,
             user_id=user.id,
             action_type="AI_PROPOSAL_ACCEPTED",
-            days_data=proposal.after_state,
+            days_data=resulting_days,
             summary=proposal.summary,
             instruction=proposal.instruction,
             model="deterministic-planner-v1",

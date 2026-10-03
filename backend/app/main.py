@@ -5,7 +5,7 @@ import redis
 
 from app.config import settings
 from app.db.database import SessionLocal
-from app.api.v1 import auth, planner, squad, explore, community, rewards, trips, bookings, chat, ai
+from app.api.v1 import auth, planner, squad, explore, community, rewards, trips, bookings, chat, ai, locations
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -39,6 +39,7 @@ app.include_router(community.router, prefix=settings.API_V1_STR)
 app.include_router(rewards.router, prefix=settings.API_V1_STR)
 app.include_router(chat.router, prefix=settings.API_V1_STR)
 app.include_router(ai.router, prefix=settings.API_V1_STR)
+app.include_router(locations.router, prefix=settings.API_V1_STR)
 
 @app.get("/")
 def root():

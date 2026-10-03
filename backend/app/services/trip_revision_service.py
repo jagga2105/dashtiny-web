@@ -17,7 +17,6 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 
 from app.models.models import Itinerary, ItineraryDay, ItineraryActivity, TripSnapshot, User
-from app.ai.tools.maps import get_coordinates
 
 
 # Supported Revision Types
@@ -219,11 +218,6 @@ def apply_activity_diff(
                     if "location" in act:
                         if act["location"] is not None:
                             db_act.location = act["location"]
-                            if "lat" not in act and "lng" not in act:
-                                coords = get_coordinates(act["location"])
-                                if coords.get("found"):
-                                    db_act.lat = coords.get("lat")
-                                    db_act.lng = coords.get("lng")
                     if "place_type" in act or "placeType" in act:
                         val = act.get("place_type") if "place_type" in act else act.get("placeType")
                         if val is not None:
@@ -283,12 +277,12 @@ def apply_activity_diff(
                     db_act.sort_order = idx
                     retained_act_ids.add(act_id)
                 else:
-                    # INSERT new activity with server-generated UUID
+                    # INSERT new activity with server-generated UUID (coordinates verified in proposal/input layer)
                     loc_name = act.get("location") or trip.destination
-                    coords = get_coordinates(loc_name)
-                    act_lat = act.get("lat") or coords.get("lat")
-                    act_lng = act.get("lng") or coords.get("lng")
-                    act_prov = act.get("provenance") or (coords.get("provenance") if coords.get("found") else "CURATED_UNRESOLVED")
+                    act_lat = act.get("lat")
+                    act_lng = act.get("lng")
+                    act_prov = act.get("provenance") or ("GEOCODED" if act_lat and act_lng else "CURATED_UNRESOLVED")
+                    act_loc_src = act.get("location_source") or act.get("locationSource") or ("GEOCODED" if act_lat and act_lng else "UNRESOLVED")
 
                     new_act = ItineraryActivity(
                         id=str(uuid.uuid4()),
@@ -366,6 +360,8 @@ def record_mutation(
     Records a manual user or system mutation to the trip history.
     Serializes current canonical trip state and creates an append-only revision.
     """
+    db.flush()
+    db.expire_all()
     trip = db.query(Itinerary).filter(Itinerary.id == trip_id).with_for_update().first()
     if not trip:
         raise ValueError(f"Trip {trip_id} not found")
@@ -452,6 +448,10 @@ def restore_revision(
 
     # 2. Apply target snapshot days_data to the database
     apply_activity_diff(db, trip, target_snap.days_data)
+    db.flush()
+    db.expire_all()
+    trip = db.query(Itinerary).filter(Itinerary.id == trip_id).first()
+    resulting_days = serialize_trip_days(trip)
 
     # 3. Create a brand NEW append-only UNDO revision
     next_ver = curr.version + 1
@@ -468,7 +468,7 @@ def restore_revision(
         instruction=f"Undo to revision {target_snap.version}",
         model="deterministic-planner-v1",
         summary=f"Restored trip state to revision {target_snap.version}",
-        days_data=target_snap.days_data
+        days_data=resulting_days
     )
     db.add(new_undo_snap)
     db.flush()

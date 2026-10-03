@@ -379,10 +379,29 @@ POST /ai/proposals/{id}/accept    POST /ai/proposals/{id}/reject
 ```
 
 ### Append-Only Revision & Multi-Step Undo Model
-1. **Append-Only History**: Historical `TripSnapshot` records are strictly immutable. They are never modified or flagged with `action = "reverted"`.
-2. **Deterministic Versioning**: Every mutation (initial creation, manual activity add/delete/reorder, AI proposal accept) increments the monotonic version $v(N+1)$ with `parent_version = N`.
-3. **Multi-Step Undo**: Undoing creates a brand new revision with `action_type = "UNDO"` and records `restored_from_version = target_version`. Consecutive undos follow the `parent_version` chain backward ($v_4 \to v_3 \to v_2 \to v_1$) while appending new snapshots ($v_5, v_6, v_7$), preserving a 100% complete and auditable history.
-4. **Compatibility Wrapper**: `POST /api/v1/ai/query` behaves strictly as a non-mutating compatibility wrapper around proposal generation, returning `proposal_id` and structured diffs without mutating the database.
+1. **Resulting State Semantics**: `TripRevision N` stores the complete canonical Trip state **AFTER** mutation $N$. Revisions serialize and capture the post-mutation resulting state, never the pre-mutation state.
+2. **Initial Baseline at Creation**: As soon as a Trip is created, `INITIAL_CREATION` revision $v_1$ is committed alongside the trip and its days. AI proposal generation strictly inspects existing revisions and never lazily mutates trip history.
+3. **No External Lookups in DB Mutations**: Geocoding and location verification take place strictly in the proposal/research layer (`create_ai_proposal`). The resulting proposal diff contains pre-verified coordinates (`lat`, `lng`, `location_source="GEOCODED"`). `TripRevisionService.apply_activity_diff()` executes as a pure, fast PostgreSQL mutation without external network dependencies.
+4. **Append-Only History**: Historical `TripSnapshot` records are strictly immutable. They are never modified or flagged with `action = "reverted"`.
+5. **Deterministic Versioning**: Every mutation (initial creation, manual activity add/delete/reorder, AI proposal accept) increments the monotonic version $v(N+1)$ with `parent_version = N`.
+6. **Multi-Step Undo & Server Authority**: Undoing (`POST /api/v1/trips/{id}/undo`) creates a brand new revision with `action_type = "UNDO"` and records `restored_from_version = target_version`. Consecutive undos follow the `parent_version` chain backward ($v_4 \to v_3 \to v_2 \to v_1$) while appending new snapshots ($v_5, v_6, v_7$). The UI fetches canonical server state after undo rather than reconstructing deleted items client-side.
+7. **Compatibility Wrapper**: `POST /api/v1/ai/query` behaves strictly as a non-mutating compatibility wrapper around proposal generation, returning `proposal_id` and structured diffs without mutating the database.
+
+---
+
+## 14.1 Provider Abstraction & Location Domain Architecture
+
+### Provider Abstraction Wiring
+Search endpoints (`/api/v1/bookings/search/flights`, `/api/v1/bookings/search/hotels`) are decoupled from specific booking engines through `FlightProvider` and `HotelProvider` abstract base classes, wired to `CuratedFlightProvider` and `CuratedHotelProvider`.
+- All returned offers carry `CURATED` provenance, `ESTIMATED` availability, and current catalog pricing.
+- Live OTA provider integrations (e.g., live Skyscanner, Booking.com, Airbnb APIs) are deferred to subsequent development phases.
+
+### Location Domain & Airport Search
+Airports and transportation hubs are persisted in the PostgreSQL `airports` table:
+- `GET /api/v1/locations/search?q=` provides server-authoritative autocomplete across IATA code, name, city, state, and country.
+- `GET /api/v1/locations/airports/{iata_code}` retrieves airport details by canonical code.
+- Client airport helpers (`src/lib/airports.ts`) do not guess or fallback to Goa (`GOI`) for unknown destinations; unresolved locations remain clean (`""`).
+
 
 ---
 

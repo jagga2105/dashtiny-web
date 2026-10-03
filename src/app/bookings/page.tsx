@@ -117,9 +117,9 @@ function BookingsContent() {
     }
     if (prov === 'CURATED') {
       return (
-        <span title="Curated sample offer in DashTiny's current catalog" className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-50 text-slate-700 text-[10px] font-medium border border-slate-200">
+        <span title="Curated travel catalog offer with estimated availability" className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-50 text-slate-700 text-[10px] font-medium border border-slate-200">
           <CheckCircle2 className="w-3 h-3 text-slate-500" />
-          Curated sample offer
+          Curated travel catalog
         </span>
       );
     }
@@ -835,7 +835,7 @@ function BookingsContent() {
 
               <div className="flex items-center gap-3">
                 <span className="text-xs text-slate-500">
-                  {isSearchingHotels ? 'Working out the best stay options…' : `${hotelsList.length} verified stays available`}
+                  {isSearchingHotels ? 'Working out the best stay options…' : `${hotelsList.length} curated stays in catalog`}
                 </span>
                 <Button
                   variant="outline"

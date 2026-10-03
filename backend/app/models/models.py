@@ -559,3 +559,27 @@ class TripProposal(Base):
     trip = relationship("Itinerary", backref="proposals")
     user = relationship("User")
 
+
+class Airport(Base):
+    __tablename__ = "airports"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    iata_code = Column(String(3), unique=True, index=True, nullable=False)
+    icao_code = Column(String(4), index=True, nullable=True)
+    name = Column(String(200), nullable=False)
+    city = Column(String(100), index=True, nullable=False)
+    state_region = Column(String(100), nullable=True)
+    country = Column(String(100), nullable=False, default="India")
+    country_code = Column(String(2), nullable=True, default="IN")
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
+    timezone = Column(String(50), nullable=True)
+    search_text = Column(String(255), nullable=True)
+    is_active = Column(Boolean, default=True, nullable=False)
+
+    __table_args__ = (
+        Index("ix_airports_search_text", "search_text"),
+        Index("ix_airports_city_iata", "city", "iata_code"),
+    )
+
+

@@ -81,3 +81,36 @@ def test_curated_activity_provider_schema_and_provenance():
     assert first["source"] == "CURATED_DATABASE"
     assert "retrieved_at" in first
     assert "expires_at" in first
+
+
+def test_locations_search_and_lookup_endpoints(client):
+    """
+    Test Location domain API endpoints:
+    - GET /api/v1/locations/search?q=
+    - GET /api/v1/locations/airports/{iata_code}
+    """
+    # 1. Search without query returns hubs
+    res = client.get("/api/v1/locations/search")
+    assert res.status_code == 200
+    hubs = res.json()
+    assert len(hubs) > 0
+    assert any(h["iata_code"] == "DEL" for h in hubs)
+
+    # 2. Search with city query
+    res_goa = client.get("/api/v1/locations/search?q=goa")
+    assert res_goa.status_code == 200
+    goa_airports = res_goa.json()
+    assert len(goa_airports) > 0
+    assert any(a["iata_code"] in ["GOI", "GOX"] for a in goa_airports)
+
+    # 3. Lookup specific airport by IATA
+    res_del = client.get("/api/v1/locations/airports/DEL")
+    assert res_del.status_code == 200
+    del_data = res_del.json()
+    assert del_data["iata_code"] == "DEL"
+    assert "Delhi" in del_data["city"]
+
+    # 4. Unknown airport returns 404
+    res_404 = client.get("/api/v1/locations/airports/ZZZ")
+    assert res_404.status_code == 404
+

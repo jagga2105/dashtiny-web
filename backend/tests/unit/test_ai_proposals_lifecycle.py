@@ -4,6 +4,7 @@ from starlette.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.models.models import Itinerary, ItineraryDay, ItineraryActivity, TripSnapshot, TripProposal, AIRun
+from app.services.trip_revision_service import record_initial_revision
 
 
 def test_ai_proposal_does_not_mutate_trip(client: TestClient, db_session: Session, test_user):
@@ -40,6 +41,10 @@ def test_ai_proposal_does_not_mutate_trip(client: TestClient, db_session: Sessio
         sort_order=0
     )
     db_session.add(act1)
+    db_session.commit()
+
+    # Record baseline initial revision v1 upon trip creation
+    record_initial_revision(db_session, trip.id, test_user.id)
     db_session.commit()
 
     # Request proposal
@@ -111,6 +116,10 @@ def test_ai_proposal_accept_mutates_trip_creates_revision(client: TestClient, db
         sort_order=0
     )
     db_session.add(act1)
+    db_session.commit()
+
+    # Record baseline initial revision v1 upon trip creation
+    record_initial_revision(db_session, trip.id, test_user.id)
     db_session.commit()
 
     # Generate proposal
@@ -189,6 +198,10 @@ def test_ai_proposal_reject_leaves_trip_unchanged(client: TestClient, db_session
     db_session.add(act1)
     db_session.commit()
 
+    # Record baseline initial revision v1 upon trip creation
+    record_initial_revision(db_session, trip.id, test_user.id)
+    db_session.commit()
+
     # Generate proposal
     prop_res = client.post("/api/v1/ai/proposals", json={
         "trip_id": trip.id,
@@ -250,6 +263,10 @@ def test_ai_proposal_stale_parent_conflict(client: TestClient, db_session: Sessi
         sort_order=0
     )
     db_session.add(act1)
+    db_session.commit()
+
+    # Record baseline initial revision v1 upon trip creation
+    record_initial_revision(db_session, trip.id, test_user.id)
     db_session.commit()
 
     # Generate proposal 1
