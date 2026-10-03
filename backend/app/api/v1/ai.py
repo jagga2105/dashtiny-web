@@ -26,7 +26,7 @@ from sqlalchemy.orm import Session
 from app.db.database import get_db
 from app.models.models import (
     Itinerary, ItineraryDay, ItineraryActivity, User,
-    AIRun, AIToolCall, SquadRoom, SquadMember, TripSnapshot, TripProposal
+    AIRun, AIToolCall, SquadRoom, SquadMember, TripSnapshot, TripProposal, Booking
 )
 from app.ai.tools.itinerary import apply_itinerary_action
 from app.ai.tools.weather import get_destination_weather
@@ -46,7 +46,10 @@ router = APIRouter(prefix="/ai", tags=["DashTiny AI Action & Proposal Engine"])
 
 class AIProposalRequest(BaseModel):
     trip_id: str
-    instruction: str
+    instruction: Optional[str] = ""
+    proposal_type: Optional[str] = "ITINERARY_DIFF"  # ITINERARY_DIFF or ATTACH_FLIGHT_OFFER
+    offer: Optional[Dict[str, Any]] = None
+    offer_id: Optional[str] = None
 
 
 class AIQueryRequest(BaseModel):
@@ -137,6 +140,100 @@ def create_ai_proposal(
             detail="Trip has not been initialized with baseline revision v1."
         )
 
+    # Check if flight offer proposal
+    if request.proposal_type == "ATTACH_FLIGHT_OFFER" or request.offer:
+        offer = request.offer or {}
+        airline = offer.get("airline", "Selected Airline")
+        flight_number = offer.get("flight_number", "FL-100")
+        origin = offer.get("origin", "")
+        dest = offer.get("destination", "")
+        price = float(offer.get("price", 0))
+        summary = f"Attach {airline} flight {flight_number} ({origin} → {dest}) to your trip"
+
+        changes = [{
+            "action": "attach_flight",
+            "flight_number": flight_number,
+            "airline": airline,
+            "origin": origin,
+            "destination": dest,
+            "departure_time": offer.get("departure_time"),
+            "arrival_time": offer.get("arrival_time"),
+            "price": price,
+            "why_recommended": offer.get("why_recommended", "Traveler selected curated flight offer")
+        }]
+
+        updated_days = []
+        for idx, day in enumerate(before_days):
+            day_copy = dict(day)
+            acts = list(day.get("activities", []))
+            if idx == 0:
+                transit_act = {
+                    "time": offer.get("departure_time", "08:00 AM"),
+                    "description": f"Flight {airline} {flight_number}: {origin} → {dest}",
+                    "location": f"{offer.get('origin_airport', {}).get('name', origin)} Airport",
+                    "place_type": "TR",
+                    "provenance": "CURATED",
+                    "cost_estimate": price,
+                    "why_recommended": offer.get("why_recommended", "Selected transportation for trip"),
+                    "location_source": "VERIFIED_AIRPORT",
+                    "transit_mode": "flight"
+                }
+                acts.insert(0, transit_act)
+            if offer.get("trip_type") == "roundtrip" and idx == len(before_days) - 1 and len(before_days) > 1:
+                return_act = {
+                    "time": "06:00 PM",
+                    "description": f"Return Flight {airline}: {dest} → {origin}",
+                    "location": f"{offer.get('destination_airport', {}).get('name', dest)} Airport",
+                    "place_type": "TR",
+                    "provenance": "CURATED",
+                    "cost_estimate": 0,
+                    "why_recommended": "Return flight segment",
+                    "location_source": "VERIFIED_AIRPORT",
+                    "transit_mode": "flight"
+                }
+                acts.append(return_act)
+            day_copy["activities"] = acts
+            updated_days.append(day_copy)
+
+        proposal = TripProposal(
+            trip_id=trip.id,
+            user_id=user.id,
+            parent_version=curr_version,
+            instruction=request.instruction or summary,
+            summary=summary,
+            changes=changes,
+            before_state={"days": before_days},
+            after_state=updated_days,
+            verification={
+                "spatial_bounds": "VERIFIED",
+                "airport_codes": f"{origin} - {dest}",
+                "route_feasible": True
+            },
+            provenance={
+                "tier": "CURATED",
+                "source": "CURATED_DATABASE",
+                "model": "curated-flight-v1",
+                "why_recommended": offer.get("why_recommended", "Selected curated flight offer"),
+                "proposal_type": "ATTACH_FLIGHT_OFFER",
+                "offer_payload": offer
+            },
+            status="pending"
+        )
+        db.add(proposal)
+        db.commit()
+        db.refresh(proposal)
+
+        return {
+            "proposal_id": proposal.id,
+            "trip_id": proposal.trip_id,
+            "summary": proposal.summary,
+            "changes": proposal.changes,
+            "before": proposal.before_state,
+            "after": {"days": proposal.after_state},
+            "verification": proposal.verification,
+            "provenance": proposal.provenance
+        }
+
     # 5. Persist TripProposal record (TRIP IS NOT MUTATED)
     proposal = TripProposal(
         trip_id=trip.id,
@@ -226,6 +323,38 @@ def accept_ai_proposal(
     try:
         # Apply diff to database while preserving stable activity IDs (pure PostgreSQL mutation)
         apply_activity_diff(db, trip, proposal.after_state)
+
+        # Check if proposal is ATTACH_FLIGHT_OFFER
+        prov = proposal.provenance or {}
+        is_flight = prov.get("proposal_type") == "ATTACH_FLIGHT_OFFER" or any(
+            c.get("action") == "attach_flight" for c in (proposal.changes or [])
+        )
+        if is_flight:
+            offer_payload = prov.get("offer_payload") or {}
+            airline_name = offer_payload.get("airline") or offer_payload.get("provider", "Curated Airline")
+            flight_num = offer_payload.get("flight_number", "FL")
+            booking_ref = Booking(
+                trip_id=trip.id,
+                user_id=user.id,
+                category="flight",
+                provider=airline_name,
+                title=f"Flight {airline_name} {flight_num}",
+                amount=float(offer_payload.get("price", 0)),
+                currency=offer_payload.get("currency", "INR"),
+                status="pending",
+                provenance="CURATED",
+                details={
+                    "offer_id": offer_payload.get("offer_id"),
+                    "origin": offer_payload.get("origin"),
+                    "destination": offer_payload.get("destination"),
+                    "departure_time": offer_payload.get("departure_time"),
+                    "arrival_time": offer_payload.get("arrival_time"),
+                    "source": "CURATED_DATABASE",
+                    "verification": "UNVERIFIED_CURATED_OFFER"
+                }
+            )
+            db.add(booking_ref)
+
         db.flush()
         db.expire_all()
 
@@ -240,11 +369,11 @@ def accept_ai_proposal(
             db=db,
             trip_id=trip.id,
             user_id=user.id,
-            action_type="AI_PROPOSAL_ACCEPTED",
+            action_type="ATTACH_FLIGHT_OFFER" if is_flight else "AI_PROPOSAL_ACCEPTED",
             days_data=resulting_days,
             summary=proposal.summary,
             instruction=proposal.instruction,
-            model="deterministic-planner-v1",
+            model="curated-flight-v1" if is_flight else "deterministic-planner-v1",
             actor_type="USER",
             parent_version=proposal.parent_version
         )

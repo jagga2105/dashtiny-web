@@ -1,7 +1,8 @@
 from abc import ABC, abstractmethod
-from datetime import datetime, timezone, timedelta
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel, Field
+
+from app.schemas.flight import FlightOffer
 
 
 class BaseOffer(BaseModel):
@@ -19,7 +20,8 @@ class BaseOffer(BaseModel):
 
 class FlightProvider(ABC):
     """
-    Abstract Base Class for flight inventory providers (e.g. Skyscanner, Amadeus, Curated).
+    Abstract Base Class for flight inventory providers (e.g. Curated, Amadeus, Skyscanner).
+    Returns normalized FlightOffer domain objects.
     """
     @abstractmethod
     def search_flights(
@@ -31,7 +33,7 @@ class FlightProvider(ABC):
         passengers: int = 1,
         cabin_class: str = "economy",
         trip_type: str = "roundtrip"
-    ) -> List[Dict[str, Any]]:
+    ) -> List[FlightOffer]:
         pass
 
 

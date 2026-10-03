@@ -3,6 +3,7 @@
  * Single source of truth for all API requests to DashTiny FastAPI backend.
  * Rule: Never silently swallow errors into fake success data.
  */
+import type { FlightOffer, FlightSearchResponse } from '@/types/flight';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
 
@@ -315,7 +316,7 @@ export const apiService = {
       tripType?: string;
     } = '',
     destinationFallback: string = ''
-  ) {
+  ): Promise<FlightSearchResponse> {
     let params: Record<string, string> = {};
     if (typeof paramsOrOrigin === 'string') {
       params = {
@@ -336,7 +337,7 @@ export const apiService = {
     const query = new URLSearchParams(
       Object.entries(params).filter(([_, v]) => Boolean(v))
     ).toString();
-    return request<any[]>(`/bookings/search/flights?${query}`);
+    return request<FlightSearchResponse>(`/bookings/search/flights?${query}`);
   },
 
   async searchHotels(
@@ -447,6 +448,17 @@ export const apiService = {
     return request<any>('/ai/proposals', {
       method: 'POST',
       body: JSON.stringify({ trip_id: tripId, instruction }),
+    });
+  },
+
+  async createFlightOfferProposal(tripId: string, offer: FlightOffer) {
+    return request<any>('/ai/proposals', {
+      method: 'POST',
+      body: JSON.stringify({
+        trip_id: tripId,
+        proposal_type: 'ATTACH_FLIGHT_OFFER',
+        offer,
+      }),
     });
   },
 

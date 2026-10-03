@@ -164,10 +164,38 @@ Booking Service
 ```
 
 ### Core Normalized Schemas:
-- `FlightOffer`: Departure, arrival, stops, duration, baggage allowance, cancellation terms, price, deep link.
+- `FlightOffer` (Canonical 29-field contract across Provider / FastAPI / Frontend):
+  - `offer_id`, `provider`, `airline`, `flight_number`, `origin`, `destination`
+  - `origin_airport` (code, name, city, country), `destination_airport` (code, name, city, country)
+  - `departure_date`, `return_date`, `departure_time`, `arrival_time`, `duration_minutes`
+  - `stops`, `stop_details` (airport, city, duration_minutes), `passengers`, `cabin_class`, `trip_type`
+  - `price`, `per_passenger_price`, `currency`, `baggage`, `cancellation`
+  - `availability_state` (`ESTIMATED` / `AVAILABLE` / `LIMITED`)
+  - `provenance` (`CURATED`), `source` (`CURATED_DATABASE`), `retrieved_at`, `expires_at`
+  - `deep_link` ("Continue to provider"), `why_recommended`
 - `HotelOffer`: Name, star rating, address, room type, amenities, cancellation policy, per-night price, deep link.
 - `ActivityOffer`: Title, category, duration, meeting point, inclusions, price, deep link.
 - `TransportOffer`: Vehicle type, pickup, drop-off, driver details, price.
+
+### L2 Flight Search Request Validation:
+- Strict validation via `FlightSearchRequest`:
+  - `origin` & `destination`: required 3-letter uppercase IATA code, `origin != destination`. Must resolve through L1 Airport Autocomplete (zero fallback to GOI).
+  - `departure_date`: ISO format `YYYY-MM-DD`, strictly `>= today`.
+  - `roundtrip`: `return_date` required, strictly `> departure_date`.
+  - `oneway`: `return_date` must be null.
+  - `passengers`: 1 to 9 travelers.
+  - `cabin_class`: `economy`, `premium_economy`, `business`, `first`.
+  - `trip_type`: `oneway`, `roundtrip`.
+  - Invalid requests return HTTP 422 Unprocessable Content. No silent corrections.
+
+### L2 Proposal & Append-Only Revision Integration:
+- Selecting an offer generates a `TripProposal` with `proposal_type="ATTACH_FLIGHT_OFFER"`.
+- Review in UI shows diff preview, parent version, and honest `CURATED` provenance.
+- On proposal acceptance:
+  - Slots Day 1 transit activity into the itinerary.
+  - Records a pending transport reference (`status="pending"`, `provenance="CURATED"`).
+  - Creates an append-only `TripRevision` (`action_type="ATTACH_FLIGHT_OFFER"`).
+  - No fake verified bookings created.
 
 ---
 

@@ -555,7 +555,8 @@ def test_flight_search_parameterized(client):
         }
     )
     assert res.status_code == 200
-    flights = res.json()
+    data = res.json()
+    flights = data["offers"] if isinstance(data, dict) and "offers" in data else data
     assert len(flights) > 0
     first = flights[0]
     assert first["passengers"] == 3

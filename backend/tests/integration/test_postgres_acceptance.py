@@ -672,4 +672,215 @@ def test_database_safety_guard_rejects_dangerous_targets():
         validate_test_database_safety(url)  # Must not raise
 
 
+def test_flight_search_to_trip_proposal_and_revision_lifecycle(pg_session):
+    """
+    L2 Requirement 25: PostgreSQL-backed integration scenario:
+    User -> Trip -> Flight Search -> Select Offer -> TripProposal -> Accept -> TripRevision
+    Verifies:
+    1. Flight search returns normalized FlightOffer with CURATED provenance.
+    2. Proposal generated: Trip is UNCHANGED.
+    3. Proposal accepted: Trip is CHANGED.
+    4. Immutable append-only TripRevision created (version incremented).
+    5. Provenance retained (CURATED, status=pending, NOT confirmed PROVIDER_VERIFIED).
+    6. Does NOT create a provider-verified Booking.
+    """
+    from app.services.providers.curated import CuratedFlightProvider
+    from app.services.trip_revision_service import record_initial_revision, apply_activity_diff
+    from app.models.models import Booking
+
+    # 1. Create User
+    test_user = User(
+        id=str(uuid.uuid4()),
+        email=f"flight_traveler_{uuid.uuid4().hex[:6]}@dashtiny.com",
+        password_hash="hashed_pw_123",
+        full_name="Flight Traveler"
+    )
+    pg_session.add(test_user)
+    pg_session.flush()
+
+    # 2. Create Trip with Day 1 & Day 2
+    trip_id = str(uuid.uuid4())
+    trip = Itinerary(
+        id=trip_id,
+        owner_id=test_user.id,
+        title="Mumbai Explorer Trip",
+        destination="Mumbai",
+        origin="Delhi",
+        start_date=date(2026, 11, 20),
+        end_date=date(2026, 11, 25),
+        travellers=2,
+        total_budget=50000.0,
+        currency="INR"
+    )
+    pg_session.add(trip)
+    pg_session.flush()
+
+    day1 = ItineraryDay(
+        id=str(uuid.uuid4()),
+        itinerary_id=trip.id,
+        day_number=1,
+        title="Arrival & Colaba Heritage",
+        weather_summary="Sunny 28°C"
+    )
+    act1 = ItineraryActivity(
+        id=str(uuid.uuid4()),
+        day_id=day1.id,
+        time_slot="03:00 PM",
+        description="Gateway of India & Sea Breeze Walk",
+        location="Colaba",
+        place_type="TA",
+        provenance="DETERMINISTIC",
+        cost_estimate=0.0
+    )
+    day1.activities.append(act1)
+    trip.days.append(day1)
+    pg_session.flush()
+
+    # Initialize baseline revision v1
+    initial_snapshot, init_ver = record_initial_revision(
+        db=pg_session,
+        trip_id=trip.id,
+        user_id=test_user.id
+    )
+    pg_session.commit()
+    assert init_ver == 1
+
+    # 3. Flight Search: DEL -> BOM
+    provider = CuratedFlightProvider()
+    offers = provider.search_flights(
+        origin="DEL",
+        destination="BOM",
+        departure_date="2026-11-20",
+        return_date="2026-11-25",
+        passengers=2,
+        cabin_class="economy",
+        trip_type="roundtrip"
+    )
+    assert len(offers) > 0
+    selected_offer = offers[0]
+    assert selected_offer.provenance == "CURATED"
+    assert selected_offer.availability_state == "ESTIMATED"
+
+    # 4. Generate Proposal: Select Offer -> TripProposal (TRIP MUST REMAIN UNCHANGED)
+    before_days = serialize_trip_days(trip)
+    initial_activity_count = len(day1.activities)
+
+    transit_act = {
+        "time": selected_offer.departure_time,
+        "description": f"Flight {selected_offer.airline} {selected_offer.flight_number}: {selected_offer.origin} → {selected_offer.destination}",
+        "location": f"{selected_offer.origin_airport['name']} Airport",
+        "place_type": "TR",
+        "provenance": "CURATED",
+        "cost_estimate": selected_offer.price,
+        "why_recommended": selected_offer.why_recommended,
+        "location_source": "VERIFIED_AIRPORT",
+        "transit_mode": "flight"
+    }
+
+    updated_days = []
+    for idx, day_dict in enumerate(before_days):
+        d_copy = dict(day_dict)
+        acts = list(day_dict.get("activities", []))
+        if idx == 0:
+            acts.insert(0, transit_act)
+        d_copy["activities"] = acts
+        updated_days.append(d_copy)
+
+    proposal = TripProposal(
+        id=str(uuid.uuid4()),
+        trip_id=trip.id,
+        user_id=test_user.id,
+        parent_version=init_ver,
+        instruction=f"Attach {selected_offer.airline} flight {selected_offer.flight_number}",
+        summary=f"Attach {selected_offer.airline} flight {selected_offer.flight_number} (DEL → BOM) to your trip",
+        changes=[{
+            "action": "attach_flight",
+            "flight_number": selected_offer.flight_number,
+            "airline": selected_offer.airline,
+            "origin": selected_offer.origin,
+            "destination": selected_offer.destination,
+            "price": selected_offer.price
+        }],
+        before_state={"days": before_days},
+        after_state=updated_days,
+        verification={"spatial_bounds": "VERIFIED", "route_feasible": True},
+        provenance={
+            "tier": "CURATED",
+            "source": "CURATED_DATABASE",
+            "model": "curated-flight-v1",
+            "proposal_type": "ATTACH_FLIGHT_OFFER",
+            "offer_payload": selected_offer.model_dump()
+        },
+        status="pending"
+    )
+    pg_session.add(proposal)
+    pg_session.commit()
+
+    # VERIFY: Proposal generated -> Trip is UNCHANGED
+    pg_session.refresh(trip)
+    assert len(trip.days[0].activities) == initial_activity_count
+    assert get_current_version(pg_session, trip.id) == 1
+    booking_count = pg_session.query(Booking).filter(Booking.trip_id == trip.id).count()
+    assert booking_count == 0  # No bookings created prematurely
+
+    # 5. Accept Proposal: Apply diff, create pending Booking, create append-only Revision v2
+    apply_activity_diff(pg_session, trip, proposal.after_state)
+
+    booking = Booking(
+        id=str(uuid.uuid4()),
+        trip_id=trip.id,
+        user_id=test_user.id,
+        category="flight",
+        provider=selected_offer.airline,
+        title=f"Flight {selected_offer.airline} {selected_offer.flight_number}",
+        amount=selected_offer.price,
+        currency="INR",
+        status="pending",              # Status must be pending/selected (NOT confirmed)
+        provenance="CURATED",          # Provenance retained as CURATED (NOT PROVIDER_VERIFIED)
+        details={
+            "offer_id": selected_offer.offer_id,
+            "origin": selected_offer.origin,
+            "destination": selected_offer.destination,
+            "verification": "UNVERIFIED_CURATED_OFFER"
+        }
+    )
+    pg_session.add(booking)
+    pg_session.flush()
+
+    resulting_days = serialize_trip_days(trip)
+    new_snapshot, next_ver = create_revision(
+        db=pg_session,
+        trip_id=trip.id,
+        user_id=test_user.id,
+        action_type="ATTACH_FLIGHT_OFFER",
+        days_data=resulting_days,
+        summary=proposal.summary,
+        instruction=proposal.instruction,
+        model="curated-flight-v1",
+        parent_version=proposal.parent_version
+    )
+    proposal.status = "accepted"
+    pg_session.commit()
+
+    # 6. VERIFY POST-ACCEPTANCE
+    assert next_ver == 2
+    assert new_snapshot.parent_version == 1
+    assert new_snapshot.action_type == "ATTACH_FLIGHT_OFFER"
+
+    # Trip is CHANGED
+    pg_session.refresh(trip)
+    assert len(trip.days[0].activities) == initial_activity_count + 1
+    transit_activity = trip.days[0].activities[0]
+    assert transit_activity.place_type == "TR"
+    assert "Flight" in transit_activity.description
+    assert transit_activity.provenance == "CURATED"
+
+    # Booking reference created with explicit truth boundaries
+    saved_booking = pg_session.query(Booking).filter(Booking.trip_id == trip.id).first()
+    assert saved_booking is not None
+    assert saved_booking.status == "pending"            # NOT confirmed
+    assert saved_booking.provenance == "CURATED"        # NOT PROVIDER_VERIFIED
+    assert saved_booking.amount == selected_offer.price
+
+
 

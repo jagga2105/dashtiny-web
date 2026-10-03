@@ -315,8 +315,7 @@ def test_hotel_and_flight_search_no_backend_defaults(client):
     assert res_hotel.json() == []
 
     res_flight = client.get("/api/v1/bookings/search/flights?origin=&destination=")
-    assert res_flight.status_code == 200
-    assert res_flight.json() == []
+    assert res_flight.status_code == 422
 
 
 def test_reward_ledger_ten_rules_end_to_end(client, db_session, test_user):

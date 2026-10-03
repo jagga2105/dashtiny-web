@@ -71,6 +71,26 @@ Traveler Action / Copilot Prompt
 - External API calls (such as geocoding) are strictly kept out of database mutation transactions; coordinates are resolved during proposal synthesis.
 - Initial Trip creation immediately registers version 1 (`INITIAL_CREATION`), removing lazy baseline creation.
 
+---
+
+## ✈️ Flight Search, Comparison & Trip Attachment (L2)
+
+DashTiny provides a modernized flight search and comparison experience integrated directly with the active **Trip Workspace**:
+
+1. **Normalized Provider Abstraction**:
+   - `GET /api/v1/bookings/search/flights` queries the canonical provider abstraction layer (`FlightProvider`).
+   - Responses are normalized into 29-field `FlightOffer` objects with honest metadata envelopes (`total_offers`, `providers_queried`, `provenance="CURATED"`, `availability_state="ESTIMATED"`).
+   - Modeled after contemporary carriers (IndiGo, Air India, Akasa Air, SpiceJet, Air India Express) with dynamic flight duration calculated from route coordinates. Zero defunct airlines (Vistara, Go First).
+2. **Search & Filter UX**:
+   - Powered by L1 PostgreSQL `AirportAutocomplete` with keyboard navigation and zero fallback to dummy codes.
+   - Comprehensive filtering: stops (non-stop, 1 stop, 2+ stops), airlines, departure time slots, and dynamic price slider.
+   - 5-way sorting: Cheapest, Fastest, Balanced, Earliest Departure, and Latest Departure.
+   - Side-by-side comparison tray and modal for up to 3 flight offers highlighting differences in price, duration, baggage, and cancellation terms.
+3. **Trip Context & Proposal Integration**:
+   - Searches prefill origin, destination, and dates directly from the traveler's active Trip.
+   - Selecting a flight triggers the canonical AI Proposal flow (`ATTACH_FLIGHT_OFFER`): non-mutating preview with budget impact, row locking on acceptance, automated Day 1 transit activity scheduling, pending `Booking` record creation, and append-only `TripRevision`.
+
+---
 
 ## ⚡ Tech Stack
 

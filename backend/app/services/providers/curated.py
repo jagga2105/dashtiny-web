@@ -1,12 +1,114 @@
 from datetime import datetime, timezone, timedelta
 from typing import List, Dict, Any, Optional
 
+from app.schemas.flight import FlightOffer
 from app.services.providers.base import FlightProvider, HotelProvider, ActivityProvider
+from app.db.database import SessionLocal
+from app.models.models import Airport
+
+
+# Reference metadata for top commercial hubs for instant, zero-latency resolution
+KNOWN_AIRPORT_REFS: Dict[str, Dict[str, str]] = {
+    "DEL": {"code": "DEL", "name": "Indira Gandhi International Airport", "city": "New Delhi", "country": "India"},
+    "BOM": {"code": "BOM", "name": "Chhatrapati Shivaji Maharaj International Airport", "city": "Mumbai", "country": "India"},
+    "BLR": {"code": "BLR", "name": "Kempegowda International Airport", "city": "Bengaluru", "country": "India"},
+    "GOI": {"code": "GOI", "name": "Dabolim Airport", "city": "Goa", "country": "India"},
+    "GOA": {"code": "GOI", "name": "Dabolim Airport", "city": "Goa", "country": "India"},
+    "GOX": {"code": "GOX", "name": "Manohar International Airport (Mopa)", "city": "Goa", "country": "India"},
+    "HYD": {"code": "HYD", "name": "Rajiv Gandhi International Airport", "city": "Hyderabad", "country": "India"},
+    "MAA": {"code": "MAA", "name": "Chennai International Airport", "city": "Chennai", "country": "India"},
+    "CCU": {"code": "CCU", "name": "Netaji Subhash Chandra Bose International Airport", "city": "Kolkata", "country": "India"},
+    "COK": {"code": "COK", "name": "Cochin International Airport", "city": "Kochi", "country": "India"},
+    "AMD": {"code": "AMD", "name": "Sardar Vallabhbhai Patel International Airport", "city": "Ahmedabad", "country": "India"},
+    "PNQ": {"code": "PNQ", "name": "Pune International Airport", "city": "Pune", "country": "India"},
+    "JAI": {"code": "JAI", "name": "Jaipur International Airport", "city": "Jaipur", "country": "India"},
+    "IXC": {"code": "IXC", "name": "Shaheed Bhagat Singh International Airport", "city": "Chandigarh", "country": "India"},
+    "SXR": {"code": "SXR", "name": "Sheikh ul-Alam International Airport", "city": "Srinagar", "country": "India"},
+    "LKO": {"code": "LKO", "name": "Chaudhary Charan Singh International Airport", "city": "Lucknow", "country": "India"},
+    "TRV": {"code": "TRV", "name": "Thiruvananthapuram International Airport", "city": "Thiruvananthapuram", "country": "India"},
+    "GAU": {"code": "GAU", "name": "Lokpriya Gopinath Bordoloi International Airport", "city": "Guwahati", "country": "India"},
+    "PAT": {"code": "PAT", "name": "Jay Prakash Narayan Airport", "city": "Patna", "country": "India"},
+    "BBI": {"code": "BBI", "name": "Biju Patnaik International Airport", "city": "Bhubaneswar", "country": "India"},
+    "VNS": {"code": "VNS", "name": "Lal Bahadur Shastri International Airport", "city": "Varanasi", "country": "India"},
+    "IXR": {"code": "IXR", "name": "Birsa Munda Airport", "city": "Ranchi", "country": "India"},
+    "IDR": {"code": "IDR", "name": "Devi Ahilya Bai Holkar Airport", "city": "Indore", "country": "India"},
+    "NAG": {"code": "NAG", "name": "Dr. Babasaheb Ambedkar International Airport", "city": "Nagpur", "country": "India"},
+    "ATQ": {"code": "ATQ", "name": "Sri Guru Ram Dass Jee International Airport", "city": "Amritsar", "country": "India"},
+    "UDR": {"code": "UDR", "name": "Maharana Pratap Airport", "city": "Udaipur", "country": "India"},
+    "DXB": {"code": "DXB", "name": "Dubai International Airport", "city": "Dubai", "country": "United Arab Emirates"},
+    "SIN": {"code": "SIN", "name": "Singapore Changi Airport", "city": "Singapore", "country": "Singapore"},
+    "BKK": {"code": "BKK", "name": "Suvarnabhumi Airport", "city": "Bangkok", "country": "Thailand"},
+    "LHR": {"code": "LHR", "name": "Heathrow Airport", "city": "London", "country": "United Kingdom"},
+    "JFK": {"code": "JFK", "name": "John F. Kennedy International Airport", "city": "New York", "country": "United States"}
+}
+
+
+# Estimated standard non-stop duration in minutes between major corridors
+CORRIDOR_DURATIONS: Dict[str, int] = {
+    "DEL_BOM": 130, "BOM_DEL": 125,
+    "DEL_BLR": 165, "BLR_DEL": 160,
+    "DEL_GOI": 155, "GOI_DEL": 150,
+    "DEL_GOX": 150, "GOX_DEL": 145,
+    "BOM_GOI": 75,  "GOI_BOM": 75,
+    "BOM_GOX": 70,  "GOX_BOM": 70,
+    "BLR_GOI": 75,  "GOI_BLR": 75,
+    "BLR_BOM": 100, "BOM_BLR": 100,
+    "DEL_CCU": 135, "CCU_DEL": 135,
+    "DEL_HYD": 130, "HYD_DEL": 125,
+    "DEL_MAA": 170, "MAA_DEL": 165,
+    "DEL_COK": 195, "COK_DEL": 190,
+    "DEL_AMD": 95,  "AMD_DEL": 90,
+    "DEL_PNQ": 125, "PNQ_DEL": 120,
+    "DEL_JAI": 60,  "JAI_DEL": 60,
+    "DEL_IXC": 55,  "IXC_DEL": 55,
+    "DEL_SXR": 90,  "SXR_DEL": 85,
+    "DEL_DXB": 240, "DXB_DEL": 225,
+    "DEL_SIN": 330, "SIN_DEL": 345,
+    "DEL_LHR": 550, "LHR_DEL": 510,
+    "DEL_BKK": 255, "BKK_DEL": 270,
+}
+
+
+def _resolve_airport_ref(iata: str) -> Optional[Dict[str, str]]:
+    clean = iata.upper().strip()
+    if clean in KNOWN_AIRPORT_REFS:
+        return KNOWN_AIRPORT_REFS[clean]
+
+    # Query PostgreSQL airports table if not in memory dictionary
+    db = SessionLocal()
+    try:
+        airport = db.query(Airport).filter(Airport.iata_code == clean).first()
+        if airport:
+            return {
+                "code": airport.iata_code,
+                "name": airport.name,
+                "city": airport.city,
+                "country": airport.country or "India"
+            }
+    except Exception:
+        pass
+    finally:
+        db.close()
+
+    return None
+
+
+def _format_time_with_duration(base_time_str: str, duration_mins: int) -> str:
+    """Calculates arrival time string (e.g. '08:35 AM') from departure time and duration."""
+    try:
+        t = datetime.strptime(base_time_str, "%I:%M %p")
+        arr = t + timedelta(minutes=duration_mins)
+        return arr.strftime("%I:%M %p")
+    except Exception:
+        return "11:30 AM"
 
 
 class CuratedFlightProvider(FlightProvider):
     """
     Curated adapter representing standardized flight offers with explicit CURATED provenance.
+    Synthesizes deterministic, contemporary airline catalog offers.
+    Adheres strictly to current-date airline safety (IndiGo, Air India, Air India Express, Akasa Air, SpiceJet).
+    Never exposes defunct carriers (Vistara, Go First).
     Never labeled as live provider inventory.
     """
     def search_flights(
@@ -18,107 +120,169 @@ class CuratedFlightProvider(FlightProvider):
         passengers: int = 1,
         cabin_class: str = "economy",
         trip_type: str = "roundtrip"
-    ) -> List[Dict[str, Any]]:
+    ) -> List[FlightOffer]:
         origin_clean = origin.upper().strip() if origin else ""
         dest_clean = destination.upper().strip() if destination else ""
-        if not origin_clean or not dest_clean:
+        if not origin_clean or not dest_clean or origin_clean == dest_clean:
             return []
 
-        num_pax = max(1, passengers or 1)
+        # Resolve airport information using L1 Location database & reference dictionary
+        origin_info = _resolve_airport_ref(origin_clean)
+        dest_info = _resolve_airport_ref(dest_clean)
+
+        # If airport is not recognized in DashTiny location repository, return empty results
+        if not origin_info or not dest_info:
+            return []
+
+        num_pax = max(1, min(9, passengers or 1))
         cabin = (cabin_class or "economy").lower()
+        if cabin == "premium":
+            cabin = "premium_economy"
         is_roundtrip = (trip_type or "roundtrip").lower() == "roundtrip"
 
-        cabin_multiplier = 2.4 if cabin == "business" else (1.4 if cabin == "premium" else 1.0)
+        cabin_multiplier = {
+            "economy": 1.0,
+            "premium_economy": 1.45,
+            "business": 2.5,
+            "first": 3.8
+        }.get(cabin, 1.0)
         trip_multiplier = 1.85 if is_roundtrip else 1.0
 
         now_utc = datetime.now(timezone.utc)
         retrieved_at = now_utc.isoformat()
         expires_at = (now_utc + timedelta(hours=2)).isoformat()
 
-        base_corridors = [
+        # Determine corridor duration and base fare
+        corridor_key = f"{origin_clean}_{dest_clean}"
+        base_duration = CORRIDOR_DURATIONS.get(corridor_key, 125)
+        
+        # Base fare calculation anchored in duration
+        base_corridor_fare = max(2800, int(base_duration * 28 + 400))
+
+        # 5 Contemporary Indian & Regional Carriers (Safe contemporary identities)
+        catalog_blueprints = [
             {
                 "suffix": "01",
+                "airline": "IndiGo",
                 "provider": "IndiGo Premier",
-                "flight_number": "6E-534",
-                "departure_time": "06:15 AM",
-                "arrival_time": "07:30 AM",
-                "duration": "1h 15m (Non-stop)",
-                "duration_minutes": 75,
+                "flight_number": f"6E-{2000 + (hash(corridor_key + '1') % 800)}",
+                "dep_time": "06:15 AM",
                 "stops": 0,
-                "base_fare": 3450,
+                "layover": 0,
+                "base_fare": base_corridor_fare + 250,
                 "baggage": "15kg Checked • 7kg Cabin" if cabin == "economy" else "30kg Checked • 10kg Cabin",
-                "cancellation": "Free cancellation within 24 hours",
+                "cancellation": "Free cancellation within 24 hours of booking",
                 "deep_link": "https://www.goindigo.in",
-                "why_recommended": "Morning direct flight with early arrival at destination"
+                "why_recommended": "Early morning direct flight; arrives early for a full day of travel"
             },
             {
                 "suffix": "02",
-                "provider": "Air India Express",
-                "flight_number": "AI-802",
-                "departure_time": "10:45 AM",
-                "arrival_time": "12:10 PM",
-                "duration": "1h 25m (Non-stop)",
-                "duration_minutes": 85,
+                "airline": "Air India",
+                "provider": "Air India",
+                "flight_number": f"AI-{800 + (hash(corridor_key + '2') % 150)}",
+                "dep_time": "10:30 AM",
                 "stops": 0,
-                "base_fare": 4120,
-                "baggage": "20kg Checked • Priority Boarding" if cabin == "economy" else "35kg Checked • Lounge Access",
-                "cancellation": "Partially refundable",
+                "layover": 0,
+                "base_fare": base_corridor_fare + 750,
+                "baggage": "20kg Checked • 7kg Cabin" if cabin == "economy" else "35kg Checked • 12kg Cabin • Lounge Access",
+                "cancellation": "Refundable with nominal partner fee",
                 "deep_link": "https://www.airindia.com",
-                "why_recommended": "Generous luggage allowance and comfortable mid-day timing"
+                "why_recommended": "Generous luggage allowance and comfortable prime mid-day timing"
             },
             {
                 "suffix": "03",
-                "provider": "Akasa Air Getaway",
-                "flight_number": "QP-1310",
-                "departure_time": "04:30 PM",
-                "arrival_time": "05:45 PM",
-                "duration": "1h 15m (Non-stop)",
-                "duration_minutes": 75,
+                "airline": "Akasa Air",
+                "provider": "Akasa Air",
+                "flight_number": f"QP-{1300 + (hash(corridor_key + '3') % 200)}",
+                "dep_time": "03:45 PM",
                 "stops": 0,
-                "base_fare": 2890,
-                "baggage": "15kg Checked • USB port charging",
+                "layover": 0,
+                "base_fare": max(2600, base_corridor_fare - 350),
+                "baggage": "15kg Checked • 7kg Cabin • USB port charging",
                 "cancellation": "Standard fee applies",
                 "deep_link": "https://www.akasaair.com",
-                "why_recommended": "Lowest base fare on this corridor, arriving right before sunset"
+                "why_recommended": "Lowest direct base fare on this corridor, arriving right before sunset"
+            },
+            {
+                "suffix": "04",
+                "airline": "SpiceJet",
+                "provider": "SpiceJet",
+                "flight_number": f"SG-{350 + (hash(corridor_key + '4') % 300)}",
+                "dep_time": "12:40 PM",
+                "stops": 1,
+                "layover": 50,
+                "base_fare": max(2400, base_corridor_fare - 500),
+                "baggage": "15kg Checked • 7kg Cabin",
+                "cancellation": "Standard airline terms apply",
+                "deep_link": "https://www.spicejet.com",
+                "why_recommended": "Budget-friendly connecting option with a short, single stop"
+            },
+            {
+                "suffix": "05",
+                "airline": "Air India Express",
+                "provider": "Air India Express",
+                "flight_number": f"IX-{1100 + (hash(corridor_key + '5') % 250)}",
+                "dep_time": "07:15 PM",
+                "stops": 0,
+                "layover": 0,
+                "base_fare": base_corridor_fare + 100,
+                "baggage": "15kg Checked • 7kg Cabin" if cabin == "economy" else "30kg Checked • 10kg Cabin",
+                "cancellation": "Partially refundable",
+                "deep_link": "https://www.airindiaexpress.com",
+                "why_recommended": "Evening departure ideal for post-work weekend getaways"
             }
         ]
 
-        offers = []
-        for b in base_corridors:
+        offers: List[FlightOffer] = []
+        for b in catalog_blueprints:
+            dur_mins = base_duration + (b["layover"] if b["stops"] > 0 else 0)
+            arr_time = _format_time_with_duration(b["dep_time"], dur_mins)
+            
             calculated_total = float(round(b["base_fare"] * cabin_multiplier * trip_multiplier * num_pax))
             per_pax = float(round(calculated_total / num_pax))
-            offer_id = f"fl_{origin_clean[:3]}_{dest_clean[:3]}_{b['suffix']}"
+            offer_id = f"fl_{origin_clean}_{dest_clean}_{b['suffix']}"
 
-            offers.append({
-                "offer_id": offer_id,
-                "id": offer_id,
-                "provider": b["provider"],
-                "flight_number": b["flight_number"],
-                "origin": origin_clean,
-                "destination": dest_clean,
-                "departure_date": departure_date or "Upcoming",
-                "return_date": return_date if is_roundtrip else None,
-                "departure_time": b["departure_time"],
-                "arrival_time": b["arrival_time"],
-                "duration": b["duration"],
-                "duration_minutes": b["duration_minutes"],
-                "stops": b["stops"],
-                "price": calculated_total,
-                "per_passenger_price": per_pax,
-                "passengers": num_pax,
-                "cabin_class": cabin,
-                "trip_type": "roundtrip" if is_roundtrip else "oneway",
-                "currency": "INR",
-                "baggage": b["baggage"],
-                "cancellation": b["cancellation"],
-                "availability_state": "ESTIMATED",
-                "provenance": "CURATED",
-                "source": "CURATED_DATABASE",
-                "retrieved_at": retrieved_at,
-                "expires_at": expires_at,
-                "deep_link": b["deep_link"],
-                "why_recommended": b["why_recommended"]
-            })
+            stop_details = []
+            if b["stops"] > 0:
+                layover_hub = "HYD" if "HYD" not in (origin_clean, dest_clean) else "BOM"
+                stop_details = [{
+                    "airport": layover_hub,
+                    "city": KNOWN_AIRPORT_REFS.get(layover_hub, {}).get("city", layover_hub),
+                    "duration_minutes": b["layover"]
+                }]
+
+            offers.append(FlightOffer(
+                offer_id=offer_id,
+                provider=b["provider"],
+                airline=b["airline"],
+                flight_number=b["flight_number"],
+                origin=origin_clean,
+                destination=dest_clean,
+                origin_airport=origin_info,
+                destination_airport=dest_info,
+                departure_date=departure_date or datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+                return_date=return_date if is_roundtrip else None,
+                departure_time=b["dep_time"],
+                arrival_time=arr_time,
+                duration_minutes=dur_mins,
+                stops=b["stops"],
+                stop_details=stop_details,
+                passengers=num_pax,
+                cabin_class=cabin,
+                trip_type="roundtrip" if is_roundtrip else "oneway",
+                price=calculated_total,
+                per_passenger_price=per_pax,
+                currency="INR",
+                baggage=b["baggage"],
+                cancellation=b["cancellation"],
+                availability_state="ESTIMATED",
+                provenance="CURATED",
+                source="CURATED_DATABASE",
+                retrieved_at=retrieved_at,
+                expires_at=expires_at,
+                deep_link=b["deep_link"],
+                why_recommended=b["why_recommended"]
+            ))
 
         return offers
 

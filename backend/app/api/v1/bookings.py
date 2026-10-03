@@ -12,6 +12,10 @@ from app.db.database import get_db
 from app.models.models import Booking, User, UserProfile, Itinerary, SquadRoom, SquadMember, RewardTransaction
 from app.api.deps import get_current_user
 
+from datetime import datetime, timezone, timedelta
+from pydantic import ValidationError
+from app.schemas.flight import FlightOffer, FlightSearchRequest, FlightSearchResponse
+
 from app.services.providers import (
     FlightProvider,
     HotelProvider,
@@ -34,30 +38,65 @@ class CreateBookingRequest(BaseModel):
     pnr_ref: Optional[str] = None
     details: Optional[dict] = None
 
-@router.get("/search/flights")
-def search_flights_endpoint(
-    origin: str,
-    destination: str,
-    departure_date: Optional[str] = None,
+
+def get_flight_search_request(
+    origin: str = "",
+    destination: str = "",
+    departure_date: str = "",
     return_date: Optional[str] = None,
     passengers: int = 1,
     cabin_class: str = "economy",
     trip_type: str = "roundtrip"
+) -> FlightSearchRequest:
+    try:
+        return FlightSearchRequest(
+            origin=origin,
+            destination=destination,
+            departure_date=departure_date,
+            return_date=return_date,
+            passengers=passengers,
+            cabin_class=cabin_class,
+            trip_type=trip_type
+        )
+    except (ValidationError, ValueError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc)
+        )
+
+
+@router.get("/search/flights", response_model=FlightSearchResponse)
+def search_flights_endpoint(
+    req: FlightSearchRequest = Depends(get_flight_search_request)
 ):
     """
     Search curated travel catalog flight offers normalized into FlightOffer schema.
     Returns current catalog pricing and estimated availability with explicit CURATED provenance.
     Live OTA provider integrations are deferred to future phases.
-    Requires explicit search intent: origin and destination.
+    Requires explicit search intent: origin and destination, validated departure dates.
+    Invalid input returns HTTP 422 Unprocessable Entity.
     """
-    return _flight_provider.search_flights(
-        origin=origin,
-        destination=destination,
-        departure_date=departure_date,
-        return_date=return_date,
-        passengers=passengers,
-        cabin_class=cabin_class,
-        trip_type=trip_type
+    offers = _flight_provider.search_flights(
+        origin=req.origin,
+        destination=req.destination,
+        departure_date=req.departure_date,
+        return_date=req.return_date,
+        passengers=req.passengers,
+        cabin_class=req.cabin_class,
+        trip_type=req.trip_type
+    )
+
+    now_utc = datetime.now(timezone.utc)
+    retrieved_at = now_utc.isoformat()
+    expires_at = (now_utc + timedelta(hours=2)).isoformat()
+
+    return FlightSearchResponse(
+        search=req.model_dump(),
+        offers=offers,
+        provenance="CURATED",
+        availability_state="ESTIMATED",
+        retrieved_at=retrieved_at,
+        expires_at=expires_at
     )
 
 @router.get("/search/hotels")

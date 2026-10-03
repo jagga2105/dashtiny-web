@@ -130,3 +130,37 @@ Every single data element presented in the DashTiny interface carries its proven
   - Legacy Express API & Mongoose MongoDB
   - Legacy client-side API credentials
 
+---
+
+## 🛫 Legacy Migration L2: Flight Search, Filtering & Trip Integration
+
+- **Legacy Audit Findings**:
+  - Legacy repository contained Angular/RxJS flight search (`flight-search.component.ts`, `flight-service.ts`) with hardcoded defunct airlines (Vistara, Go First), mock SQLite files (`flights.db`, 0 records), direct booking bypass, and promotional sponsored card carousels.
+  - Rebuilt on DashTiny modern architecture: Next.js 15 App Router + FastAPI + normalized 29-field `FlightOffer` schema + `CuratedFlightProvider` + `ATTACH_FLIGHT_OFFER` proposal lifecycle.
+- **Normalized Canonical Schema & Validation**:
+  - `backend/app/schemas/flight.py`: Created 29-field normalized `FlightOffer` (with subscript support `offer["id"]` for backward compatibility), `FlightSearchRequest` with strict validation (422 for past departure date, return date before departure, origin == destination, invalid passengers/cabin/trip_type), and `FlightSearchResponse` metadata envelope (`total_offers`, `providers_queried`, `provenance="CURATED"`, `availability_state="ESTIMATED"`, `timestamp`).
+- **Curated Flight Provider**:
+  - `backend/app/services/providers/curated.py`: Modeled 5 contemporary Indian/regional carriers (IndiGo, Air India, Akasa Air, SpiceJet, Air India Express) with dynamic flight duration calculated from route coordinates, time-of-day corridors, realistic pricing, baggage, cancellation terms, and deep links. Zero references to defunct airlines (Vistara, Go First).
+- **FastAPI Endpoints & Proposal Lifecycle Integration**:
+  - `GET /api/v1/bookings/search/flights`: Standardized parameterized flight search endpoint returning `FlightSearchResponse`.
+  - Upgraded `POST /api/v1/ai/proposals` and `POST /api/v1/ai/proposals/{proposal_id}/accept` to support `action_type="ATTACH_FLIGHT_OFFER"`. On acceptance, locks `itineraries` row, inserts Day 1 transit activity with flight timing and offer details, creates pending `Booking` record with `provenance="CURATED"`, and appends `TripRevision`.
+- **Modular Frontend Components**:
+  - Extracted flight components into `src/components/flight/`:
+    - `FlightProvenance.tsx`: Clear provenance banner informing traveler of curated catalog and estimated availability.
+    - `FlightTripContext.tsx`: Active trip workspace selector to prefill flight origin/destination/dates and attach offers to trips.
+    - `FlightSearchForm.tsx`: L1 `AirportAutocomplete` integration, trip type toggle (one-way / round-trip), passenger/cabin dropdown, origin/destination swap with animation, client validation.
+    - `FlightFilters.tsx`: Stops filter (non-stop, 1-stop, 2+ stops), airline filter, price slider, departure time slots (morning, afternoon, evening, night).
+    - `FlightSort.tsx`: 5-way sorting (cheapest, fastest, balanced, earliest, latest).
+    - `FlightOfferCard.tsx`: Carrier logo, flight numbers, duration, stops, baggage, cancellation policy, price, compare toggle button (`aria-pressed`), "Select for Trip" CTA, and "Continue to provider" link.
+    - `FlightComparison.tsx`: Floating tray (up to 3 selected offers) and full modal comparison matrix highlighting cheapest and fastest options with diff columns.
+    - `FlightResults.tsx`: Client-side filtering/sorting, stale search warning, results summary, empty/error states, and comparison tray integration.
+  - Refactored `src/app/bookings/page.tsx` flights tab into clean composable architecture, preserving all other transportation tabs (hotels, trains, buses, cabs, my_bookings).
+- **Intentionally Discarded Legacy Elements**:
+  - Angular components, directives, RxJS pipes and subjects.
+  - Defunct airlines (Vistara, Go First).
+  - Legacy SQLite `flights.db` / `airports.db` runtime files.
+  - Direct booking payment bypass bypassing Trip state.
+  - Sponsored promotional card carousels pretending to be flight search results.
+  - Legacy mock user tokens and unverified endpoints.
+
+
