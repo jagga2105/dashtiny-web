@@ -109,7 +109,7 @@ def register(request: RegisterRequest, db: Session = Depends(get_db)):
     user_profile = UserProfile(
         user_id=new_user.id,
         home_city="Bengaluru",
-        reward_coins=300,
+        reward_coins=0,
         travel_vibes=["Beach", "Mountains"]
     )
     db.add(user_profile)

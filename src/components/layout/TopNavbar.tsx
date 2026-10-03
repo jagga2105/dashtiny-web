@@ -25,7 +25,6 @@ export function TopNavbar() {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [mounted, setMounted] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-  const coins = user?.coins ?? 250;
   const userName = user?.full_name || 'Explorer';
 
   useEffect(() => {
@@ -118,8 +117,37 @@ export function TopNavbar() {
                     <p className="text-[11px] text-slate-500 truncate">{user.email}</p>
                   </div>
 
-                  {/* Navigation & Preferences */}
+                  {/* Your Account */}
                   <div className="py-1">
+                    <div className="px-4 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                      Your Account
+                    </div>
+                    <Link
+                      href="/rewards"
+                      onClick={() => setShowUserMenu(false)}
+                      className="px-4 py-2 text-slate-700 hover:bg-slate-50 flex items-center justify-between font-medium"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <Coins className="w-3.5 h-3.5 text-amber-500" />
+                        <span>Travel Credits</span>
+                      </div>
+                      {user.coins != null ? (
+                        <span className="px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 text-[10px] font-bold border border-amber-200">
+                          {user.coins} pts
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-slate-400 font-mono">0 pts</span>
+                      )}
+                    </Link>
+                  </div>
+
+                  <div className="border-t border-slate-100 my-1" />
+
+                  {/* Trips & Planning */}
+                  <div className="py-1">
+                    <div className="px-4 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                      Trips
+                    </div>
                     <Link
                       href="/trips"
                       onClick={() => setShowUserMenu(false)}
@@ -135,19 +163,6 @@ export function TopNavbar() {
                     >
                       <Sparkles className="w-3.5 h-3.5 text-slate-400" />
                       <span>Plan a new trip</span>
-                    </Link>
-                    <Link
-                      href="/rewards"
-                      onClick={() => setShowUserMenu(false)}
-                      className="px-4 py-2 text-slate-700 hover:bg-slate-50 flex items-center justify-between font-medium"
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <Coins className="w-3.5 h-3.5 text-amber-500" />
-                        <span>Travel Credits</span>
-                      </div>
-                      <span className="px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 text-[10px] font-bold border border-amber-200">
-                        {coins} pts
-                      </span>
                     </Link>
                   </div>
 

@@ -147,6 +147,14 @@ function BookingsContent() {
   const [isSearchingHotels, setIsSearchingHotels] = useState(false);
   const [hotelError, setHotelError] = useState<string | null>(null);
 
+  const getHotelNights = (inDate?: string, outDate?: string): number => {
+    if (!inDate || !outDate) return 1;
+    const start = new Date(inDate).getTime();
+    const end = new Date(outDate).getTime();
+    if (isNaN(start) || isNaN(end) || end <= start) return 1;
+    return Math.max(1, Math.round((end - start) / (1000 * 60 * 60 * 24)));
+  };
+
   const currentHotelKey = `${hotelDest}-${hotelGuests}-${hotelCheckIn}-${hotelCheckOut}`;
   const isFlightSearchStale = lastSearchedFlightKey !== '' && lastSearchedFlightKey !== currentFlightKey && flightsList.length > 0;
   const isHotelSearchStale = lastSearchedHotelKey !== '' && lastSearchedHotelKey !== currentHotelKey && hotelsList.length > 0;
@@ -742,7 +750,7 @@ function BookingsContent() {
                 <div className="space-y-1">
                   <h3 className="font-serif-editorial font-bold text-slate-900 text-base">Ready to compare flight options</h3>
                   <p className="text-xs text-slate-500 max-w-md mx-auto">
-                    Verify your origin, destination, and travel dates above, then click &quot;Search flights&quot; to fetch live provider inventory.
+                    Verify your origin, destination, and travel dates above, then click &quot;Search flights&quot; to search the current DashTiny travel catalog.
                   </p>
                 </div>
                 <Button
@@ -916,48 +924,66 @@ function BookingsContent() {
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between pt-4 mt-3 border-t border-slate-100">
-                    <div>
-                      <span className="text-xl font-serif-editorial font-bold text-slate-900">
-                        ₹{ht.price_per_night?.toLocaleString('en-IN')}
-                      </span>
-                      <span className="text-xs text-slate-400 block">/ night</span>
-                    </div>
+                  {(() => {
+                    const stayNights = ht.nights || getHotelNights(hotelCheckIn, hotelCheckOut);
+                    const totalAmount = ht.total_amount || ht.total_price || ((ht.price_per_night || 0) * stayNights);
+                    return (
+                      <div className="flex items-center justify-between pt-4 mt-3 border-t border-slate-100">
+                        <div>
+                          <div className="flex items-baseline gap-1">
+                            <span className="text-xl font-serif-editorial font-bold text-slate-900">
+                              ₹{ht.price_per_night?.toLocaleString('en-IN')}
+                            </span>
+                            <span className="text-xs text-slate-500 font-medium">/ night</span>
+                          </div>
+                          {stayNights > 1 && (
+                            <span className="text-[11px] text-slate-500 font-semibold block">
+                              ₹{totalAmount.toLocaleString('en-IN')} total ({stayNights} nights)
+                            </span>
+                          )}
+                        </div>
 
-                    <div className="flex flex-col sm:flex-row items-end sm:items-center gap-2">
-                      {ht.deep_link ? (
-                        <a
-                          href={ht.deep_link}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl bg-orange-600 hover:bg-orange-700 text-white text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
-                          title="Open provider"
-                        >
-                          <span>Book on {ht.source || 'Provider'}</span>
-                          <ExternalLink className="w-3.5 h-3.5" />
-                        </a>
-                      ) : (
-                        <span className="text-[11px] text-slate-400 font-medium">Provider direct booking</span>
-                      )}
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        isLoading={loading}
-                        className="border-slate-200 text-slate-700 hover:bg-slate-50 font-semibold text-xs cursor-pointer"
-                        onClick={() =>
-                          handleSaveBookingReference(
-                            'hotel',
-                            ht.source || 'Stay Provider',
-                            `${ht.name} (${ht.room_type})`,
-                            ht.price_per_night,
-                            ht
-                          )
-                        }
-                      >
-                        Already booked? Add reference
-                      </Button>
-                    </div>
-                  </div>
+                        <div className="flex flex-col sm:flex-row items-end sm:items-center gap-2">
+                          {ht.deep_link ? (
+                            <a
+                              href={ht.deep_link}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl bg-orange-600 hover:bg-orange-700 text-white text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
+                              title="Open provider"
+                            >
+                              <span>Book on {ht.source || 'Provider'}</span>
+                              <ExternalLink className="w-3.5 h-3.5" />
+                            </a>
+                          ) : (
+                            <span className="text-[11px] text-slate-400 font-medium">Provider direct booking</span>
+                          )}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            isLoading={loading}
+                            className="border-slate-200 text-slate-700 hover:bg-slate-50 font-semibold text-xs cursor-pointer"
+                            onClick={() =>
+                              handleSaveBookingReference(
+                                'hotel',
+                                ht.source || 'Stay Provider',
+                                `${ht.name} (${ht.room_type} · ${stayNights} ${stayNights === 1 ? 'night' : 'nights'})`,
+                                totalAmount,
+                                {
+                                  ...ht,
+                                  nightly_rate: ht.price_per_night,
+                                  total_amount: totalAmount,
+                                  stay_nights: stayNights,
+                                }
+                              )
+                            }
+                          >
+                            Already booked? Add reference
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </Card>
               ))}
             </div>

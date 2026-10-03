@@ -12,7 +12,7 @@ from jose import jwt
 
 from app.config import settings
 from app.db.database import get_db
-from app.models.models import Itinerary, ItineraryDay, ItineraryActivity, User, AIRun, AIToolCall, SquadRoom, SquadMember
+from app.models.models import Itinerary, ItineraryDay, ItineraryActivity, User, AIRun, AIToolCall, SquadRoom, SquadMember, TripSnapshot
 from app.ai.tools.itinerary import apply_itinerary_action
 from app.ai.tools.weather import get_destination_weather
 from app.ai.tools.hotel_search import search_hotels
@@ -82,11 +82,28 @@ def ai_query(
                     "place_type": a.place_type,
                     "estimated_transit": a.estimated_transit,
                     "cost_estimate": float(a.cost_estimate or 0),
-                    "provenance": a.provenance or "DETERMINISTIC"
+                    "provenance": a.provenance or "DETERMINISTIC",
+                    "lat": a.lat,
+                    "lng": a.lng,
+                    "source_citation": a.source_citation,
+                    "why_recommended": a.why_recommended,
+                    "generation_source": a.generation_source,
+                    "location_source": a.location_source,
+                    "content_source": a.content_source,
+                    "sort_order": a.sort_order
                 }
                 for a in sorted(d.activities, key=lambda x: x.sort_order)
             ]
         })
+
+    # Save a rollback snapshot prior to applying changes
+    snapshot = TripSnapshot(
+        trip_id=trip.id,
+        user_id=user.id,
+        summary=f"Snapshot before: {request.instruction[:60]}",
+        days_data=current_days
+    )
+    db.add(snapshot)
 
     # Execute deterministic itinerary action tool
     action_result = apply_itinerary_action(request.instruction, current_days)

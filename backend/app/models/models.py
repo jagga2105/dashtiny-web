@@ -40,7 +40,7 @@ class UserProfile(Base):
     travel_vibes = Column(JSON, default=["Beach", "Mountains"])
     dietary_pref = Column(String(100), nullable=True)
     seat_pref = Column(String(50), default="Window")
-    reward_coins = Column(Integer, default=250)
+    reward_coins = Column(Integer, default=0)
 
     user = relationship("User", back_populates="profile")
 
@@ -278,6 +278,7 @@ class CommunityPost(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     source_trip = relationship("Itinerary", foreign_keys=[source_trip_id])
+    author = relationship("User", foreign_keys=[author_id])
 
 class RewardVoucher(Base):
     __tablename__ = "reward_vouchers"
@@ -299,5 +300,16 @@ class PostLike(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (UniqueConstraint("post_id", "user_id", name="uq_post_user_like"),)
+
+class TripSnapshot(Base):
+    __tablename__ = "trip_snapshots"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    trip_id = Column(String(36), ForeignKey("itineraries.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    summary = Column(String(255), nullable=True)
+    days_data = Column(JSON, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
 
 

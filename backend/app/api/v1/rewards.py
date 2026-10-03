@@ -59,7 +59,7 @@ def get_reward_vault(
     """
     profile = db.query(UserProfile).filter(UserProfile.user_id == user.id).first()
     if not profile:
-        profile = UserProfile(user_id=user.id, reward_coins=300)
+        profile = UserProfile(user_id=user.id, reward_coins=0)
         db.add(profile)
         db.commit()
         db.refresh(profile)

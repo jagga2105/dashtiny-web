@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import jwt
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.config import settings
 from app.db.database import get_db
@@ -26,8 +26,17 @@ def get_community_feed(db: Session = Depends(get_db)):
     """
     Get live verified getaway posts and companion request feed.
     Enriches posts with canonical Trip details if linked to a source trip.
+    Uses eager loading (joinedload) to eliminate N+1 queries.
     """
-    posts = db.query(CommunityPost).order_by(CommunityPost.created_at.desc()).all()
+    posts = (
+        db.query(CommunityPost)
+        .options(
+            joinedload(CommunityPost.source_trip).joinedload(Itinerary.days),
+            joinedload(CommunityPost.author)
+        )
+        .order_by(CommunityPost.created_at.desc())
+        .all()
+    )
     results = []
     for p in posts:
         source_trip_id = p.source_trip_id
@@ -36,14 +45,13 @@ def get_community_feed(db: Session = Depends(get_db)):
         trip_style = ["Travel Story"]
         is_completed = False
 
-        if p.source_trip_id:
-            trip = db.query(Itinerary).filter(Itinerary.id == p.source_trip_id).first()
-            if trip:
-                day_count = len(trip.days) if trip.days else 0
-                duration = f"{day_count} Days" if day_count > 0 else "Flexible"
-                budget_est = f"₹{int(trip.total_budget):,}" if trip.total_budget else "Flexible"
-                trip_style = [trip.vibe or trip.persona or "Discovery"]
-                is_completed = (trip.status == "completed")
+        if p.source_trip:
+            trip = p.source_trip
+            day_count = len(trip.days) if trip.days else 0
+            duration = f"{day_count} Days" if day_count > 0 else "Flexible"
+            budget_est = f"₹{int(trip.total_budget):,}" if trip.total_budget else "Flexible"
+            trip_style = [trip.vibe or trip.persona or "Discovery"]
+            is_completed = (trip.status == "completed")
         elif p.id in COMMUNITY_PUBLIC_SNAPSHOTS:
             snap = COMMUNITY_PUBLIC_SNAPSHOTS[p.id]
             source_trip_id = p.id
@@ -52,13 +60,16 @@ def get_community_feed(db: Session = Depends(get_db)):
             trip_style = [snap.get("vibe", "Culture")]
             is_completed = True
 
+        # Genuinely check author identity verification state from User.is_verified
+        is_verified = bool(p.author.is_verified) if p.author else False
+
         results.append({
             "id": p.id,
             "author_id": p.author_id,
             "source_trip_id": source_trip_id,
             "author_name": p.author_name,
             "author_avatar": p.author_avatar,
-            "trust_score": p.trust_score,
+            "trust_score": p.trust_score if is_verified else "Community Explorer",
             "getaway_title": p.getaway_title,
             "destination": p.getaway_title,
             "location": p.location,
@@ -67,7 +78,7 @@ def get_community_feed(db: Session = Depends(get_db)):
             "duration": duration,
             "budget_est": budget_est,
             "trip_style": trip_style,
-            "is_identity_verified": True,
+            "is_identity_verified": is_verified,
             "is_trip_completed": is_completed,
             "likes_count": p.likes_count or 0,
             "comments_count": 0,

@@ -234,7 +234,9 @@ def search_hotels(
         else:
             item["why_recommended"] = f"{item.get('why_recommended', '')} — Ideal bespoke setup for {clean_guests} traveler{'s' if clean_guests > 1 else ''}."
 
+        item["nightly_rate"] = item["price_per_night"]
         item["total_price"] = item["price_per_night"] * nights
+        item["total_amount"] = item["total_price"]
         scaled_results.append(item)
 
     return scaled_results

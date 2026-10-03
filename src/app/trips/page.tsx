@@ -361,14 +361,23 @@ function TripsContent() {
     });
   };
 
-  const handleUndoCopilotDiff = () => {
-    if (lastDiffResult?.previousTrip) {
-      setTrips((prev) =>
-        prev.map((t, idx) => (idx === activeTripIndex ? lastDiffResult.previousTrip : t))
-      );
+  const handleUndoCopilotDiff = async () => {
+    if (!currentTrip?.id) return;
+    try {
+      await apiService.undoTripAction(currentTrip.id);
+      await loadData();
       setLastDiffResult(null);
+    } catch (err) {
+      console.error('Failed to undo trip changes on server:', err);
+      if (lastDiffResult?.previousTrip) {
+        setTrips((prev) =>
+          prev.map((t, idx) => (idx === activeTripIndex ? lastDiffResult.previousTrip : t))
+        );
+        setLastDiffResult(null);
+      }
     }
   };
+
 
   // Helper: map activity place codes to human tags and icons
   const getPlaceCategory = (code?: string) => {
@@ -531,7 +540,13 @@ function TripsContent() {
                   <p className="text-xs sm:text-sm text-slate-600 font-medium flex flex-wrap items-center gap-2">
                     <span>{currentTrip.startDate} – {currentTrip.endDate}</span>
                     <span>•</span>
-                    <span>{currentTrip.travelers || currentTrip.travellers || 2} travelers</span>
+                    <span>
+                      {currentTrip.travellers != null
+                        ? `${currentTrip.travellers} travelers`
+                        : currentTrip.travelers != null
+                        ? `${currentTrip.travelers} travelers`
+                        : 'Travelers: Not specified'}
+                    </span>
                     <span>•</span>
                     <span className="font-semibold text-slate-900">
                       {currentTrip.budget ? `₹${Number(currentTrip.budget).toLocaleString('en-IN')} est.` : 'Budget not specified'}
@@ -923,18 +938,16 @@ function TripsContent() {
                         <div className="flex items-center gap-2">
                           <span className="w-2 h-2 rounded-full bg-emerald-400" />
                           <h4 className="font-serif-editorial font-bold text-xs uppercase tracking-wider text-slate-200">
-                            Route Map • Day {selectedDayIdx === 'all' ? 'All' : selectedDayIdx}
+                            Trip route • Day {selectedDayIdx === 'all' ? 'All' : selectedDayIdx}
                           </h4>
                         </div>
                         <div className="flex flex-col items-end">
                           <span className="text-[11px] font-mono text-orange-400">
                             {validPoints.length} of {mapActivities.length} stops mapped
                           </span>
-                          {validPoints.length < mapActivities.length && (
-                            <span className="text-[9px] text-slate-400">
-                              Some locations still need verified coordinates
-                            </span>
-                          )}
+                          <span className="text-[9px] text-slate-400">
+                            Approximate route based on mapped stops
+                          </span>
                         </div>
                       </div>
 
@@ -1066,7 +1079,7 @@ function TripsContent() {
                             </p>
                             <div className="p-2 rounded-xl bg-slate-950/80 border border-slate-800 text-[11px] text-slate-300 leading-relaxed">
                               <span className="text-orange-400 font-semibold">Why it's here: </span>
-                              {selectedStop.why || selectedStop.notes || `Curated stop slotted for smooth sequence and minimal transit in ${currentTrip.destination}.`}
+                              {selectedStop.why || selectedStop.notes || `Curated stop slotted in planned sequence for ${currentTrip.destination}.`}
                             </div>
                           </div>
 
@@ -1093,12 +1106,12 @@ function TripsContent() {
 
                       {/* Map Footer Bar */}
                       <div className="relative z-10 flex items-center justify-between pt-2 border-t border-slate-800 text-[11px] text-slate-400">
-                        <span>Pacing: Optimized for minimal transit</span>
+                        <span>Pacing: Planned sequence (DAIna's planned order)</span>
                         <button
                           onClick={() => setActiveTab('map')}
                           className="text-orange-400 hover:text-orange-300 font-semibold cursor-pointer underline"
                         >
-                          Full Map View →
+                          Full Route View →
                         </button>
                       </div>
                     </Card>
@@ -1314,7 +1327,7 @@ function TripsContent() {
                         {selectedDayIdx === 'all' ? 'All Days Route' : `Day ${selectedDayIdx} Route`}
                       </h3>
                       <p className="text-xs text-slate-500 font-medium">
-                        {validPoints.length} of {mapActivities.length} stops mapped · {currentTrip.destination}
+                        Trip route · Approximate route based on mapped stops · {currentTrip.destination}
                       </p>
                     </div>
                     <div className="flex flex-col sm:items-end">

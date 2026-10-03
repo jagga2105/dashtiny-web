@@ -248,3 +248,135 @@ def test_community_like_does_not_award_fake_coins(client, db_session, test_user)
     if profile:
         db_session.refresh(profile)
         assert profile.reward_coins == initial_coins
+
+def test_community_feed_truthful_identity_verification(client, db_session, test_user):
+    """
+    Verify /community/feed only returns is_identity_verified=True when User.is_verified is genuinely True.
+    """
+    test_user.is_verified = False
+    db_session.commit()
+
+    post = CommunityPost(
+        id="unverified-author-post",
+        author_id=test_user.id,
+        author_name=test_user.full_name,
+        author_avatar="https://images.unsplash.com/photo-1534528741775-53994a69daeb",
+        trust_score="90% Explorer",
+        getaway_title="Manali Mountain Trek",
+        location="Manali, India",
+        image_url="https://images.unsplash.com/photo-1503899036084-c55cdd92da26",
+        content="Quiet trails above Old Manali.",
+        likes_count=12
+    )
+    db_session.add(post)
+    db_session.commit()
+
+    resp = client.get("/api/v1/community/feed")
+    assert resp.status_code == 200
+    feed = resp.json()
+    found = next((p for p in feed if p["id"] == "unverified-author-post"), None)
+    assert found is not None
+    assert found["is_identity_verified"] is False
+
+    # Now verify the user and check again
+    test_user.is_verified = True
+    db_session.commit()
+
+    resp2 = client.get("/api/v1/community/feed")
+    assert resp2.status_code == 200
+    feed2 = resp2.json()
+    found2 = next((p for p in feed2 if p["id"] == "unverified-author-post"), None)
+    assert found2 is not None
+    assert found2["is_identity_verified"] is True
+
+def test_server_side_trip_undo(client, db_session, test_user):
+    """
+    Verify server-side undo:
+    1. AI query modifies trip and persists a TripSnapshot
+    2. POST /trips/{trip_id}/undo restores the exact activities from before the AI query
+    3. Consecutive or invalid undo returns 400
+    """
+    trip = Itinerary(
+        id="undo-test-trip-1",
+        owner_id=test_user.id,
+        title="Jaipur Heritage Tour",
+        destination="Jaipur",
+        origin="DEL",
+        travellers=2,
+        total_budget=45000.0,
+        start_date=date(2026, 12, 1),
+        end_date=date(2026, 12, 3)
+    )
+    db_session.add(trip)
+    db_session.commit()
+
+    day = ItineraryDay(
+        id="undo-day-1",
+        itinerary_id=trip.id,
+        day_number=1,
+        title="Day 1 Forts"
+    )
+    db_session.add(day)
+    db_session.commit()
+
+    initial_act = ItineraryActivity(
+        id="initial-amber-fort",
+        day_id=day.id,
+        time_slot="09:00 AM",
+        description="Visit Amber Fort & Elephant Sanctuary",
+        location="Amber Fort, Jaipur",
+        place_type="TA",
+        cost_estimate=1200.0,
+        sort_order=0
+    )
+    db_session.add(initial_act)
+    db_session.commit()
+
+    # Modify via AI Query
+    ai_resp = client.post("/api/v1/ai/query", json={
+        "trip_id": trip.id,
+        "instruction": "Move the fort visit to sunset"
+    })
+    assert ai_resp.status_code == 200
+    ai_data = ai_resp.json()
+    assert len(ai_data["changes"]) > 0
+
+    # Verify activities table was mutated in DB
+    acts_after_ai = db_session.query(ItineraryActivity).filter(ItineraryActivity.day_id == day.id).all()
+    assert len(acts_after_ai) > 0
+    # Description changed to slotted sunset
+    assert any("Sunset" in a.description or a.time_slot == "05:30 PM" for a in acts_after_ai)
+
+    # Now call POST /api/v1/trips/{trip_id}/undo
+    undo_resp = client.post(f"/api/v1/trips/{trip.id}/undo")
+    assert undo_resp.status_code == 200
+    assert undo_resp.json()["status"] == "success"
+
+    # Verify DB restored original initial_act
+    restored_acts = db_session.query(ItineraryActivity).filter(ItineraryActivity.day_id == day.id).all()
+    assert len(restored_acts) == 1
+    assert "Amber Fort" in restored_acts[0].description
+    assert float(restored_acts[0].cost_estimate) == 1200.0
+
+    # Calling undo again should fail with 400 since snapshot was popped
+    undo_resp_again = client.post(f"/api/v1/trips/{trip.id}/undo")
+    assert undo_resp_again.status_code == 400
+    assert "no previous trip snapshot" in undo_resp_again.json()["detail"].lower()
+
+def test_new_user_registration_starts_with_zero_coins(client, db_session):
+    """
+    Verify new user registration gives 0 coins (auditable onboarding, not 250 or 300).
+    """
+    reg_resp = client.post("/api/v1/auth/register", json={
+        "email": "zero_coins_traveler@example.com",
+        "password": "Password123!",
+        "full_name": "Zero Coins Traveler"
+    })
+    assert reg_resp.status_code == 200
+    data = reg_resp.json()
+    user_id = data["user"]["id"]
+
+    profile = db_session.query(UserProfile).filter(UserProfile.user_id == user_id).first()
+    assert profile is not None
+    assert profile.reward_coins == 0
+

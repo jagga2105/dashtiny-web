@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.db.database import get_db
-from app.models.models import Itinerary, ItineraryDay, ItineraryActivity, SquadRoom, SquadMember, Booking, User, CommunityPost
+from app.models.models import Itinerary, ItineraryDay, ItineraryActivity, SquadRoom, SquadMember, Booking, User, CommunityPost, TripSnapshot
 from app.api.deps import get_current_user
 
 router = APIRouter(prefix="/trips", tags=["My Trips & Active Passages"])
@@ -460,3 +460,74 @@ def add_trip_activity(
             "whyRecommended": new_act.why_recommended
         }
     }
+
+
+@router.post("/{trip_id}/undo")
+def undo_trip_change(
+    trip_id: str,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Rolls back the most recent AI modification for the specified trip by restoring
+    the latest TripSnapshot and reapplying activities into the database.
+    """
+    it = db.query(Itinerary).filter(Itinerary.id == trip_id).first()
+    if not it:
+        raise HTTPException(status_code=404, detail="Trip not found")
+
+    is_owner = (it.owner_id == user.id)
+    squad = db.query(SquadRoom).filter(SquadRoom.itinerary_id == it.id).first()
+    is_member = False
+    if squad:
+        is_member = db.query(SquadMember).filter(
+            SquadMember.squad_id == squad.id,
+            SquadMember.user_id == user.id
+        ).first() is not None
+
+    if not is_owner and not is_member:
+        raise HTTPException(status_code=403, detail="Not authorized to modify this trip")
+
+    snapshot = db.query(TripSnapshot).filter(
+        TripSnapshot.trip_id == it.id
+    ).order_by(TripSnapshot.created_at.desc()).first()
+
+    if not snapshot:
+        raise HTTPException(status_code=400, detail="No previous trip snapshot available to undo")
+
+    # Restore days_data
+    for day_data in snapshot.days_data:
+        db_day = db.query(ItineraryDay).filter(ItineraryDay.id == day_data.get("id")).first()
+        if db_day:
+            db.query(ItineraryActivity).filter(ItineraryActivity.day_id == db_day.id).delete()
+            for idx, act in enumerate(day_data.get("activities", [])):
+                new_act = ItineraryActivity(
+                    id=act.get("id"),
+                    day_id=db_day.id,
+                    time_slot=act.get("time") or act.get("time_slot") or "10:00 AM",
+                    description=act.get("description", ""),
+                    location=act.get("location", it.destination),
+                    place_type=act.get("place_type") or act.get("placeType") or "TA",
+                    cost_estimate=act.get("cost_estimate") or act.get("costEstimate") or 0.0,
+                    provenance=act.get("provenance") or "DETERMINISTIC",
+                    lat=act.get("lat"),
+                    lng=act.get("lng"),
+                    source_citation=act.get("source_citation") or "Restored Snapshot",
+                    why_recommended=act.get("why_recommended") or act.get("whyRecommended"),
+                    generation_source=act.get("generation_source"),
+                    location_source=act.get("location_source"),
+                    content_source=act.get("content_source"),
+                    sort_order=act.get("sort_order", idx)
+                )
+                db.add(new_act)
+
+    # Pop the restored snapshot
+    db.delete(snapshot)
+    db.commit()
+
+    return {
+        "status": "success",
+        "message": "Trip reverted to previous snapshot",
+        "trip_id": it.id
+    }
+

@@ -22,6 +22,7 @@ interface CommunityTripPost {
   trip_style: string[];
   is_identity_verified: boolean;
   is_trip_completed: boolean;
+  is_demo?: boolean;
   location: string;
   image_url: string;
   content: string;
@@ -186,8 +187,9 @@ export default function CommunityPage() {
       duration: '6 days',
       budget_est: '₹72k est.',
       trip_style: ['Culture', 'Food', 'Photography'],
-      is_identity_verified: true,
+      is_identity_verified: false,
       is_trip_completed: true,
+      is_demo: true,
       location: 'Kyoto, Japan',
       content: 'Best 6-day food and photography itinerary I’ve ever done. Early morning Fushimi Inari with zero crowds, followed by Nishiki Market matcha crawls and sunset walks in Gion.',
       image_url: 'https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=800&auto=format&fit=crop&q=80',
@@ -202,8 +204,9 @@ export default function CommunityPage() {
       duration: '4 days',
       budget_est: '₹28k est.',
       trip_style: ['Coastal', 'Seafood', 'Relaxed'],
-      is_identity_verified: true,
+      is_identity_verified: false,
       is_trip_completed: true,
+      is_demo: true,
       location: 'Palolem & Agonda, Goa',
       content: 'Skipped the crowded northern beaches for quiet cliffside cafes and sunset kayaking. Perfect slow-paced escape with authentic Goan thali spots.',
       image_url: 'https://images.unsplash.com/photo-1512343879784-a960bf40e7f2?w=800&auto=format&fit=crop&q=80',
@@ -219,8 +222,9 @@ export default function CommunityPage() {
       destination: 'Rishikesh & Garhwal',
       dates: 'Oct 18 – 22',
       interests: ['Hiking', 'Photography', 'Backpacking'],
-      is_identity_verified: true,
+      is_identity_verified: false,
       is_trip_completed: true,
+      is_demo: true,
       style: 'Mountain Treks',
     },
     {
@@ -229,8 +233,9 @@ export default function CommunityPage() {
       destination: 'Gokarna & Coastal Karnataka',
       dates: 'Oct 25 – 28',
       interests: ['Culture', 'Cafe Hopping', 'Coast'],
-      is_identity_verified: true,
+      is_identity_verified: false,
       is_trip_completed: true,
+      is_demo: true,
       style: 'Slow Travel',
     },
   ];
@@ -247,6 +252,7 @@ export default function CommunityPage() {
         trip_style: Array.isArray(p.trip_style) && p.trip_style.length > 0 ? p.trip_style : ['Travel Story'],
         is_identity_verified: Boolean(p.is_identity_verified),
         is_trip_completed: Boolean(p.is_trip_completed),
+        is_demo: false,
         location: p.location,
         content: p.content,
         image_url: p.image_url,
@@ -366,18 +372,29 @@ export default function CommunityPage() {
                       <h3 className="font-semibold text-slate-900 text-sm">{trip.author_name}</h3>
                       {/* Honest Trust Badges */}
                       <div className="flex items-center gap-2 pt-0.5 text-[11px] text-slate-500">
-                        {trip.is_identity_verified && (
+                        {trip.is_demo && (
+                          <span className="px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 font-mono text-[9px] font-bold border border-slate-200 uppercase">
+                            DEMO
+                          </span>
+                        )}
+                        {trip.is_identity_verified ? (
                           <span className="inline-flex items-center gap-1 text-emerald-700 font-medium">
                             <ShieldCheck className="w-3 h-3 text-emerald-600" />
                             Identity verified
                           </span>
+                        ) : (
+                          <span className="text-slate-500 font-medium">
+                            Community Explorer
+                          </span>
                         )}
                         <span>•</span>
-                        {trip.is_trip_completed && (
+                        {trip.is_trip_completed ? (
                           <span className="inline-flex items-center gap-1 text-slate-600">
                             <CheckCircle2 className="w-3 h-3 text-emerald-600" />
                             Trip completed
                           </span>
+                        ) : (
+                          <span className="text-slate-400">Travel Story</span>
                         )}
                       </div>
                     </div>
@@ -562,6 +579,29 @@ export default function CommunityPage() {
                       </option>
                     ))}
                   </select>
+
+                  {selectedSourceTripId && (
+                    <div className="p-3 rounded-xl bg-orange-50/80 border border-orange-200 text-[11px] text-slate-700 space-y-1.5 animate-in fade-in">
+                      <div className="flex items-center gap-1.5 font-bold text-orange-950">
+                        <ShieldCheck className="w-3.5 h-3.5 text-orange-600 shrink-0" />
+                        <span>This will publish your itinerary publicly to the community</span>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-0.5">
+                        <div className="space-y-0.5">
+                          <span className="font-semibold text-slate-900 block">Publicly Visible:</span>
+                          <p className="text-emerald-700 font-medium">✓ Destination &amp; dates</p>
+                          <p className="text-emerald-700 font-medium">✓ Daily itinerary stops &amp; pacing</p>
+                          <p className="text-emerald-700 font-medium">✓ Estimated total budget</p>
+                        </div>
+                        <div className="space-y-0.5">
+                          <span className="font-semibold text-slate-900 block">Strictly Private:</span>
+                          <p className="text-slate-600">🔒 Confirmed booking references</p>
+                          <p className="text-slate-600">🔒 Tickets &amp; personal documents</p>
+                          <p className="text-slate-600">🔒 Squad expenses &amp; split ledgers</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 

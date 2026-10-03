@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { useRouter, usePathname } from 'next/navigation';
 import { X, Send, Sparkles, SlidersHorizontal, Award } from 'lucide-react';
@@ -30,9 +30,21 @@ export function DAInaChatWidget() {
     {
       id: 'msg_0',
       sender: 'daina',
-      text: "✦ Welcome to your Private Concierge. I am DAIna, your 24/7 AI Travel Butler. How may I assist your itinerary today? Ask me about destinations, packing, price trends, or custom getaway itineraries.",
+      text: "Hi, I'm DAIna. What are you planning?",
     },
   ]);
+
+  // Handle escape key to close dialog
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen]);
 
   // On Trip Workspace (/trips), the Trip Copilot is already the embedded, dedicated DAIna experience.
   // Hiding the global floating button prevents duplicate AI surfaces.
@@ -237,7 +249,12 @@ export function DAInaChatWidget() {
 
       {/* Travel Chat Modal Drawer */}
       {isOpen && (
-        <div className="fixed bottom-20 md:bottom-20 right-3 sm:right-6 z-50 w-full max-w-[calc(100vw-24px)] sm:max-w-md bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden flex flex-col h-[520px] transition-all animate-in fade-in slide-in-from-bottom-5">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="daina-chat-title"
+          className="fixed bottom-20 md:bottom-20 right-3 sm:right-6 z-50 w-full max-w-[calc(100vw-24px)] sm:max-w-md bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden flex flex-col h-[520px] transition-all animate-in fade-in slide-in-from-bottom-5"
+        >
           {/* Header */}
           <div className="p-3.5 bg-white border-b border-slate-100 flex items-center justify-between">
             <div className="flex items-center gap-2.5">
@@ -245,7 +262,7 @@ export function DAInaChatWidget() {
                 <Image src="/assets/ai/daina.png" alt="DAIna" width={32} height={32} className="w-full h-full object-cover" />
               </div>
               <div>
-                <h3 className="font-semibold text-slate-900 text-sm flex items-center gap-1.5">
+                <h3 id="daina-chat-title" className="font-semibold text-slate-900 text-sm flex items-center gap-1.5">
                   DAIna
                 </h3>
                 <p className="text-[11px] text-slate-500 font-medium">Intelligent Travel Companion</p>
@@ -273,7 +290,7 @@ export function DAInaChatWidget() {
             {[
               { label: 'Plan a trip', prompt: 'Plan a 4-day trip to Goa under ₹25k' },
               { label: 'Improve my itinerary', prompt: 'How can I make my trip slower and more relaxed?' },
-              { label: 'Find a hotel', prompt: 'Find boutique stays with good views' },
+              { label: 'Find a stay', prompt: 'Find boutique stays with good views' },
               { label: 'Compare flights', prompt: 'Compare direct flights for my upcoming dates' },
               { label: 'Ask about a destination', prompt: 'What is the best season and local food in Kyoto?' },
             ].map((chip, idx) => (
@@ -346,7 +363,13 @@ export function DAInaChatWidget() {
                         className="flex-1 text-[11px] py-1 bg-orange-500 hover:bg-orange-600 text-white font-semibold cursor-pointer"
                         onClick={() => {
                           setIsOpen(false);
-                          router.push(msg.itineraryData?.destination ? `/planner?destination=${encodeURIComponent(msg.itineraryData.destination)}` : '/planner');
+                          if (msg.itineraryData?.id) {
+                            router.push(`/planner?tripId=${encodeURIComponent(msg.itineraryData.id)}`);
+                          } else if (msg.itineraryData?.destination) {
+                            router.push(`/planner?destination=${encodeURIComponent(msg.itineraryData.destination)}`);
+                          } else {
+                            router.push('/planner');
+                          }
                         }}
                       >
                         Refine in Planner →

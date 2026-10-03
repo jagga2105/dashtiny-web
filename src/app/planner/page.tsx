@@ -21,6 +21,7 @@ function PlannerContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialQuery = searchParams.get('query') || '';
+  const paramTripId = searchParams.get('tripId') || searchParams.get('trip_id') || '';
   const sourceTripId = searchParams.get('source_trip_id') || '';
   const paramDestination = searchParams.get('destination') || '';
   const paramDuration = searchParams.get('duration') || '';
@@ -33,6 +34,8 @@ function PlannerContent() {
   const { currentItinerary, setCurrentItinerary, addItinerary } = usePlannerStore();
   const { isAuthenticated } = useAuthStore();
   const [selectedPersona, setSelectedPersona] = useState<PersonaType>('solo');
+  const [customTravelers, setCustomTravelers] = useState<number | null>(null);
+  const [isEditingTravelers, setIsEditingTravelers] = useState(false);
   const [showMapView, setShowMapView] = useState(false);
   const [showArchitect, setShowArchitect] = useState(false);
   const [promptText, setPromptText] = useState(initialQuery);
@@ -127,6 +130,41 @@ function PlannerContent() {
   // Initialize or fetch latest itinerary from PostgreSQL
   useEffect(() => {
     async function loadLatest() {
+      if (paramTripId) {
+        try {
+          const tripDetails = await apiService.getTripDetails(paramTripId);
+          if (tripDetails && tripDetails.id) {
+            setCurrentItinerary({
+              id: tripDetails.id,
+              title: tripDetails.title,
+              destination: tripDetails.destination,
+              startDate: tripDetails.startDate,
+              endDate: tripDetails.endDate,
+              budget: tripDetails.budget,
+              days: tripDetails.days || [],
+            });
+            const daysCount = tripDetails.days?.length || 4;
+            setPromptText(`Plan a ${daysCount}-day trip to ${tripDetails.destination}`);
+            if (tripDetails.persona) {
+              setSelectedPersona(tripDetails.persona as PersonaType);
+            }
+            if (tripDetails.travellers != null) {
+              setCustomTravelers(tripDetails.travellers);
+            }
+            return;
+          }
+        } catch (err) {
+          console.warn('Could not load canonical trip from tripId:', err);
+          // Try local Zustand store fallback
+          const storeItinerary = usePlannerStore.getState().itineraries.find((it) => it.id === paramTripId);
+          if (storeItinerary) {
+            setCurrentItinerary(storeItinerary);
+            setPromptText(`Plan a trip to ${storeItinerary.destination}`);
+            return;
+          }
+        }
+      }
+
       if (initialQuery) {
         setPromptText(initialQuery);
       } else if (paramDestination) {
@@ -153,7 +191,7 @@ function PlannerContent() {
       }
     }
     loadLatest();
-  }, [initialQuery, paramDestination, paramDuration, paramBudget]);
+  }, [paramTripId, initialQuery, paramDestination, paramDuration, paramBudget]);
 
   const handleBuildPlan = async (queryText?: string) => {
     const textToUse = queryText || promptText;
@@ -178,6 +216,7 @@ function PlannerContent() {
     const budgetVal = parsed.budget || (paramBudget ? parseInt(paramBudget, 10) : 0);
     const vibeVal = parsed.vibe || paramVibe || 'culture';
     const interestsVal = parsed.interests && parsed.interests.length > 0 ? parsed.interests : (paramInterests ? paramInterests.split(',') : ['culture', 'sightseeing']);
+    const effectiveTravellers = customTravelers !== null ? customTravelers : (parsed.travellers || 2);
 
     // Synchronize persona: if prompt specifies companions or persona, prioritize it and sync UI
     const hasExplicitPersonaInPrompt = /(solo|alone|partner|couple|romantic|wife|husband|girlfriend|boyfriend|family|kids|children|parents|squad|friends|gang|buddies|nomad|workation)/i.test(textToUse);
@@ -201,7 +240,7 @@ function PlannerContent() {
         start_date: parsed.start_date,
         end_date: parsed.end_date,
         days_count: days,
-        travellers: parsed.travellers,
+        travellers: effectiveTravellers,
         budget: budgetVal,
         currency: parsed.currency || 'INR',
         persona: effectivePersona,
@@ -241,6 +280,7 @@ function PlannerContent() {
 
   // Live parsed intent from user prompt
   const parsedIntent = promptText.trim() ? parseTravelPrompt(promptText) : null;
+  const effectiveTravelers = customTravelers !== null ? customTravelers : (parsedIntent?.travellers || 2);
 
   return (
     <div className="min-h-screen pb-24 md:pb-12 flex flex-col bg-[#FAFAF9] text-slate-900 font-sans selection:bg-orange-500 selection:text-white">
@@ -395,6 +435,20 @@ function PlannerContent() {
               ))}
             </div>
 
+            {/* Clear Mental Model: Keep Selected vs Rebuild Omitted */}
+            <div className="p-3 rounded-xl bg-orange-50/70 border border-orange-200/80 flex items-center justify-between gap-3 text-xs">
+              <div className="space-y-0.5">
+                <p className="font-semibold text-orange-950">
+                  DAIna will keep these {sourceHighlights.filter((h) => h.keep).length} stops and rebuild the rest around your preferences.
+                </p>
+                <p className="text-[11px] text-orange-800">
+                  {sourceHighlights.length - sourceHighlights.filter((h) => h.keep).length > 0
+                    ? `${sourceHighlights.length - sourceHighlights.filter((h) => h.keep).length} omitted stops will be replaced with fresh recommendations matching your budget and pace.`
+                    : 'All original stops selected. DAIna will optimize the schedule and verify local transit.'}
+                </p>
+              </div>
+            </div>
+
             <div className="pt-2 flex items-center justify-between text-xs border-t border-slate-100">
               <button
                 type="button"
@@ -545,10 +599,79 @@ function PlannerContent() {
                     ? `${parsedIntent.days_count} Days` 
                     : (paramDuration ? `${paramDuration} Days` : '4 Days (default recommendation)')}
                 </span>
-                <span className="px-2.5 py-1 rounded-lg bg-white border border-orange-200/80 shadow-2xs">
-                  👥 {parsedIntent.travellers} {parsedIntent.travellers === 1 ? 'traveler' : 'travelers'}
-                  {parsedIntent.companionsSource !== 'prompt' && ' (default)'}
-                </span>
+                <div className="relative inline-flex items-center">
+                  <span className="px-2.5 py-1 rounded-lg bg-white border border-orange-200/80 shadow-2xs flex items-center gap-1.5">
+                    <span>
+                      👥 {effectiveTravelers} {effectiveTravelers === 1 ? 'traveler' : 'travelers'}
+                      {customTravelers === null && parsedIntent.companionsSource !== 'prompt' ? ' · inferred' : ''}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setIsEditingTravelers(!isEditingTravelers)}
+                      className="text-[10px] text-orange-600 hover:text-orange-800 font-semibold underline ml-1 cursor-pointer"
+                    >
+                      {isEditingTravelers ? 'Done' : '[ Change ]'}
+                    </button>
+                  </span>
+                  {isEditingTravelers && (
+                    <div className="absolute top-full left-0 mt-2 z-30 p-3 bg-white border border-slate-200 rounded-xl shadow-xl w-64 space-y-3">
+                      <div className="text-[11px] font-bold text-slate-800">Who is traveling?</div>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {[
+                          { label: 'Solo', count: 1, persona: 'solo' },
+                          { label: 'Couple', count: 2, persona: 'couple' },
+                          { label: 'Family', count: 4, persona: 'family' },
+                          { label: 'Friends', count: 4, persona: 'squad' },
+                        ].map((type) => (
+                          <button
+                            key={type.label}
+                            type="button"
+                            onClick={() => {
+                              setCustomTravelers(type.count);
+                              setSelectedPersona(type.persona as PersonaType);
+                            }}
+                            className={`px-2 py-1 text-[11px] rounded-lg border text-left cursor-pointer transition-colors ${
+                              effectiveTravelers === type.count
+                                ? 'bg-orange-50 border-orange-300 text-orange-800 font-semibold'
+                                : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                            }`}
+                          >
+                            {type.label}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="flex items-center justify-between pt-1 border-t border-slate-100">
+                        <span className="text-[11px] font-medium text-slate-600">Travelers</span>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setCustomTravelers(Math.max(1, effectiveTravelers - 1))}
+                            className="w-6 h-6 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center font-bold text-xs cursor-pointer"
+                          >
+                            −
+                          </button>
+                          <span className="font-mono text-xs font-bold text-slate-900 w-4 text-center">
+                            {effectiveTravelers}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setCustomTravelers(effectiveTravelers + 1)}
+                            className="w-6 h-6 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center font-bold text-xs cursor-pointer"
+                          >
+                            +
+                          </button>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setIsEditingTravelers(false)}
+                        className="w-full py-1 text-center text-[10px] font-semibold text-white bg-orange-600 hover:bg-orange-700 rounded-lg cursor-pointer"
+                      >
+                        Done
+                      </button>
+                    </div>
+                  )}
+                </div>
                 <span className="px-2.5 py-1 rounded-lg bg-white border border-orange-200/80 shadow-2xs">
                   💰 {(parsedIntent.budget > 0 || (paramBudget && parseInt(paramBudget, 10) > 0))
                     ? `₹${(parsedIntent.budget || parseInt(paramBudget || '0', 10)).toLocaleString('en-IN')}`
@@ -599,7 +722,7 @@ function PlannerContent() {
               {showUnderstandingDetails && (
                 <div className="p-3 rounded-lg bg-white/90 border border-orange-200 text-[11px] text-slate-700 space-y-1.5 animate-in fade-in">
                   <p>• <strong>Trip Duration:</strong> {parsedIntent.days_count ? `${parsedIntent.days_count} days (explicit in request)` : (paramDuration ? `${paramDuration} days` : '4 days (default recommendation — duration not specified)')}</p>
-                  <p>• <strong>Travelers:</strong> {parsedIntent.travellers} ({parsedIntent.companionsSource === 'prompt' ? 'explicitly stated in your request' : 'default recommendation for a pair/couple'})</p>
+                  <p>• <strong>Travelers:</strong> {effectiveTravelers} ({customTravelers !== null ? 'customized inline by you' : (parsedIntent.companionsSource === 'prompt' ? 'explicitly stated in your request' : 'inferred default recommendation for a pair/couple')})</p>
                   <p>• <strong>Budget:</strong> {parsedIntent.budget > 0 ? `₹${parsedIntent.budget.toLocaleString('en-IN')} (explicitly provided)` : 'Not specified — DAIna will create a comfortable mid-range plan and estimate the cost.'}</p>
                   <p>• <strong>Trip Style &amp; Pacing:</strong> {parsedIntent.vibe || 'Leisure & Scenic'} ({parsedIntent.vibe ? 'customized based on your prompt' : 'default recommendation'})</p>
                 </div>

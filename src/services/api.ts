@@ -265,6 +265,12 @@ export const apiService = {
     });
   },
 
+  async undoTripAction(tripId: string) {
+    return request<any>(`/trips/${tripId}/undo`, {
+      method: 'POST',
+    });
+  },
+
   // Bookings API
   async searchFlights(
     paramsOrOrigin: string | {
