@@ -6,7 +6,11 @@ from app.models.models import (
     TripSnapshot, RewardVoucher, RewardRedemption, RewardTransaction,
     AIRun, AIToolCall, Booking
 )
-from app.services.reward_service import award_rewards
+from app.services.reward_service import (
+    award_rewards,
+    InsufficientRewardBalanceError,
+    InsufficientCreditsError
+)
 
 def test_multiple_trip_snapshots_versioning_and_reason(client, db_session, test_user):
     """
@@ -431,4 +435,153 @@ def test_reward_ledger_ten_rules_end_to_end(client, db_session, test_user):
     assert redemption_tx.delta == -100
     assert redemption_tx.type == "VOUCHER_REDEEMED"
     assert redemption_tx.balance_after == current_coins - 100
+
+
+def test_negative_reward_deduction_validation_suite(db_session, test_user):
+    """
+    Validation Suite for Negative Reward Deductions:
+    1. 100 -> -50 succeeds = 50
+    2. 20 -> -50 fails with controlled domain exception
+    3. failed deduction creates no RewardTransaction
+    4. failed deduction leaves balance unchanged
+    5. positive reward still works
+    6. idempotent duplicate still works
+    - caller transaction remains rollback-safe
+    """
+    user_id = test_user.id
+    profile = db_session.query(UserProfile).filter(UserProfile.user_id == user_id).first()
+    if not profile:
+        profile = UserProfile(user_id=user_id, reward_coins=0)
+        db_session.add(profile)
+        db_session.flush()
+
+    # Initial state: 100
+    profile.reward_coins = 100
+    db_session.commit()
+
+    # --- Test 1: 100 -> -50 succeeds = 50 ---
+    new_bal, was_awarded = award_rewards(
+        db=db_session,
+        user_id=user_id,
+        delta=-50,
+        reward_type="REDEMPTION_TEST",
+        reason="Deduct 50 from 100",
+        idempotency_key="idemp_suite_deduct_50_success"
+    )
+    db_session.commit()
+    assert was_awarded is True
+    assert new_bal == 50
+
+    db_profile = db_session.query(UserProfile).filter(UserProfile.user_id == user_id).first()
+    assert db_profile.reward_coins == 50
+
+    tx_success = db_session.query(RewardTransaction).filter(
+        RewardTransaction.idempotency_key == "idemp_suite_deduct_50_success"
+    ).first()
+    assert tx_success is not None
+    assert tx_success.delta == -50
+    assert tx_success.balance_after == 50
+
+    # Set balance to 20 for failure testing
+    db_profile.reward_coins = 20
+    db_session.commit()
+
+    tx_count_before = db_session.query(RewardTransaction).filter(
+        RewardTransaction.user_id == user_id
+    ).count()
+
+    # --- Test 2: 20 -> -50 fails with controlled domain exception ---
+    with pytest.raises(InsufficientRewardBalanceError) as exc_info:
+        award_rewards(
+            db=db_session,
+            user_id=user_id,
+            delta=-50,
+            reward_type="REDEMPTION_TEST",
+            reason="Illegal deduction: 20 minus 50",
+            idempotency_key="idemp_suite_deduct_50_fail"
+        )
+    assert isinstance(exc_info.value, ValueError)  # Backward compatibility
+    assert "Insufficient reward coins" in str(exc_info.value)
+    assert exc_info.value.current_balance == 20
+    assert exc_info.value.delta == -50
+    assert exc_info.value.required_deduction == 50
+
+    # Verify alias works
+    assert isinstance(exc_info.value, InsufficientCreditsError)
+
+    # --- Test 3: failed deduction creates no RewardTransaction ---
+    tx_count_after = db_session.query(RewardTransaction).filter(
+        RewardTransaction.user_id == user_id
+    ).count()
+    assert tx_count_after == tx_count_before
+
+    failed_tx = db_session.query(RewardTransaction).filter(
+        RewardTransaction.idempotency_key == "idemp_suite_deduct_50_fail"
+    ).first()
+    assert failed_tx is None
+
+    # --- Test 4: failed deduction leaves balance unchanged ---
+    profile_unchanged = db_session.query(UserProfile).filter(UserProfile.user_id == user_id).first()
+    assert profile_unchanged.reward_coins == 20
+
+    # Verify caller transaction remains rollback-safe without aborted state
+    with db_session.begin_nested() as savepoint:
+        with pytest.raises(InsufficientRewardBalanceError):
+            award_rewards(
+                db=db_session,
+                user_id=user_id,
+                delta=-999,
+                reward_type="REDEMPTION_TEST",
+                reason="Savepoint rollback safety check"
+            )
+        savepoint.rollback()
+
+    profile_after_rollback = db_session.query(UserProfile).filter(UserProfile.user_id == user_id).first()
+    assert profile_after_rollback is not None
+    assert profile_after_rollback.reward_coins == 20
+
+    # --- Test 5: positive reward still works ---
+    pos_bal, pos_awarded = award_rewards(
+        db=db_session,
+        user_id=user_id,
+        delta=30,
+        reward_type="BONUS",
+        reason="Positive Bonus 30",
+        idempotency_key="idemp_suite_bonus_30"
+    )
+    db_session.commit()
+    assert pos_awarded is True
+    assert pos_bal == 50  # 20 + 30 = 50
+
+    profile_after_bonus = db_session.query(UserProfile).filter(UserProfile.user_id == user_id).first()
+    assert profile_after_bonus.reward_coins == 50
+
+    bonus_tx = db_session.query(RewardTransaction).filter(
+        RewardTransaction.idempotency_key == "idemp_suite_bonus_30"
+    ).first()
+    assert bonus_tx is not None
+    assert bonus_tx.delta == 30
+    assert bonus_tx.balance_after == 50
+
+    # --- Test 6: idempotent duplicate still works ---
+    dup_bal, dup_awarded = award_rewards(
+        db=db_session,
+        user_id=user_id,
+        delta=30,
+        reward_type="BONUS",
+        reason="Duplicate Positive Bonus 30",
+        idempotency_key="idemp_suite_bonus_30"
+    )
+    db_session.commit()
+    assert dup_awarded is False
+    assert dup_bal == 50
+
+    dup_tx_count = db_session.query(RewardTransaction).filter(
+        RewardTransaction.idempotency_key == "idemp_suite_bonus_30"
+    ).count()
+    assert dup_tx_count == 1
+
+    profile_final = db_session.query(UserProfile).filter(UserProfile.user_id == user_id).first()
+    assert profile_final.reward_coins == 50
+
 

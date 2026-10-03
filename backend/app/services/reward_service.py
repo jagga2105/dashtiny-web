@@ -3,6 +3,27 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from app.models.models import UserProfile, RewardTransaction
 
+
+class InsufficientRewardBalanceError(ValueError):
+    """
+    Controlled domain exception raised when a reward coin/credit deduction exceeds available balance.
+    Inherits from ValueError to preserve backward-compatibility with generic exception handlers.
+    """
+    def __init__(self, current_balance: int, delta: int, message: Optional[str] = None):
+        self.current_balance = current_balance
+        self.delta = delta
+        self.required_deduction = abs(delta)
+        msg = message or (
+            f"Insufficient reward coins. Required deduction: {self.required_deduction}, "
+            f"Available balance: {current_balance}"
+        )
+        super().__init__(msg)
+
+
+# Semantic domain alias
+InsufficientCreditsError = InsufficientRewardBalanceError
+
+
 def award_rewards(
     db: Session,
     user_id: str,
@@ -23,6 +44,8 @@ def award_rewards(
     1. Lock UserProfile row first (via with_for_update()).
     2. Check idempotency key: if existing, return (current_balance, False).
     3. Validate that negative awards do not exceed balance (no silent clamping to 0).
+       Raises InsufficientRewardBalanceError immediately without mutating balance
+       or creating any transaction records, leaving caller transactions rollback-safe.
     4. Persist RewardTransaction and update balance.
     5. Defensively handle IntegrityError for concurrent duplicate idempotency keys.
     6. Caller owns the transaction (no commit inside award_rewards).
@@ -32,12 +55,7 @@ def award_rewards(
     """
     # 1. Acquire row lock on UserProfile FIRST to serialize concurrent requests for this user
     profile = db.query(UserProfile).filter(UserProfile.user_id == user_id).with_for_update().first()
-    if not profile:
-        profile = UserProfile(user_id=user_id, reward_coins=0)
-        db.add(profile)
-        db.flush()
-
-    current_balance = profile.reward_coins or 0
+    current_balance = (profile.reward_coins or 0) if profile else 0
 
     # 2. Check idempotency key inside the row lock
     if idempotency_key:
@@ -47,11 +65,18 @@ def award_rewards(
         if existing_tx:
             return current_balance, False
 
-    # 3. Reject negative balances without silent clamping (Requirement 8)
+    # 3. Reject negative deductions when balance is insufficient (no silent clamping to 0)
     if delta < 0 and (current_balance + delta) < 0:
-        raise ValueError(
-            f"Insufficient reward coins. Required deduction: {abs(delta)}, Available balance: {current_balance}"
+        raise InsufficientRewardBalanceError(
+            current_balance=current_balance,
+            delta=delta
         )
+
+    # Ensure profile row exists now that validation has passed
+    if not profile:
+        profile = UserProfile(user_id=user_id, reward_coins=0)
+        db.add(profile)
+        db.flush()
 
     new_balance = current_balance + delta
     profile.reward_coins = new_balance
