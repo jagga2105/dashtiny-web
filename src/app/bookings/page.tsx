@@ -28,7 +28,6 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { apiService } from '@/services/api';
 import { useAuthStore } from '@/store/useAuthStore';
-import { getAirportCodeForDestination, getCityNameForDestination } from '@/lib/airports';
 import { AirportAutocomplete } from '@/components/location/AirportAutocomplete';
 
 type BookingCategory = 'flights' | 'hotels' | 'trains' | 'buses' | 'cabs' | 'my_bookings';
@@ -192,16 +191,39 @@ function BookingsContent() {
     if (selectedTripId && activeTrips.length > 0) {
       const match = activeTrips.find((t) => t.id === selectedTripId);
       if (match) {
-        const dest = match.destination || '';
-        const airportCode = getAirportCodeForDestination(dest);
-        const cityName = getCityNameForDestination(dest);
-        
-        setFlightDest(airportCode || dest);
-        setHotelDest(cityName || dest);
+        const dest = (match.destination || '').trim();
+        setHotelDest(dest);
+
+        // Canonical location resolution: unknown remains unresolved (''), never defaults to GOI
+        if (dest) {
+          if (/^[A-Za-z]{3}$/.test(dest)) {
+            setFlightDest(dest.toUpperCase());
+          } else {
+            apiService.searchLocations(dest, 1).then((airports) => {
+              if (airports && airports.length > 0) {
+                setFlightDest(airports[0].iata_code);
+              } else {
+                setFlightDest('');
+              }
+            }).catch(() => setFlightDest(''));
+          }
+        } else {
+          setFlightDest('');
+        }
 
         if (match.origin) {
-          const originAirport = getAirportCodeForDestination(match.origin);
-          setFlightOrigin(originAirport || match.origin);
+          const orig = match.origin.trim();
+          if (/^[A-Za-z]{3}$/.test(orig)) {
+            setFlightOrigin(orig.toUpperCase());
+          } else {
+            apiService.searchLocations(orig, 1).then((airports) => {
+              if (airports && airports.length > 0) {
+                setFlightOrigin(airports[0].iata_code);
+              } else {
+                setFlightOrigin('');
+              }
+            }).catch(() => setFlightOrigin(''));
+          }
         }
 
         if (match.startDate) {

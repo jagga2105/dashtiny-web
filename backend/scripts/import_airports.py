@@ -1,13 +1,25 @@
 #!/usr/bin/env python3
 """
 DashTiny L1 — Airport & Location Domain Migration Script
-Imports and normalizes legacy airport reference datasets into PostgreSQL.
+Canonical ingestion pipeline for legacy airport reference datasets into PostgreSQL.
 
 Sources audited:
-1. src/assets/indiaAirport.json (244 records)
-2. src/app/data/airportData.ts (78 records)
+1. backend/app/db/legacy/indiaAirport.json (244 records)
+2. backend/app/db/legacy/airportData.ts (78 records)
 3. airports.db (0 bytes, empty placeholder - discarded)
 4. flights.db (empty tables - discarded)
+
+Data Mapping & Provenance Architecture:
+- Legacy Reference Datasets:
+    * indiaAirport.json: Comprehensive Indian airports list with ICAO codes, operational status, states.
+    * airportData.ts: Curated commercial airport catalog from legacy frontend typeahead.
+- Curated Enrichment (L1 Reference Baseline):
+    * name_source: LEGACY (from catalog) or CURATED (official title in CANONICAL_COORDINATES)
+    * coordinate_source: CURATED (accurate latitude & longitude in CANONICAL_COORDINATES)
+    * timezone_source: CURATED (IANA timezone, e.g. "Asia/Kolkata", "Asia/Dubai", "Europe/London")
+- Provenance Classification:
+    * Every ingested record is tagged with provenance = "REFERENCE_DATASET".
+    * Never labeled "VERIFIED" without authoritative live provider confirmation.
 
 Usage:
   python backend/scripts/import_airports.py [--dry-run]
@@ -18,16 +30,24 @@ import sys
 import json
 import re
 import argparse
-from typing import Dict, Any, List, Tuple
+from pathlib import Path
+from typing import Dict, Any, List, Tuple, Optional, Union
 
 # Ensure backend root is on Python path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+BACKEND_ROOT = Path(__file__).resolve().parent.parent
+if str(BACKEND_ROOT) not in sys.path:
+    sys.path.insert(0, str(BACKEND_ROOT))
 
 from sqlalchemy.orm import Session
-from app.db.database import SessionLocal, engine
+from app.db.database import SessionLocal
 from app.models.models import Airport
 
-# Canonical coordinates for major Indian & international airports
+DEFAULT_LEGACY_DIR = BACKEND_ROOT / "app" / "db" / "legacy"
+
+# Curated reference enrichment: (latitude, longitude, timezone, official_name)
+# coordinate_source = CURATED
+# timezone_source = CURATED
+# name_source = CURATED
 CANONICAL_COORDINATES: Dict[str, Tuple[float, float, str, str]] = {
     # Domestic Hubs
     "DEL": (28.5562, 77.1000, "Asia/Kolkata", "Indira Gandhi International Airport"),
@@ -70,7 +90,6 @@ CANONICAL_COORDINATES: Dict[str, Tuple[float, float, str, str]] = {
     "VGA": (16.5304, 80.7968, "Asia/Kolkata", "Vijayawada Airport"),
     "RPR": (21.1804, 81.7388, "Asia/Kolkata", "Swami Vivekananda Airport"),
     "JDH": (26.2511, 73.0489, "Asia/Kolkata", "Jodhpur Airport"),
-    "JAI": (26.8242, 75.8122, "Asia/Kolkata", "Jaipur International Airport"),
     "SHL": (25.7036, 91.9789, "Asia/Kolkata", "Shillong Airport"),
     "AJL": (23.8407, 92.6199, "Asia/Kolkata", "Lengpui Airport"),
     "IMF": (24.7600, 93.8967, "Asia/Kolkata", "Bir Tikendrajit International Airport"),
@@ -106,6 +125,7 @@ CANONICAL_COORDINATES: Dict[str, Tuple[float, float, str, str]] = {
     "KTM": (27.6966, 85.3591, "Asia/Kathmandu", "Tribhuvan International Airport"),
 }
 
+# Curated reference metadata for key international destinations
 INTERNATIONAL_METADATA: Dict[str, Tuple[str, str, str, str]] = {
     # code: (name, city, country, country_code)
     "DXB": ("Dubai International Airport", "Dubai", "United Arab Emirates", "AE"),
@@ -133,13 +153,22 @@ INTERNATIONAL_METADATA: Dict[str, Tuple[str, str, str, str]] = {
     "KTM": ("Tribhuvan International Airport", "Kathmandu", "Nepal", "NP"),
 }
 
+# Curated city overrides for primary traveler recognition
+# city_source = CURATED
+CURATED_CITIES: Dict[str, str] = {
+    "GOI": "Goa",
+    "GOX": "Goa",
+    "IXZ": "Port Blair",
+    "IXB": "Bagdogra / Siliguri",
+    "MYQ": "Mysuru",
+    "KUU": "Kullu Manali",
+}
+
 
 def clean_text(s: str) -> str:
     if not s:
         return ""
-    # Strip HTML, normalize whitespace
-    s = re.sub(r"\s+", " ", s).strip()
-    return s
+    return re.sub(r"\s+", " ", str(s)).strip()
 
 
 def is_valid_iata(code: str) -> bool:
@@ -148,32 +177,30 @@ def is_valid_iata(code: str) -> bool:
     return bool(re.match(r"^[A-Z]{3}$", code.strip().upper()))
 
 
-def is_valid_coord(lat: float, lon: float) -> bool:
+def is_valid_coord(lat: Optional[float], lon: Optional[float]) -> bool:
     if lat is None or lon is None:
         return False
     return -90.0 <= lat <= 90.0 and -180.0 <= lon <= 180.0
 
 
-def load_legacy_airport_data(legacy_dir: str):
-    json_path = os.path.join(legacy_dir, "indiaAirport.json")
-    ts_path = os.path.join(legacy_dir, "airportData.ts")
+def load_legacy_airport_data(legacy_dir: Optional[Union[str, Path]] = None) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """
+    Loads raw legacy airport reference datasets using repository-relative paths.
+    Works consistently across developer machines, CI, Docker, and deployment environments.
+    """
+    base_dir = Path(legacy_dir) if legacy_dir else DEFAULT_LEGACY_DIR
+    json_path = base_dir / "indiaAirport.json"
+    ts_path = base_dir / "airportData.ts"
 
-    # Fallback to local app/db/legacy
-    if not os.path.exists(json_path):
-        json_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "app", "db", "legacy", "indiaAirport.json"))
-    if not os.path.exists(ts_path):
-        ts_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "app", "db", "legacy", "airportData.ts"))
-
-    india_raw = []
-    if os.path.exists(json_path):
+    india_raw: List[Dict[str, Any]] = []
+    if json_path.exists():
         with open(json_path, "r", encoding="utf-8") as f:
             india_raw = json.load(f)
 
-    ts_raw = []
-    if os.path.exists(ts_path):
+    ts_raw: List[Dict[str, Any]] = []
+    if ts_path.exists():
         with open(ts_path, "r", encoding="utf-8") as f:
             content = f.read()
-            # Extract code, name, city, state, country
             matches = re.finditer(
                 r'\"code\":\s*\"([^\"]*)\",\s*\"name\":\s*\"([^\"]*)\",\s*\"city\":\s*\"([^\"]*)\",\s*\"state\":\s*\"([^\"]*)\",\s*\"country\":\s*\"([^\"]*)\"',
                 content
@@ -190,35 +217,22 @@ def load_legacy_airport_data(legacy_dir: str):
     return india_raw, ts_raw
 
 
-def run_import(dry_run: bool = False):
-    print("=" * 70)
-    print("🌍 DashTiny L1 — Airport & Location Domain Importer")
-    print("=" * 70)
-
-    legacy_dir = "/Users/kumkumpandey/Downloads/dashtiny_mvp_angular/src/assets"
-    alt_legacy_dir = "/Users/kumkumpandey/Downloads/dashtiny_mvp_angular"
-    
+def normalize_airports(legacy_dir: Optional[Union[str, Path]] = None) -> Dict[str, Dict[str, Any]]:
+    """
+    Performs normalization and reference-data enrichment on legacy datasets.
+    Distinguishes LEGACY source values from CURATED enrichment.
+    """
     india_raw, ts_raw = load_legacy_airport_data(legacy_dir)
-    if not india_raw and os.path.exists(alt_legacy_dir):
-        india_raw, ts_raw = load_legacy_airport_data(os.path.join(alt_legacy_dir, "src", "assets"))
+    normalized: Dict[str, Dict[str, Any]] = {}
 
-    print(f"Loaded raw records from legacy indiaAirport.json: {len(india_raw)}")
-    print(f"Loaded raw records from legacy airportData.ts: {len(ts_raw)}")
-
-    normalized_airports: Dict[str, Dict[str, Any]] = {}
-    skipped_records: List[Tuple[str, str, str]] = []  # (source, reason, raw)
-    duplicates_count = 0
-    invalid_coords_count = 0
-
-    # 1. Process airportData.ts (Clean baseline of Indian commercial airports)
+    # 1. Process airportData.ts (Clean baseline of commercial airports)
     for entry in ts_raw:
         code = entry.get("code", "").strip().upper()
         if not is_valid_iata(code):
-            skipped_records.append(("airportData.ts", f"Invalid IATA format '{code}'", str(entry)))
             continue
 
         name = clean_text(entry.get("name", ""))
-        city = clean_text(entry.get("city", ""))
+        city = CURATED_CITIES.get(code, clean_text(entry.get("city", "")))
         state = clean_text(entry.get("state", ""))
         country = clean_text(entry.get("country", "India"))
 
@@ -230,14 +244,14 @@ def run_import(dry_run: bool = False):
         lon = coord_info[1] if coord_info else None
         tz = coord_info[2] if coord_info else "Asia/Kolkata"
         if coord_info and coord_info[3]:
-            name = coord_info[3]  # Prefer canonical official airport title
+            name = coord_info[3]  # Prefer curated official airport title
 
-        normalized_airports[code] = {
+        normalized[code] = {
             "iata_code": code,
             "icao_code": None,
             "name": name,
             "city": city or name,
-            "state_region": state,
+            "state_region": state or None,
             "country": country,
             "country_code": "IN",
             "latitude": lat,
@@ -252,34 +266,23 @@ def run_import(dry_run: bool = False):
         val = item.get("value", {})
         raw_iata = clean_text(val.get("iata", "")).upper()
         raw_name = clean_text(val.get("airport", ""))
-        raw_city = clean_text(val.get("location", ""))
+        raw_city = CURATED_CITIES.get(raw_iata, clean_text(val.get("location", "")))
         raw_icao = clean_text(val.get("icao", "")).upper()
         status = clean_text(val.get("airportstatus", ""))
         state = clean_text(val.get("state", ""))
 
-        if not raw_iata or raw_iata in ["—", "-", "N/A", "NONE"]:
-            skipped_records.append((
-                "indiaAirport.json",
-                f"No official IATA assigned (status='{status}', type='{val.get('airporttype')}')",
-                f"{raw_city} - {raw_name}"
-            ))
+        if not raw_iata or raw_iata in ["—", "-", "N/A", "NONE"] or not is_valid_iata(raw_iata):
             continue
 
-        if not is_valid_iata(raw_iata):
-            skipped_records.append(("indiaAirport.json", f"Invalid IATA code '{raw_iata}'", str(val)))
-            continue
-
-        # If duplicate within indiaAirport.json or already in ts_raw
-        if raw_iata in normalized_airports:
-            duplicates_count += 1
-            rec = normalized_airports[raw_iata]
+        # If already exists from airportData.ts, enrich with ICAO and state
+        if raw_iata in normalized:
+            rec = normalized[raw_iata]
             if raw_icao and len(raw_icao) == 4 and not rec.get("icao_code"):
                 rec["icao_code"] = raw_icao
             if not rec.get("state_region") and state:
                 rec["state_region"] = state
             continue
 
-        # New airport from indiaAirport.json
         name = raw_name or f"{raw_city} Airport"
         icao = raw_icao if len(raw_icao) == 4 else None
         coord_info = CANONICAL_COORDINATES.get(raw_iata)
@@ -289,12 +292,12 @@ def run_import(dry_run: bool = False):
         if coord_info and coord_info[3]:
             name = coord_info[3]
 
-        normalized_airports[raw_iata] = {
+        normalized[raw_iata] = {
             "iata_code": raw_iata,
             "icao_code": icao,
             "name": name,
             "city": raw_city or name,
-            "state_region": state,
+            "state_region": state or None,
             "country": "India",
             "country_code": "IN",
             "latitude": lat,
@@ -306,13 +309,13 @@ def run_import(dry_run: bool = False):
 
     # 3. Add canonical International hubs
     for code, (name, city, country, country_code) in INTERNATIONAL_METADATA.items():
-        if code not in normalized_airports:
+        if code not in normalized:
             coord_info = CANONICAL_COORDINATES.get(code)
             lat = coord_info[0] if coord_info else None
             lon = coord_info[1] if coord_info else None
             tz = coord_info[2] if coord_info else "UTC"
 
-            normalized_airports[code] = {
+            normalized[code] = {
                 "iata_code": code,
                 "icao_code": None,
                 "name": name,
@@ -328,7 +331,7 @@ def run_import(dry_run: bool = False):
             }
 
     # 4. Generate search_text and validate coordinates
-    for code, rec in normalized_airports.items():
+    for code, rec in normalized.items():
         parts = [
             rec["city"],
             rec["name"],
@@ -339,65 +342,87 @@ def run_import(dry_run: bool = False):
         ]
         rec["search_text"] = " ".join([p for p in parts if p]).lower().strip()
 
-        # Coordinate check
         lat = rec.get("latitude")
         lon = rec.get("longitude")
         if lat is not None and lon is not None:
             if not is_valid_coord(lat, lon):
-                invalid_coords_count += 1
                 rec["latitude"] = None
                 rec["longitude"] = None
 
-    valid_count = len(normalized_airports)
+    return normalized
+
+
+def import_airports_data(
+    db: Session,
+    legacy_dir: Optional[Union[str, Path]] = None,
+    dry_run: bool = False
+) -> Dict[str, int]:
+    """
+    Canonical airport ingestion method into PostgreSQL.
+    Idempotent: updates existing records and inserts new ones.
+    """
+    normalized_airports = normalize_airports(legacy_dir)
     inserted_count = 0
     updated_count = 0
 
-    print(f"\nAudit Summary:")
-    print(f"  Valid normalized airports to upsert: {valid_count}")
-    print(f"  Duplicates handled: {duplicates_count}")
-    print(f"  Skipped invalid/unassigned records: {len(skipped_records)}")
-    print(f"  Invalid coordinates detected: {invalid_coords_count}")
-
     if dry_run:
-        print("\n[DRY RUN] No database changes committed.")
-        return
+        return {
+            "valid": len(normalized_airports),
+            "inserted": 0,
+            "updated": 0,
+            "total": db.query(Airport).count()
+        }
 
-    # 5. Database Upsert
+    for code, data in normalized_airports.items():
+        existing = db.query(Airport).filter(Airport.iata_code == code).first()
+        if existing:
+            existing.name = data["name"]
+            existing.city = data["city"]
+            existing.state_region = data.get("state_region")
+            existing.country = data["country"]
+            existing.country_code = data["country_code"]
+            if data.get("icao_code"):
+                existing.icao_code = data["icao_code"]
+            if data.get("latitude") is not None:
+                existing.latitude = data["latitude"]
+                existing.longitude = data["longitude"]
+            if data.get("timezone"):
+                existing.timezone = data["timezone"]
+            existing.search_text = data["search_text"]
+            existing.is_active = data["is_active"]
+            existing.provenance = data["provenance"]
+            updated_count += 1
+        else:
+            airport = Airport(**data)
+            db.add(airport)
+            inserted_count += 1
+
+    db.commit()
+    total_count = db.query(Airport).count()
+    return {
+        "valid": len(normalized_airports),
+        "inserted": inserted_count,
+        "updated": updated_count,
+        "total": total_count
+    }
+
+
+def run_import(dry_run: bool = False, legacy_dir: Optional[str] = None):
+    print("=" * 70)
+    print("🌍 DashTiny L1 — Airport & Location Domain Importer")
+    print("=" * 70)
+    print(f"Canonical source directory: {legacy_dir or DEFAULT_LEGACY_DIR}")
+
     db: Session = SessionLocal()
     try:
-        for code, data in normalized_airports.items():
-            existing = db.query(Airport).filter(Airport.iata_code == code).first()
-            if existing:
-                existing.name = data["name"]
-                existing.city = data["city"]
-                existing.state_region = data.get("state_region")
-                existing.country = data["country"]
-                existing.country_code = data["country_code"]
-                if data.get("icao_code"):
-                    existing.icao_code = data["icao_code"]
-                if data.get("latitude") is not None:
-                    existing.latitude = data["latitude"]
-                    existing.longitude = data["longitude"]
-                if data.get("timezone"):
-                    existing.timezone = data["timezone"]
-                existing.search_text = data["search_text"]
-                existing.is_active = data["is_active"]
-                existing.provenance = data["provenance"]
-                updated_count += 1
-            else:
-                airport = Airport(**data)
-                db.add(airport)
-                inserted_count += 1
-
-        db.commit()
-        print(f"\nDatabase Upsert Complete:")
-        print(f"  Inserted: {inserted_count}")
-        print(f"  Updated:  {updated_count}")
-        print(f"  Total in DB: {db.query(Airport).count()}")
-    except Exception as e:
-        db.rollback()
-        print(f"Database error during import: {e}", file=sys.stderr)
-        raise
+        res = import_airports_data(db, legacy_dir=legacy_dir, dry_run=dry_run)
+        print(f"\nImport Results:")
+        print(f"  Valid records processed: {res['valid']}")
+        print(f"  Inserted:                 {res['inserted']}")
+        print(f"  Updated:                  {res['updated']}")
+        print(f"  Total in Database:        {res['total']}")
+        if dry_run:
+            print("  [DRY RUN: no changes written]")
     finally:
         db.close()
 
@@ -405,5 +430,6 @@ def run_import(dry_run: bool = False):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Import legacy airports into PostgreSQL")
     parser.add_argument("--dry-run", action="store_true", help="Inspect without committing to DB")
+    parser.add_argument("--legacy-dir", type=str, default=None, help="Path to directory containing legacy datasets")
     args = parser.parse_args()
-    run_import(dry_run=args.dry_run)
+    run_import(dry_run=args.dry_run, legacy_dir=args.legacy_dir)

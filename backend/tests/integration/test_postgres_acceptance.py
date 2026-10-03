@@ -20,10 +20,41 @@ from app.models.models import (
 )
 from app.services.trip_revision_service import create_revision, serialize_trip_days, get_current_version
 
+from urllib.parse import urlparse
+
 POSTGRES_URL = os.environ.get(
     "POSTGRES_TEST_DATABASE_URL",
     "postgresql://postgres:postgres@localhost:5432/dashtiny_empty_test"
 )
+
+
+def validate_test_database_safety(url: str) -> None:
+    """
+    Safety guard to prevent catastrophic DROP SCHEMA on non-disposable databases.
+    Rejects production, prod, or default database names (e.g. 'production', 'prod', 'dashtiny_db').
+    Requires an unmistakable test database marker such as '_test', 'test_', or 'acceptance'.
+    """
+    parsed = urlparse(url)
+    db_name = (parsed.path or "").lstrip("/").lower()
+
+    # 1. Prohibited markers
+    prohibited_markers = ["prod", "production", "live", "dashtiny_db", "main", "master"]
+    for marker in prohibited_markers:
+        if marker in db_name:
+            raise RuntimeError(
+                f"SAFETY GUARD FAILURE: Refusing to drop schema. "
+                f"Database '{db_name}' contains dangerous production marker '{marker}'."
+            )
+
+    # 2. Required test markers
+    valid_markers = ["_test", "test_", "acceptance"]
+    if not any(marker in db_name for marker in valid_markers):
+        raise RuntimeError(
+            f"SAFETY GUARD FAILURE: Refusing to drop schema. "
+            f"Database '{db_name}' is missing an unmistakable test marker ({valid_markers}). "
+            f"Integration tests require a dedicated disposable test database."
+        )
+
 
 def is_postgres_available():
     try:
@@ -43,6 +74,9 @@ pytestmark = pytest.mark.skipif(
 
 @pytest.fixture(scope="module")
 def pg_engine():
+    # Enforce test database safety guard before any schema modification
+    validate_test_database_safety(POSTGRES_URL)
+
     ini_path = os.path.join(os.path.dirname(__file__), "..", "..", "alembic.ini")
     script_path = os.path.join(os.path.dirname(__file__), "..", "..", "alembic")
     alembic_cfg = Config(ini_path)
@@ -599,5 +633,36 @@ def test_postgres_airports_domain_search_and_lookup(pg_engine, pg_session):
     with pytest.raises(IntegrityError):
         pg_session.commit()
     pg_session.rollback()
+
+
+def test_database_safety_guard_rejects_dangerous_targets():
+    """
+    Safety Guard Unit Verification:
+    Rejects production, prod, or generic database names.
+    Accepts only explicit test databases containing '_test', 'test_', or 'acceptance'.
+    """
+    # Prohibited cases must raise RuntimeError
+    dangerous_urls = [
+        "postgresql://postgres:secret@prod-db.aws.com:5432/production",
+        "postgresql://postgres:secret@prod-db.aws.com:5432/dashtiny_prod",
+        "postgresql://postgres:secret@localhost:5432/dashtiny_db",
+        "postgresql://postgres:secret@localhost:5432/main",
+        "postgresql://postgres:secret@localhost:5432/master",
+        "postgresql://postgres:secret@localhost:5432/dashtiny",
+    ]
+    for url in dangerous_urls:
+        with pytest.raises(RuntimeError, match="SAFETY GUARD FAILURE"):
+            validate_test_database_safety(url)
+
+    # Valid test markers must succeed without raising
+    safe_urls = [
+        "postgresql://postgres:postgres@localhost:5432/dashtiny_empty_test",
+        "postgresql://postgres:postgres@localhost:5432/test_dashtiny",
+        "postgresql://postgres:postgres@localhost:5432/dashtiny_acceptance",
+        "postgresql://postgres:postgres@ci-runner:5432/ci_test_db",
+    ]
+    for url in safe_urls:
+        validate_test_database_safety(url)  # Must not raise
+
 
 

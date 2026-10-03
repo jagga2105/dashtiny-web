@@ -173,3 +173,63 @@ def test_inactive_airport_exclusion(db_session, client):
     # Lookup should return 404 for inactive airport
     res_get = client.get("/api/v1/locations/airports/INA")
     assert res_get.status_code == 404
+
+
+def test_location_endpoints_are_strictly_read_only(db_session, client):
+    """
+    GET /locations/search and GET /locations/airports/{iata} are strictly read-only.
+    Verifies that initial airport count N equals count N after executing requests.
+    """
+    initial_count = db_session.query(Airport).count()
+    assert initial_count > 0, "Pre-condition: database has seeded airports"
+
+    # 1. Search for existing hub
+    res_search = client.get("/api/v1/locations/search?q=DEL")
+    assert res_search.status_code == 200
+
+    # 2. Search for popular hubs (empty query)
+    res_hubs = client.get("/api/v1/locations/search?q=")
+    assert res_hubs.status_code == 200
+
+    # 3. Lookup existing airport
+    res_lookup = client.get("/api/v1/locations/airports/DEL")
+    assert res_lookup.status_code == 200
+
+    # 4. Lookup non-existent airport
+    res_404 = client.get("/api/v1/locations/airports/ZZZ")
+    assert res_404.status_code == 404
+
+    # Count must remain strictly identical
+    post_count = db_session.query(Airport).count()
+    assert post_count == initial_count, f"Expected {initial_count} airports, but found {post_count}"
+
+
+def test_lookup_and_search_never_seeds_empty_database(db_session, client):
+    """
+    When the database contains zero airports, GET requests MUST NEVER auto-seed.
+    Search must return empty list [] and lookup must return 404.
+    Airport count must remain 0.
+    """
+    # Delete all airports within this transactional test session
+    db_session.query(Airport).delete()
+    db_session.flush()
+
+    assert db_session.query(Airport).count() == 0, "Table must be empty"
+
+    # Search with query should return empty list without mutating database
+    res_search = client.get("/api/v1/locations/search?q=DEL")
+    assert res_search.status_code == 200
+    assert res_search.json() == []
+
+    # Search without query should return empty list without mutating database
+    res_empty_q = client.get("/api/v1/locations/search?q=")
+    assert res_empty_q.status_code == 200
+    assert res_empty_q.json() == []
+
+    # Direct IATA lookup on empty table should return 404 without mutating database
+    res_lookup = client.get("/api/v1/locations/airports/DEL")
+    assert res_lookup.status_code == 404
+
+    # Database count must remain exactly 0 (no auto-seeding occurred)
+    assert db_session.query(Airport).count() == 0, "GET endpoints must not auto-seed an empty table"
+

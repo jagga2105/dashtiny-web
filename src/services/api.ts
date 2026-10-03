@@ -220,9 +220,9 @@ export const apiService = {
   },
 
   // Location & Airport Discovery API
-  async searchLocations(query: string, limit: number = 10): Promise<AirportLocation[]> {
-    if (!query || !query.trim()) return [];
-    return request<AirportLocation[]>(`/locations/search?q=${encodeURIComponent(query.trim())}&limit=${limit}`);
+  async searchLocations(query: string = '', limit: number = 10): Promise<AirportLocation[]> {
+    const cleanQ = (query || '').trim();
+    return request<AirportLocation[]>(`/locations/search?q=${encodeURIComponent(cleanQ)}&limit=${limit}`);
   },
 
   async getAirport(iataCode: string): Promise<AirportLocation> {

@@ -83,28 +83,47 @@ CREATE INDEX ix_airports_is_active ON airports(is_active);
 CREATE INDEX ix_airports_city_iata ON airports(city, iata_code);
 ```
 
-### 1.3 Field Transformation Matrix
+### 1.3 Field Transformation & Curated Enrichment Matrix
 
-| Legacy JSON / TS Field | Target PostgreSQL Field | Transform / Sanitization Rule |
+To prevent misleading claims of "verified" live data while providing high-quality geographic data, L1 explicitly documents legacy source values versus curated reference enrichment:
+
+| Target PostgreSQL Field | Source Origin | Transform / Sanitization Rule |
 | :--- | :--- | :--- |
-| `iata` / `code` | `iata_code` | Trim, uppercase, validate 3 uppercase ASCII characters (`^[A-Z]{3}$`). Must be unique. |
-| `icao` | `icao_code` | Trim, uppercase, 4 chars or `NULL` if missing. |
-| `airport` / `name` | `name` | Strip trailing duplicate `"Airport"`, decode entities, clean whitespace. |
-| `location` / `city` | `city` | Title case, normalize spellings (e.g. "Bengaluru" / "Bangalore", "New Delhi" / "Delhi"). |
-| `state` | `state_region` | Title case state name. |
-| (Implicit) | `country` | `"India"` for domestic catalog, country name for international hubs. |
-| (Implicit) | `country_code` | ISO 3166-1 alpha-2 (`"IN"`, `"AE"`, `"SG"`, etc.). |
-| `lat`, `lon` | `latitude`, `longitude` | Parse to float; validate $-90 \le \text{lat} \le 90$ and $-180 \le \text{lon} \le 180$. Nullable if unassigned. |
-| `tz` | `timezone` | IANA timezone string (`"Asia/Kolkata"` default for India). |
-| Computed | `search_text` | Lowercase concatenation: `${iata} ${city} ${name} ${icao} ${country} ${country_code}` for fast autocomplete. |
-| (Constant) | `provenance` | Explicitly `"REFERENCE_DATASET"`. Never `"LIVE"` or `"PROVIDER_VERIFIED"`. |
-| (Constant) | `is_active` | `TRUE` for operational airports; `FALSE` for decommissioned or unverified strips. |
+| `iata_code` | `LEGACY` (`airportData.ts` / `indiaAirport.json`) | Validated 3 uppercase alphabetic characters (`^[A-Z]{3}$`). Unique constraint enforced. |
+| `icao_code` | `LEGACY` (`indiaAirport.json`) | 4 uppercase characters (`^[A-Z]{4}$`) or `NULL` if missing. |
+| `name` | `LEGACY` or `CURATED` (`CANONICAL_COORDINATES`) | Prefer official airport title from `CANONICAL_COORDINATES` (e.g. "Indira Gandhi International Airport"); fallback to legacy string with cleaned whitespace. |
+| `city` | `LEGACY` or `CURATED` (`CURATED_CITIES`) | Normalized traveler recognition (e.g. `GOI` / `GOX` mapped to "Goa" instead of municipality "Vasco Da Gama"). |
+| `state_region` | `LEGACY` (`indiaAirport.json` / `airportData.ts`) | Title case state name (e.g. "Delhi", "Goa", "Maharashtra"). |
+| `country` | `LEGACY` / `CURATED` | "India" for domestic records, country name from `INTERNATIONAL_METADATA` for international hubs. |
+| `country_code` | `LEGACY` / `CURATED` | ISO 3166-1 alpha-2 ("IN", "AE", "SG", "GB", "US", etc.). |
+| `latitude`, `longitude` | `CURATED` (`CANONICAL_COORDINATES`) | Accurate decimal degrees from reference coordinate table. Validated within $[-90, 90]$ and $[-180, 180]$. |
+| `timezone` | `CURATED` (`CANONICAL_COORDINATES`) | Standard IANA timezone string ("Asia/Kolkata", "Asia/Dubai", "Europe/London"). |
+| `search_text` | Computed | Lowercase token index: `${iata} ${city} ${name} ${icao} ${state} ${country} ${country_code}` for fast prefix and substring filtering. |
+| `provenance` | Governed Constant | **`REFERENCE_DATASET`**. Never marked `VERIFIED` without an authoritative live contract. |
+| `is_active` | `LEGACY` / Governed | `TRUE` for commercial airports; `FALSE` for decommissioned or unverified strips. |
 
-### 1.4 Deduplication & Ingestion Strategy
-1. **Source Deduplication**: Where `iata` exists in both `indiaAirport.json` and `airportData.ts`, prefer `airportData.ts` for clean naming and `indiaAirport.json` for ICAO & status.
-2. **Exclude Non-Operational**: Skip records where `airportstatus == "Closed"` or `iata` is blank/hyphen (`—`). 93 records skipped for this reason.
-3. **Controlled Ingestion**: Ingest once via `backend/scripts/import_airports.py` into PostgreSQL with Alembic migration `3900ef1a1170`. Zero runtime reads from SQLite or static client-side JSON files.
-4. **Idempotence**: Importer uses PostgreSQL upsert (`ON CONFLICT (iata_code) DO UPDATE`). Safe to run multiple times without data drift.
+### 1.4 Single Ingestion Authority Pipeline & Read-Only Runtime Guarantee
+
+```
+  backend/app/db/legacy/indiaAirport.json
+  backend/app/db/legacy/airportData.ts
+               │
+               ▼
+  backend/scripts/import_airports.py (Canonical Ingestion Authority)
+               │ (Thin delegation wrapper: backend/app/db/seed_airports.py)
+               ▼
+      PostgreSQL airports Table
+               │
+               ▼
+  GET /api/v1/locations/search?q=  (Strictly Read-Only)
+  GET /api/v1/locations/airports/{iata} (Strictly Read-Only)
+```
+
+1. **Single Authority**: `backend/scripts/import_airports.py` is the sole ingestion pipeline. `backend/app/db/seed_airports.py` is a thin compatibility wrapper that delegates directly to `import_airports_data(db)`. No duplicate hardcoded airport databases exist.
+2. **Repository Portability**: All legacy data files are referenced relative to the module root (`DEFAULT_LEGACY_DIR = BACKEND_ROOT / "app" / "db" / "legacy"`). Zero developer-specific absolute paths remain.
+3. **Strict Read-Only Runtime**: Request handlers (`GET /locations/search` and `GET /locations/airports/{iata}`) NEVER create records or execute `seed_airports()`. When the table is empty, search returns `[]` and lookup returns `404`. Seeding is strictly an explicit administrative/initialization step.
+4. **Popular Hubs Flow**: An empty query (`GET /locations/search?q=`) returns curated popular hubs (`DEL`, `BOM`, `BLR`, `GOI`, `HYD`, etc.). When travelers focus an empty input in `AirportAutocomplete`, the frontend queries this endpoint to present top hubs immediately.
+
 
 ---
 

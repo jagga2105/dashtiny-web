@@ -209,4 +209,22 @@ describe('AirportAutocomplete Component', () => {
 
     expect(onSelect).toHaveBeenCalledWith(null);
   });
+
+  it('loads and displays popular hubs when focused with empty input', async () => {
+    const searchSpy = vi.spyOn(apiService, 'searchLocations').mockResolvedValue(mockAirports);
+
+    render(<AirportAutocomplete onSelect={vi.fn()} />);
+    const input = screen.getByRole('combobox');
+
+    act(() => {
+      fireEvent.focus(input);
+    });
+
+    expect(searchSpy).toHaveBeenCalledWith('', 12);
+
+    await waitFor(() => {
+      expect(screen.getByText('Popular Hubs & Gateways')).toBeDefined();
+      expect(screen.getAllByText('New Delhi').length).toBeGreaterThan(0);
+    });
+  });
 });

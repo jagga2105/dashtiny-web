@@ -93,20 +93,15 @@ export function AirportAutocomplete({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Debounced search
+  // Debounced search (empty query fetches popular hubs from GET /locations/search?q=)
   const performSearch = useCallback((query: string) => {
-    if (!query || query.trim().length === 0) {
-      setResults([]);
-      setIsLoading(false);
-      setError(null);
-      return;
-    }
+    const cleanQuery = (query || '').trim();
 
     setIsLoading(true);
     setError(null);
 
     apiService
-      .searchLocations(query.trim(), 12)
+      .searchLocations(cleanQuery, 12)
       .then((data) => {
         setResults(data || []);
         setIsLoading(false);
@@ -148,12 +143,12 @@ export function AirportAutocomplete({
   const handleClear = () => {
     setSelectedAirport(null);
     setInputValue('');
-    setResults([]);
-    setIsOpen(false);
+    setIsOpen(true);
     setActiveIndex(-1);
     setError(null);
     onSelect(null);
     inputRef.current?.focus();
+    performSearch('');
   };
 
   // Keyboard navigation
@@ -295,6 +290,12 @@ export function AirportAutocomplete({
               <p className="text-[11px] text-slate-400">
                 Try searching by city name (e.g. &quot;Delhi&quot;, &quot;Bengaluru&quot;), airport name, or IATA code (&quot;DEL&quot;, &quot;BLR&quot;).
               </p>
+            </div>
+          )}
+
+          {results.length > 0 && !inputValue.trim() && (
+            <div className="px-3.5 py-2 bg-slate-50 border-b border-slate-100 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+              Popular Hubs & Gateways
             </div>
           )}
 

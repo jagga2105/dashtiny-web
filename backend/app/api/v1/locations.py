@@ -11,7 +11,6 @@ from sqlalchemy import or_, and_, func, case
 
 from app.db.database import get_db
 from app.models.models import Airport
-from app.db.seed_airports import seed_airports
 
 router = APIRouter(prefix="/locations", tags=["Locations & Airports"])
 
@@ -42,6 +41,7 @@ def search_locations(
 ):
     """
     Deterministic ranked search for airports from PostgreSQL location domain.
+    Read-only: Never creates, mutates, or seeds database records.
     
     Ranking Preference:
     1. Exact IATA match (e.g. 'DEL')
@@ -50,11 +50,6 @@ def search_locations(
     4. Prefix match (IATA prefix, city prefix, name prefix)
     5. Broader token match in search_text
     """
-    # Ensure baseline airport dataset is available in PostgreSQL
-    total = db.query(Airport).count()
-    if total == 0:
-        seed_airports(db)
-
     clean_q = (q or "").strip().lower()
 
     if not clean_q or len(clean_q) < 2:
@@ -123,11 +118,8 @@ def get_airport_by_iata(
     """
     Lookup a specific airport by its 3-letter IATA code.
     Case-insensitive. Returns 404 if unknown or unresolved.
+    Read-only: Never creates, mutates, or seeds database records.
     """
-    total = db.query(Airport).count()
-    if total == 0:
-        seed_airports(db)
-
     clean_iata = iata_code.strip().upper()
     if len(clean_iata) != 3 or not clean_iata.isalpha():
         raise HTTPException(
