@@ -29,6 +29,7 @@ import { Button } from '@/components/ui/Button';
 import { apiService } from '@/services/api';
 import { useAuthStore } from '@/store/useAuthStore';
 import { getAirportCodeForDestination, getCityNameForDestination } from '@/lib/airports';
+import { AirportAutocomplete } from '@/components/location/AirportAutocomplete';
 
 type BookingCategory = 'flights' | 'hotels' | 'trains' | 'buses' | 'cabs' | 'my_bookings';
 
@@ -530,35 +531,21 @@ function BookingsContent() {
                 {/* Airports & Dates Inputs */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
                   <div className="space-y-1">
-                    <label className="text-[10px] font-semibold uppercase text-slate-400">From (Origin)</label>
-                    <select
+                    <AirportAutocomplete
+                      label="From (Origin)"
+                      placeholder="Origin (e.g. DEL, Mumbai)…"
                       value={flightOrigin}
-                      onChange={(e) => setFlightOrigin(e.target.value)}
-                      className="w-full text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                    >
-                      {flightOrigin && !['BLR', 'DEL', 'BOM'].includes(flightOrigin) && (
-                        <option value={flightOrigin}>{flightOrigin} — Trip Origin</option>
-                      )}
-                      <option value="DEL">DEL — New Delhi Indira Gandhi</option>
-                      <option value="BLR">BLR — Bengaluru Kempegowda</option>
-                      <option value="BOM">BOM — Mumbai Chhatrapati Shivaji</option>
-                    </select>
+                      onSelect={(airport) => setFlightOrigin(airport ? airport.iata_code : '')}
+                    />
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-[10px] font-semibold uppercase text-slate-400">To (Destination)</label>
-                    <select
+                    <AirportAutocomplete
+                      label="To (Destination)"
+                      placeholder="Destination (e.g. GOI, Goa)…"
                       value={flightDest}
-                      onChange={(e) => setFlightDest(e.target.value)}
-                      className="w-full text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                    >
-                      {flightDest && !['GOI', 'JAI', 'KUU'].includes(flightDest) && (
-                        <option value={flightDest}>{flightDest} — Trip Destination</option>
-                      )}
-                      <option value="GOI">GOI — Goa Dabolim / Mopa</option>
-                      <option value="JAI">JAI — Jaipur Sanganer</option>
-                      <option value="KUU">KUU — Kullu Manali Bhuntar</option>
-                    </select>
+                      onSelect={(airport) => setFlightDest(airport ? airport.iata_code : '')}
+                    />
                   </div>
 
                   <div className="space-y-1">

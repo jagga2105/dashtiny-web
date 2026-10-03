@@ -14,7 +14,8 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { usePlannerStore } from '@/store/usePlannerStore';
 import { useAuthStore } from '@/store/useAuthStore';
-import { apiService } from '@/services/api';
+import { apiService, AirportLocation } from '@/services/api';
+import { AirportAutocomplete } from '@/components/location/AirportAutocomplete';
 import { parseTravelPrompt } from '@/lib/dainaIntentParser';
 import { Trip } from '@/types/trip';
 
@@ -37,6 +38,8 @@ function PlannerContent() {
   const [selectedPersona, setSelectedPersona] = useState<PersonaType>('solo');
   const [customTravelers, setCustomTravelers] = useState<number | null>(null);
   const [isEditingTravelers, setIsEditingTravelers] = useState(false);
+  const [selectedOriginAirport, setSelectedOriginAirport] = useState<AirportLocation | null>(null);
+  const [isEditingOrigin, setIsEditingOrigin] = useState(false);
   const [showMapView, setShowMapView] = useState(false);
   const [showArchitect, setShowArchitect] = useState(false);
   const [promptText, setPromptText] = useState(initialQuery);
@@ -226,7 +229,7 @@ function PlannerContent() {
     try {
       const res = await apiService.generateItinerary({
         destination: dest,
-        origin: parsed.origin,
+        origin: selectedOriginAirport ? selectedOriginAirport.iata_code : parsed.origin,
         start_date: parsed.start_date,
         end_date: parsed.end_date,
         days_count: days,
@@ -675,11 +678,42 @@ function PlannerContent() {
                     ? `₹${(parsedIntent.budget || parseInt(paramBudget || '0', 10)).toLocaleString('en-IN')}`
                     : 'Budget: Not specified'}
                 </span>
-                {parsedIntent.origin && (
-                  <span className="px-2.5 py-1 rounded-lg bg-white border border-orange-200/80 shadow-2xs">
-                    🛫 From {parsedIntent.origin}
+                <div className="relative inline-flex items-center">
+                  <span className="px-2.5 py-1 rounded-lg bg-white border border-orange-200/80 shadow-2xs flex items-center gap-1.5">
+                    <span>
+                      🛫 From {selectedOriginAirport ? `${selectedOriginAirport.city} (${selectedOriginAirport.iata_code})` : (parsedIntent.origin || 'Add Departure Airport')}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setIsEditingOrigin(!isEditingOrigin)}
+                      className="text-[10px] text-orange-600 hover:text-orange-800 font-semibold underline ml-1 cursor-pointer"
+                    >
+                      {isEditingOrigin ? 'Done' : (selectedOriginAirport || parsedIntent.origin ? '[ Change ]' : '[ Set ]')}
+                    </button>
                   </span>
-                )}
+                  {isEditingOrigin && (
+                    <div className="absolute top-full left-0 mt-2 z-30 p-3 bg-white border border-slate-200 rounded-xl shadow-xl w-72 sm:w-80 space-y-2">
+                      <div className="text-[11px] font-bold text-slate-800">Select Departure Airport</div>
+                      <AirportAutocomplete
+                        placeholder="Search departure airport or city…"
+                        value={selectedOriginAirport}
+                        onSelect={(ap) => {
+                          setSelectedOriginAirport(ap);
+                          setIsEditingOrigin(false);
+                        }}
+                      />
+                      <div className="flex justify-end">
+                        <button
+                          type="button"
+                          onClick={() => setIsEditingOrigin(false)}
+                          className="px-2.5 py-1 text-[10px] font-semibold text-white bg-orange-600 hover:bg-orange-700 rounded-lg cursor-pointer"
+                        >
+                          Done
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
                 <span className="px-2.5 py-1 rounded-lg bg-white border border-orange-200/80 shadow-2xs">
                   ✨ {parsedIntent.vibe || paramVibe || 'Leisure & Scenic (default style)'}
                 </span>

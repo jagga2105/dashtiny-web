@@ -574,12 +574,17 @@ class Airport(Base):
     latitude = Column(Float, nullable=True)
     longitude = Column(Float, nullable=True)
     timezone = Column(String(50), nullable=True)
-    search_text = Column(String(255), nullable=True)
+    search_text = Column(String(500), nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)
+    provenance = Column(String(50), default="REFERENCE_DATASET", nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
 
     __table_args__ = (
         Index("ix_airports_search_text", "search_text"),
         Index("ix_airports_city_iata", "city", "iata_code"),
+        Index("ix_airports_country", "country"),
+        Index("ix_airports_active", "is_active"),
     )
 
 

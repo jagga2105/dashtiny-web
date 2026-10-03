@@ -59,6 +59,9 @@ def setup_test_db():
     for d in defaults:
         session.add(d)
     session.commit()
+
+    from app.db.seed_airports import seed_airports
+    seed_airports(session)
     session.close()
 
     yield

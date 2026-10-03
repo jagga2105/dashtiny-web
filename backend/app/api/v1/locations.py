@@ -7,7 +7,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
-from sqlalchemy import or_, func
+from sqlalchemy import or_, and_, func, case
 
 from app.db.database import get_db
 from app.models.models import Airport
@@ -29,6 +29,7 @@ class AirportResponse(BaseModel):
     longitude: Optional[float] = None
     timezone: Optional[str] = None
     is_active: bool
+    provenance: str = "REFERENCE_DATASET"
 
     model_config = {"from_attributes": True}
 
@@ -40,9 +41,14 @@ def search_locations(
     db: Session = Depends(get_db)
 ):
     """
-    Search airports and destinations from PostgreSQL.
-    Matches against IATA code, city, airport name, and search_text index.
-    If query is empty, returns primary active hub airports.
+    Deterministic ranked search for airports from PostgreSQL location domain.
+    
+    Ranking Preference:
+    1. Exact IATA match (e.g. 'DEL')
+    2. Exact airport name match (e.g. 'Indira Gandhi International Airport')
+    3. Exact city match (e.g. 'Delhi')
+    4. Prefix match (IATA prefix, city prefix, name prefix)
+    5. Broader token match in search_text
     """
     # Ensure baseline airport dataset is available in PostgreSQL
     total = db.query(Airport).count()
@@ -50,52 +56,63 @@ def search_locations(
         seed_airports(db)
 
     clean_q = (q or "").strip().lower()
-    
+
     if not clean_q or len(clean_q) < 2:
-        # Return prominent hub airports
-        hubs = ["DEL", "BOM", "BLR", "GOI", "HYD", "MAA", "CCU", "COK", "DXB", "SIN", "BKK", "HND"]
+        # Return prominent default hub airports
+        hubs = ["DEL", "BOM", "BLR", "GOI", "HYD", "MAA", "CCU", "COK", "JAI", "AMD", "DXB", "SIN", "LHR", "BKK"]
         return db.query(Airport).filter(
             Airport.iata_code.in_(hubs),
             Airport.is_active == True
-        ).all()
+        ).order_by(
+            case(
+                {h: idx for idx, h in enumerate(hubs)},
+                value=Airport.iata_code
+            )
+        ).limit(limit).all()
 
-    # If exactly 3 uppercase letters, prioritize exact IATA code match
-    if len(clean_q) == 3 and clean_q.isalpha():
-        exact = db.query(Airport).filter(
-            func.lower(Airport.iata_code) == clean_q,
-            Airport.is_active == True
-        ).all()
-        if exact:
-            # Also fetch partial matches to fill limit
-            others = db.query(Airport).filter(
-                func.lower(Airport.iata_code) != clean_q,
-                Airport.is_active == True,
-                or_(
-                    func.lower(Airport.city).like(f"%{clean_q}%"),
-                    func.lower(Airport.name).like(f"%{clean_q}%"),
-                    Airport.search_text.like(f"%{clean_q}%")
-                )
-            ).limit(limit - len(exact)).all()
-            return exact + others
+    # Build SQL ranking score
+    # 1. Exact IATA match -> 100
+    # 2. Exact Airport Name -> 90
+    # 3. Exact City -> 80
+    # 4. IATA prefix -> 70
+    # 5. City prefix -> 60
+    # 6. Name prefix -> 50
+    # 7. Substring -> 20
+    relevance_score = case(
+        (func.lower(Airport.iata_code) == clean_q, 100),
+        (func.lower(Airport.name) == clean_q, 90),
+        (func.lower(Airport.city) == clean_q, 80),
+        (func.lower(Airport.iata_code).startswith(clean_q), 70),
+        (func.lower(Airport.city).startswith(clean_q), 60),
+        (func.lower(Airport.name).startswith(clean_q), 50),
+        else_=20
+    )
 
-    # General search
-    term = f"%{clean_q}%"
-    results = db.query(Airport).filter(
-        Airport.is_active == True,
-        or_(
-            func.lower(Airport.iata_code).like(term),
-            func.lower(Airport.city).like(term),
-            func.lower(Airport.name).like(term),
-            func.lower(Airport.state_region).like(term),
-            Airport.search_text.like(term)
+    # Token-based filtering for multi-word queries like "Indira Gandhi"
+    tokens = clean_q.split()
+    token_filters = []
+    for t in tokens:
+        term = f"%{t}%"
+        token_filters.append(
+            or_(
+                func.lower(Airport.iata_code).like(term),
+                func.lower(Airport.city).like(term),
+                func.lower(Airport.name).like(term),
+                func.lower(Airport.state_region).like(term),
+                Airport.search_text.like(term)
+            )
         )
-    ).order_by(
-        # Order exact city prefix match first
-        func.lower(Airport.city).like(f"{clean_q}%").desc(),
-        Airport.iata_code.asc()
-    ).limit(limit).all()
 
-    return results
+    query = db.query(Airport).filter(
+        Airport.is_active == True,
+        and_(*token_filters)
+    ).order_by(
+        relevance_score.desc(),
+        Airport.city.asc(),
+        Airport.iata_code.asc()
+    ).limit(limit)
+
+    return query.all()
 
 
 @router.get("/airports/{iata_code}", response_model=AirportResponse)
@@ -107,7 +124,6 @@ def get_airport_by_iata(
     Lookup a specific airport by its 3-letter IATA code.
     Case-insensitive. Returns 404 if unknown or unresolved.
     """
-    # Ensure baseline airport dataset is available in PostgreSQL
     total = db.query(Airport).count()
     if total == 0:
         seed_airports(db)

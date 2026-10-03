@@ -1,6 +1,13 @@
 /**
- * Centralized Airport & Destination Registry
- * Maps traveler destinations and cities to standard IATA airport codes.
+ * Centralized Airport & Destination Registry (COMPATIBILITY SHIM ONLY)
+ * 
+ * NOTICE (L1 Migration):
+ * This file is NO LONGER the authoritative airport registry.
+ * The authoritative location source is the PostgreSQL Airport domain queried
+ * via apiService.searchLocations() (/api/v1/locations/search).
+ * 
+ * Unresolved destinations must remain unresolved (empty string / null).
+ * No destination must ever silently fall back to 'GOI' or any arbitrary airport.
  */
 
 export interface AirportMapping {
@@ -32,7 +39,6 @@ export const AIRPORT_REGISTRY: Record<string, AirportMapping> = {
   kerala: { code: 'COK', city: 'Kochi', country: 'India', name: 'Cochin Intl' },
   munnar: { code: 'COK', city: 'Kochi / Munnar', country: 'India', name: 'Cochin Intl' },
   varanasi: { code: 'VNS', city: 'Varanasi', country: 'India', name: 'Lal Bahadur Shastri Intl' },
-  gokarna: { code: 'GOI', city: 'Gokarna / Goa', country: 'India', name: 'Dabolim Airport' },
   rishikesh: { code: 'DED', city: 'Dehradun / Rishikesh', country: 'India', name: 'Jolly Grant Airport' },
   dehradun: { code: 'DED', city: 'Dehradun', country: 'India', name: 'Jolly Grant Airport' },
   andaman: { code: 'IXZ', city: 'Port Blair / Andaman', country: 'India', name: 'Veer Savarkar Intl' },

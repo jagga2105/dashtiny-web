@@ -11,8 +11,8 @@
 
 ## 1. Airport & Location Intelligence Mapping
 
-### 1.1 Legacy Data Audit
-1. **`airports.db`**: An empty 0-byte SQLite file present in the legacy repository root.
+### 1.1 Legacy Data Audit (Verified Counts)
+1. **`airports.db`**: An empty 0-byte SQLite file present in the legacy repository root (discarded; 0 records).
 2. **`flights.db` (`airports` table)**:
    ```sql
    CREATE TABLE airports (
@@ -37,28 +37,27 @@
      carriers TEXT
    );
    ```
-   *(Note: This SQLite table has 0 rows; the application used client-side JSON files at runtime).*
-3. **`src/assets/indiaAirport.json`**: 3,173 lines containing ~350 structured airport records across India.
-   ```json
-   {
-     "location": "Kadapa",
-     "airport": "Kadapa Airport",
-     "iata": "CDP",
-     "icao": "VOCP",
-     "airporttype": "Domestic",
-     "airportstatus": "Operational",
-     "state": "Andhra Pradesh",
-     "___id___": "977"
-   }
-   ```
-4. **`src/app/data/airportData.ts`**: 549 lines containing ~80 popular airport entries with full names and states.
+   *(Note: This SQLite table has 0 rows; the application used client-side data arrays at runtime).*
+3. **`src/assets/indiaAirport.json`**: 244 total JSON entries:
+   - 2 empty placeholder objects (`{}`)
+   - 151 records with valid 3-letter IATA codes
+   - 93 records with unassigned/non-operational codes (`—` or `-` for defense, airstrips, or proposed fields)
+   - 147 unique valid IATA codes
+   - 4 duplicate IATAs (`IXI`, `DED`, `TIR`, `CBD`)
+4. **`src/app/data/airportData.ts`**: 78 total TypeScript records:
+   - 78 valid unique 3-letter IATA codes
+   - 4 entries had blank names (`SHL`, `TCR`, `TRZ`) and 1 had blank state (`IXI`), which were enriched from `indiaAirport.json`.
+5. **Consolidated Ingestion Dataset**:
+   - 148 unique domestic Indian airports (merged from `indiaAirport.json` and `airportData.ts`).
+   - 23 high-volume international gateway hubs (e.g. `DXB`, `SIN`, `LHR`, `NRT`, `HND`, `BKK`, `DPS`).
+   - **171 total unique reference airports** imported into PostgreSQL.
 
 ### 1.2 Target PostgreSQL Schema (`airports`)
-To eliminate all runtime dependencies on SQLite and client-side JSON files, airports will be normalized into PostgreSQL:
+To eliminate all runtime dependencies on SQLite and client-side JSON files, airports are normalized into PostgreSQL:
 
 ```sql
 CREATE TABLE airports (
-    id VARCHAR(36) PRIMARY KEY,              -- UUID
+    id VARCHAR(36) PRIMARY KEY,              -- UUID / deterministic key (e.g. 'ap_del_vidp')
     iata_code VARCHAR(3) NOT NULL UNIQUE,     -- 'DEL', 'BOM', 'BLR'
     icao_code VARCHAR(4),                     -- 'VIDP', 'VABB'
     name VARCHAR(255) NOT NULL,               -- 'Indira Gandhi International Airport'
@@ -69,15 +68,19 @@ CREATE TABLE airports (
     latitude DOUBLE PRECISION,                -- 28.5562
     longitude DOUBLE PRECISION,               -- 77.1000
     timezone VARCHAR(50) DEFAULT 'Asia/Kolkata',
-    search_text VARCHAR(500) NOT NULL,        -- 'new delhi indira gandhi international del india'
+    search_text VARCHAR(500) NOT NULL,        -- 'del new delhi indira gandhi international vidp india in'
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    provenance VARCHAR(50) NOT NULL DEFAULT 'REFERENCE_DATASET',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE
 );
 
-CREATE INDEX ix_airports_iata_code ON airports(iata_code);
+CREATE UNIQUE INDEX ix_airports_iata_code ON airports(iata_code);
 CREATE INDEX ix_airports_city ON airports(city);
 CREATE INDEX ix_airports_country ON airports(country);
 CREATE INDEX ix_airports_search_text ON airports(search_text);
+CREATE INDEX ix_airports_is_active ON airports(is_active);
+CREATE INDEX ix_airports_city_iata ON airports(city, iata_code);
 ```
 
 ### 1.3 Field Transformation Matrix
@@ -86,19 +89,22 @@ CREATE INDEX ix_airports_search_text ON airports(search_text);
 | :--- | :--- | :--- |
 | `iata` / `code` | `iata_code` | Trim, uppercase, validate 3 uppercase ASCII characters (`^[A-Z]{3}$`). Must be unique. |
 | `icao` | `icao_code` | Trim, uppercase, 4 chars or `NULL` if missing. |
-| `airport` / `name` | `name` | Strip duplicate `"Airport"`, decode HTML entities, clean whitespace. |
-| `location` / `city` | `city` | Title case, normalize spellings (e.g. "Bengaluru" / "Bangalore"). |
+| `airport` / `name` | `name` | Strip trailing duplicate `"Airport"`, decode entities, clean whitespace. |
+| `location` / `city` | `city` | Title case, normalize spellings (e.g. "Bengaluru" / "Bangalore", "New Delhi" / "Delhi"). |
 | `state` | `state_region` | Title case state name. |
 | (Implicit) | `country` | `"India"` for domestic catalog, country name for international hubs. |
-| (Implicit) | `country_code` | ISO 3166-1 alpha-2 (`"IN"`). |
-| `lat`, `lon` | `latitude`, `longitude` | Parse to float; validate $-90 \le \text{lat} \le 90$ and $-180 \le \text{lon} \le 180$. |
-| `tz` | `timezone` | IANA timezone string or default to destination regional timezone. |
-| Computed | `search_text` | Lowercase concatenation: `${city} ${name} ${iata} ${country}` for fast substring autocomplete. |
+| (Implicit) | `country_code` | ISO 3166-1 alpha-2 (`"IN"`, `"AE"`, `"SG"`, etc.). |
+| `lat`, `lon` | `latitude`, `longitude` | Parse to float; validate $-90 \le \text{lat} \le 90$ and $-180 \le \text{lon} \le 180$. Nullable if unassigned. |
+| `tz` | `timezone` | IANA timezone string (`"Asia/Kolkata"` default for India). |
+| Computed | `search_text` | Lowercase concatenation: `${iata} ${city} ${name} ${icao} ${country} ${country_code}` for fast autocomplete. |
+| (Constant) | `provenance` | Explicitly `"REFERENCE_DATASET"`. Never `"LIVE"` or `"PROVIDER_VERIFIED"`. |
+| (Constant) | `is_active` | `TRUE` for operational airports; `FALSE` for decommissioned or unverified strips. |
 
 ### 1.4 Deduplication & Ingestion Strategy
 1. **Source Deduplication**: Where `iata` exists in both `indiaAirport.json` and `airportData.ts`, prefer `airportData.ts` for clean naming and `indiaAirport.json` for ICAO & status.
-2. **Exclude Non-Operational**: Skip records where `airportstatus == "Closed"` or `iata` is blank/hyphen.
-3. **Controlled Ingestion**: Ingest once via dedicated migration or backend seeding script into PostgreSQL. Zero runtime reads from SQLite or static JSON files.
+2. **Exclude Non-Operational**: Skip records where `airportstatus == "Closed"` or `iata` is blank/hyphen (`—`). 93 records skipped for this reason.
+3. **Controlled Ingestion**: Ingest once via `backend/scripts/import_airports.py` into PostgreSQL with Alembic migration `3900ef1a1170`. Zero runtime reads from SQLite or static client-side JSON files.
+4. **Idempotence**: Importer uses PostgreSQL upsert (`ON CONFLICT (iata_code) DO UPDATE`). Safe to run multiple times without data drift.
 
 ---
 

@@ -195,6 +195,9 @@ Structure the relational schema into logical functional domains:
 - `trip_days` (id, trip_id, day_number, date, title, weather)
 - `trip_items` (id, trip_day_id, item_type, title, start_time, duration_minutes, lat, lng, estimated_cost, source_type)
 
+### `LOCATION (Reference Domain)`
+- `airports` (id, iata_code, icao_code, name, city, state_region, country, country_code, latitude, longitude, timezone, search_text, is_active, provenance, created_at, updated_at)
+
 ### `INVENTORY`
 - `flight_offers`
 - `hotel_offers`
@@ -479,5 +482,55 @@ Unauthenticated public access via `GET /api/v1/trips/{trip_id}/public` is strict
 3. **Honest Deep-Linking**: Partner offers feature two distinct actions:
    - `[ Book on Provider ↗ ]`: Opens the third-party booking portal via deep-link.
    - `[ Already booked? Add confirmation reference ]`: Explicitly acknowledges that booking occurs externally and lets the traveler attach their PNR/confirmation reference to DashTiny.
+
+---
+
+## 17. Location & Airport Discovery Domain Architecture (L1 Migration)
+
+### 17.1 Canonical Location Pipeline
+```
+Legacy Sources (indiaAirport.json + airportData.ts)
+                    ↓
+One-Time Ingestion (backend/scripts/import_airports.py)
+                    ↓
+Normalized PostgreSQL Domain (airports table, Alembic 3900ef1a1170)
+                    ↓
+FastAPI Location Service (GET /api/v1/locations/search & /airports/{iata})
+                    ↓
+Unified API Client (apiService.searchLocations & apiService.getAirport)
+                    ↓
+Next.js Reusable Autocomplete (AirportAutocomplete component)
+                    ↓
+Planner & Bookings Integration (Flight Origin / Destination)
+```
+
+### 17.2 Deterministic Ranking Algorithm
+Airport autocomplete queries execute database-side ranking using SQL `case`:
+1. **Weight 100**: Exact 3-letter IATA code match (`upper(iata_code) = upper(:q)`)
+2. **Weight 90**: Exact airport name match (`lower(name) = lower(:q)`)
+3. **Weight 80**: Exact city name match (`lower(city) = lower(:q)`)
+4. **Weight 70**: IATA code prefix match (`iata_code ilike :prefix`)
+5. **Weight 60**: City name prefix match (`city ilike :prefix`)
+6. **Weight 50**: Airport name prefix match (`name ilike :prefix`)
+7. **Weight 40**: Token substring match in normalized `search_text`
+
+Bounded result limit defaults to 10 (maximum 50). Deactivated airports (`is_active = False`) are excluded.
+
+### 17.3 Provenance & Zero Silent Fallbacks
+- Airport reference data carries explicit provenance: `provenance = "REFERENCE_DATASET"`.
+- Coordinates are authoritative reference values, not live telemetry.
+- **Zero Fallback Rule**: Unknown destination or origin inputs remain strictly unresolved (`null` / empty string). The legacy practice of silently mapping unknown cities to Goa (`GOI`) is permanently abolished.
+
+### 17.4 What Was Intentionally NOT Ported
+| Legacy Component | Rejection Rationale |
+| :--- | :--- |
+| **Angular Service (`airport-data.service.ts`)** | Replaced by Next.js React component + `apiService.searchLocations`. |
+| **RxJS Observables & BehaviorSubjects** | Replaced by React state hooks, debounced fetch, and standard async/await. |
+| **SQLite Runtime (`airports.db`, `flights.db`)** | Discarded; SQLite is strictly prohibited in runtime. PostgreSQL is single source of truth. |
+| **Client-Side Hardcoded Registry (`src/lib/airports.ts`)** | Deprecated; downgraded to a legacy compatibility shim. Must not override backend search. |
+| **Legacy Express Davinci Server (`server.js`)** | Deprecated legacy wrapper; replaced by FastAPI + LangGraph. |
+| **Legacy Mongoose Backend (`db.js`)** | Discarded MongoDB; PostgreSQL with relational foreign keys and migrations is used. |
+| **Client-side API Credentials** | Plaintext keys from legacy `environment.ts` were discarded; backend `.env` manages secrets. |
+
 4. **Server-Authoritative Rewards**: Booking references and community actions reflect server-calculated reward coin balances (`setCoins(response.total_coins)`), eliminating double-awarding and client-side balance desynchronization.
 

@@ -109,6 +109,21 @@ export interface BookingPayload {
   details?: any;
 }
 
+export interface AirportLocation {
+  id: string;
+  iata_code: string;
+  icao_code?: string | null;
+  name: string;
+  city: string;
+  state_region?: string | null;
+  country: string;
+  country_code: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  timezone?: string | null;
+  provenance: string;
+}
+
 export interface AuthResponse {
   access_token: string;
   token_type: string;
@@ -202,6 +217,19 @@ export const apiService = {
       // If already registered, sign in
       return await apiService.loginWithEmail({ email, password });
     }
+  },
+
+  // Location & Airport Discovery API
+  async searchLocations(query: string, limit: number = 10): Promise<AirportLocation[]> {
+    if (!query || !query.trim()) return [];
+    return request<AirportLocation[]>(`/locations/search?q=${encodeURIComponent(query.trim())}&limit=${limit}`);
+  },
+
+  async getAirport(iataCode: string): Promise<AirportLocation> {
+    if (!iataCode || !iataCode.trim()) {
+      throw new ApiError('IATA code is required', 400);
+    }
+    return request<AirportLocation>(`/locations/airports/${encodeURIComponent(iataCode.trim().toUpperCase())}`);
   },
 
   // Explore API

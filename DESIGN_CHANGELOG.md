@@ -98,3 +98,35 @@ Every single data element presented in the DashTiny interface carries its proven
 8. **Pure PostgreSQL Mutations**:
    - External lookups (e.g., geocoding) moved strictly to proposal/research layer (`create_ai_proposal`). Database transactions inside `TripRevisionService` execute with zero external network dependencies.
    - Revision state semantics unified: `TripRevision N` captures canonical resulting Trip state **AFTER** mutation $N$.
+
+---
+
+## ✈️ Legacy Migration L1: Airport & Location Discovery Domain
+
+- **Audit Findings**:
+  - `src/assets/indiaAirport.json`: 244 total items; 2 empty records; 151 valid 3-letter IATAs; 93 invalid/unassigned (`—`, `-`, proposed/defence); 147 unique valid IATAs; 4 duplicate IATAs.
+  - `src/app/data/airportData.ts`: 78 items; all 78 valid unique 3-letter IATAs (enriched names and states).
+  - Merged dataset: 148 unique domestic Indian airports + 23 canonical international gateways = **171 total reference airports**.
+  - `airports.db`: 0-byte empty file.
+  - `flights.db`: SQLite database with empty tables (0 records).
+- **PostgreSQL Domain & Migration**:
+  - Added `Airport` model in `backend/app/models/models.py`.
+  - Alembic migration `3900ef1a1170_add_airports_table_for_locations_domain.py`.
+  - Unique index on `iata_code`, indexes on `city`, `country`, `search_text`, `is_active`, and composite `(city, iata_code)`.
+  - Ingestion script `backend/scripts/import_airports.py` with idempotent upsert and coordinate validation.
+- **FastAPI Location Service**:
+  - `GET /api/v1/locations/search?q=&limit=`: Deterministic ranking: exact IATA (100) > exact name (90) > exact city (80) > IATA prefix (70) > city prefix (60) > name prefix (50) > token search (40).
+  - `GET /api/v1/locations/airports/{iata_code}`: Case-insensitive 3-letter lookup.
+- **Frontend Component & Integration**:
+  - Built `src/components/location/AirportAutocomplete.tsx` with debounced search, keyboard navigation (ArrowUp, ArrowDown, Enter, Escape), loading state, empty state, error state, and clear selection badge.
+  - Information hierarchy: City (bold) -> Airport Name -> `DEL · New Delhi · India`.
+  - Integrated into Planner (`src/app/planner/page.tsx`) for departure airport refinement and Bookings (`src/app/bookings/page.tsx`) for flight origin and destination.
+  - `src/lib/airports.ts` reduced to legacy shim with zero fallback to `GOI`.
+- **Intentionally NOT Ported**:
+  - Angular services (`airport-data.service.ts`)
+  - RxJS patterns (`BehaviorSubject`, `Observable`)
+  - SQLite runtime dependencies
+  - Client-side hardcoded airport dictionaries
+  - Legacy Express API & Mongoose MongoDB
+  - Legacy client-side API credentials
+
