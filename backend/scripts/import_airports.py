@@ -407,29 +407,95 @@ def import_airports_data(
     }
 
 
+def audit_data(legacy_dir: Optional[Union[str, Path]] = None) -> Dict[str, int]:
+    """
+    Performs a read-only audit of legacy datasets and reference enrichment.
+    Never modifies PostgreSQL. Computes exact transformation metrics.
+    """
+    india_raw, ts_raw = load_legacy_airport_data(legacy_dir)
+    normalized = normalize_airports(legacy_dir)
+
+    invalid_iata_count = 0
+    duplicates_count = 0
+    seen = set()
+
+    # Track validation metrics from airportData.ts
+    for entry in ts_raw:
+        code = entry.get("code", "").strip().upper()
+        if not is_valid_iata(code):
+            invalid_iata_count += 1
+        elif code in seen:
+            duplicates_count += 1
+        else:
+            seen.add(code)
+
+    # Track validation metrics from indiaAirport.json
+    for item in india_raw:
+        val = item.get("value", {})
+        raw_iata = clean_text(val.get("iata", "")).upper()
+        if not raw_iata or raw_iata in ["—", "-", "N/A", "NONE"] or not is_valid_iata(raw_iata):
+            invalid_iata_count += 1
+        elif raw_iata in seen:
+            duplicates_count += 1
+        else:
+            seen.add(raw_iata)
+
+    without_coords = sum(1 for a in normalized.values() if a["latitude"] is None or a["longitude"] is None)
+    without_icao = sum(1 for a in normalized.values() if not a.get("icao_code"))
+    curated_count = sum(
+        1 for code in normalized
+        if code in CANONICAL_COORDINATES or code in CURATED_CITIES or code in INTERNATIONAL_METADATA
+    )
+
+    return {
+        "legacy_json_records": len(india_raw),
+        "legacy_ts_records": len(ts_raw),
+        "normalized_unique_airports": len(normalized),
+        "curated_enrichments": curated_count,
+        "records_without_coordinates": without_coords,
+        "records_without_icao": without_icao,
+        "invalid_iata": invalid_iata_count,
+        "duplicates": duplicates_count,
+    }
+
+
 def run_import(dry_run: bool = False, legacy_dir: Optional[str] = None):
+    source_dir = legacy_dir or DEFAULT_LEGACY_DIR
     print("=" * 70)
-    print("🌍 DashTiny L1 — Airport & Location Domain Importer")
+    print("🌍 DashTiny L1 — Airport & Location Domain Importer / Auditor")
     print("=" * 70)
-    print(f"Canonical source directory: {legacy_dir or DEFAULT_LEGACY_DIR}")
+    print(f"Canonical source directory: {source_dir}")
+
+    if dry_run:
+        audit = audit_data(legacy_dir=legacy_dir)
+        print("\nAudit Summary (Read-Only Dry Run):")
+        print(f"  Legacy JSON records:         {audit['legacy_json_records']}")
+        print(f"  Legacy TS records:           {audit['legacy_ts_records']}")
+        print(f"  Normalized unique airports:  {audit['normalized_unique_airports']}")
+        print(f"  Curated enrichments:         {audit['curated_enrichments']}")
+        print(f"  Records without coordinates: {audit['records_without_coordinates']}")
+        print(f"  Records without ICAO:        {audit['records_without_icao']}")
+        print(f"  Invalid IATA:                {audit['invalid_iata']}")
+        print(f"  Duplicates:                  {audit['duplicates']}")
+        print("\n[DRY RUN] No database modifications committed. PostgreSQL untouched.")
+        return
 
     db: Session = SessionLocal()
     try:
-        res = import_airports_data(db, legacy_dir=legacy_dir, dry_run=dry_run)
-        print(f"\nImport Results:")
+        res = import_airports_data(db, legacy_dir=legacy_dir, dry_run=False)
+        print(f"\nDatabase Import Results:")
         print(f"  Valid records processed: {res['valid']}")
         print(f"  Inserted:                 {res['inserted']}")
         print(f"  Updated:                  {res['updated']}")
         print(f"  Total in Database:        {res['total']}")
-        if dry_run:
-            print("  [DRY RUN: no changes written]")
     finally:
         db.close()
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Import legacy airports into PostgreSQL")
-    parser.add_argument("--dry-run", action="store_true", help="Inspect without committing to DB")
+    parser.add_argument("--dry-run", action="store_true", help="Inspect and audit without committing to DB")
+    parser.add_argument("--audit", action="store_true", help="Alias for --dry-run")
     parser.add_argument("--legacy-dir", type=str, default=None, help="Path to directory containing legacy datasets")
     args = parser.parse_args()
-    run_import(dry_run=args.dry_run, legacy_dir=args.legacy_dir)
+    run_import(dry_run=(args.dry_run or args.audit), legacy_dir=args.legacy_dir)

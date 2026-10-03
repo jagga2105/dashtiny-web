@@ -227,4 +227,71 @@ describe('AirportAutocomplete Component', () => {
       expect(screen.getAllByText('New Delhi').length).toBeGreaterThan(0);
     });
   });
+
+  it('searches for DEL and Delhi via apiService.searchLocations', async () => {
+    const searchSpy = vi.spyOn(apiService, 'searchLocations').mockResolvedValue([mockAirports[0]]);
+
+    render(<AirportAutocomplete onSelect={vi.fn()} />);
+    const input = screen.getByRole('combobox');
+
+    // Type DEL
+    act(() => {
+      fireEvent.change(input, { target: { value: 'DEL' } });
+    });
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 300));
+    });
+    expect(searchSpy).toHaveBeenCalledWith('DEL', 12);
+
+    // Type Delhi
+    act(() => {
+      fireEvent.change(input, { target: { value: 'Delhi' } });
+    });
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 300));
+    });
+    expect(searchSpy).toHaveBeenCalledWith('Delhi', 12);
+  });
+
+  it('handles Escape and Tab keyboard interactions cleanly', async () => {
+    vi.spyOn(apiService, 'searchLocations').mockResolvedValue(mockAirports);
+    const onSelect = vi.fn();
+
+    render(<AirportAutocomplete onSelect={onSelect} />);
+    const input = screen.getByRole('combobox');
+
+    // Open dropdown
+    act(() => {
+      fireEvent.focus(input);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Popular Hubs & Gateways')).toBeDefined();
+    });
+
+    // Escape closes dropdown
+    act(() => {
+      fireEvent.keyDown(input, { key: 'Escape' });
+    });
+
+    expect(screen.queryByRole('listbox')).toBeNull();
+
+    // Reopen dropdown
+    act(() => {
+      fireEvent.focus(input);
+    });
+
+    // Navigate to first item (DEL)
+    act(() => {
+      fireEvent.keyDown(input, { key: 'ArrowDown' });
+    });
+
+    // Select with Tab
+    act(() => {
+      fireEvent.keyDown(input, { key: 'Tab' });
+    });
+
+    expect(onSelect).toHaveBeenCalledWith(mockAirports[0]);
+    expect((input as HTMLInputElement).value).toBe('New Delhi (DEL)');
+  });
 });

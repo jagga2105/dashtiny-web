@@ -161,6 +161,8 @@ export function AirportAutocomplete({
         setIsOpen(true);
         if (results.length === 0 && inputValue.trim()) {
           performSearch(inputValue);
+        } else if (results.length > 0) {
+          setActiveIndex(0);
         }
       } else if (results.length > 0) {
         setActiveIndex((prev) => (prev < results.length - 1 ? prev + 1 : 0));

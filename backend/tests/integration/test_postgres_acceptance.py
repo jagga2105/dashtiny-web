@@ -22,12 +22,6 @@ from app.services.trip_revision_service import create_revision, serialize_trip_d
 
 from urllib.parse import urlparse
 
-POSTGRES_URL = os.environ.get(
-    "POSTGRES_TEST_DATABASE_URL",
-    "postgresql://postgres:postgres@localhost:5432/dashtiny_empty_test"
-)
-
-
 def validate_test_database_safety(url: str) -> None:
     """
     Safety guard to prevent catastrophic DROP SCHEMA on non-disposable databases.
@@ -56,6 +50,18 @@ def validate_test_database_safety(url: str) -> None:
         )
 
 
+# STEP 1: Load POSTGRES_TEST_DATABASE_URL
+POSTGRES_URL = os.environ.get(
+    "POSTGRES_TEST_DATABASE_URL",
+    "postgresql://postgres:postgres@localhost:5432/dashtiny_empty_test"
+)
+
+# STEP 2: Unconditionally validate database is unmistakably disposable BEFORE ANY CONNECTION
+# If a dangerous URL is configured, fail immediately rather than skipping.
+validate_test_database_safety(POSTGRES_URL)
+
+
+# STEP 3: Only then attempt connection
 def is_postgres_available():
     try:
         test_engine = create_engine(POSTGRES_URL, connect_args={"connect_timeout": 3})
@@ -72,6 +78,7 @@ pytestmark = pytest.mark.skipif(
 )
 
 
+# STEP 4: Only then allow DROP SCHEMA
 @pytest.fixture(scope="module")
 def pg_engine():
     # Enforce test database safety guard before any schema modification
