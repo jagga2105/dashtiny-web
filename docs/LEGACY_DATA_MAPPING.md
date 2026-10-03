@@ -1,0 +1,254 @@
+# 🗄️ DashTiny — Legacy Data Mapping & Migration Blueprint
+
+> **Sources**:  
+> - `airports.db` & `flights.db` (Legacy SQLite root files)  
+> - `db.js` (Legacy Mongoose / MongoDB schema)  
+> - `src/assets/indiaAirport.json` & `src/app/data/airportData.ts` (Legacy airport data arrays)  
+> - `src/app/data/flightData.ts` (Legacy flight dataset)  
+> - `src/app/services/itinerary-generator.service.ts` & `src/assets/trip/open-api.json` (Legacy itinerary structures)
+
+---
+
+## 1. Airport & Location Intelligence Mapping
+
+### 1.1 Legacy Data Audit
+1. **`airports.db`**: An empty 0-byte SQLite file present in the legacy repository root.
+2. **`flights.db` (`airports` table)**:
+   ```sql
+   CREATE TABLE airports (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     code TEXT NOT NULL,
+     lat TEXT NOT NULL,
+     lon TEXT NOT NULL,
+     name TEXT NOT NULL,
+     city TEXT NOT NULL,
+     state TEXT NOT NULL,
+     country TEXT NOT NULL,
+     woeid TEXT NOT NULL,
+     tz TEXT NOT NULL,
+     phone TEXT,
+     type TEXT NOT NULL,
+     email TEXT,
+     url TEXT,
+     runway_length TEXT,
+     elev TEXT,
+     icao TEXT,
+     direct_flights TEXT,
+     carriers TEXT
+   );
+   ```
+   *(Note: This SQLite table has 0 rows; the application used client-side JSON files at runtime).*
+3. **`src/assets/indiaAirport.json`**: 3,173 lines containing ~350 structured airport records across India.
+   ```json
+   {
+     "location": "Kadapa",
+     "airport": "Kadapa Airport",
+     "iata": "CDP",
+     "icao": "VOCP",
+     "airporttype": "Domestic",
+     "airportstatus": "Operational",
+     "state": "Andhra Pradesh",
+     "___id___": "977"
+   }
+   ```
+4. **`src/app/data/airportData.ts`**: 549 lines containing ~80 popular airport entries with full names and states.
+
+### 1.2 Target PostgreSQL Schema (`airports`)
+To eliminate all runtime dependencies on SQLite and client-side JSON files, airports will be normalized into PostgreSQL:
+
+```sql
+CREATE TABLE airports (
+    id VARCHAR(36) PRIMARY KEY,              -- UUID
+    iata_code VARCHAR(3) NOT NULL UNIQUE,     -- 'DEL', 'BOM', 'BLR'
+    icao_code VARCHAR(4),                     -- 'VIDP', 'VABB'
+    name VARCHAR(255) NOT NULL,               -- 'Indira Gandhi International Airport'
+    city VARCHAR(100) NOT NULL,               -- 'New Delhi'
+    state_region VARCHAR(100),                -- 'Delhi'
+    country VARCHAR(100) NOT NULL DEFAULT 'India',
+    country_code VARCHAR(2) NOT NULL DEFAULT 'IN',
+    latitude DOUBLE PRECISION,                -- 28.5562
+    longitude DOUBLE PRECISION,               -- 77.1000
+    timezone VARCHAR(50) DEFAULT 'Asia/Kolkata',
+    search_text VARCHAR(500) NOT NULL,        -- 'new delhi indira gandhi international del india'
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX ix_airports_iata_code ON airports(iata_code);
+CREATE INDEX ix_airports_city ON airports(city);
+CREATE INDEX ix_airports_country ON airports(country);
+CREATE INDEX ix_airports_search_text ON airports(search_text);
+```
+
+### 1.3 Field Transformation Matrix
+
+| Legacy JSON / TS Field | Target PostgreSQL Field | Transform / Sanitization Rule |
+| :--- | :--- | :--- |
+| `iata` / `code` | `iata_code` | Trim, uppercase, validate 3 uppercase ASCII characters (`^[A-Z]{3}$`). Must be unique. |
+| `icao` | `icao_code` | Trim, uppercase, 4 chars or `NULL` if missing. |
+| `airport` / `name` | `name` | Strip duplicate `"Airport"`, decode HTML entities, clean whitespace. |
+| `location` / `city` | `city` | Title case, normalize spellings (e.g. "Bengaluru" / "Bangalore"). |
+| `state` | `state_region` | Title case state name. |
+| (Implicit) | `country` | `"India"` for domestic catalog, country name for international hubs. |
+| (Implicit) | `country_code` | ISO 3166-1 alpha-2 (`"IN"`). |
+| `lat`, `lon` | `latitude`, `longitude` | Parse to float; validate $-90 \le \text{lat} \le 90$ and $-180 \le \text{lon} \le 180$. |
+| `tz` | `timezone` | IANA timezone string or default to destination regional timezone. |
+| Computed | `search_text` | Lowercase concatenation: `${city} ${name} ${iata} ${country}` for fast substring autocomplete. |
+
+### 1.4 Deduplication & Ingestion Strategy
+1. **Source Deduplication**: Where `iata` exists in both `indiaAirport.json` and `airportData.ts`, prefer `airportData.ts` for clean naming and `indiaAirport.json` for ICAO & status.
+2. **Exclude Non-Operational**: Skip records where `airportstatus == "Closed"` or `iata` is blank/hyphen.
+3. **Controlled Ingestion**: Ingest once via dedicated migration or backend seeding script into PostgreSQL. Zero runtime reads from SQLite or static JSON files.
+
+---
+
+## 2. Flight Search & Offers Data Mapping
+
+### 2.1 Legacy Data Audit
+1. **`flights.db` (`flights` table)**:
+   ```sql
+   CREATE TABLE flights (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     airline TEXT NOT NULL,
+     flight_number TEXT NOT NULL,
+     departure_airport TEXT NOT NULL,
+     arrival_airport TEXT NOT NULL,
+     departure_time DATETIME NOT NULL,
+     arrival_time DATETIME NOT NULL,
+     price REAL NOT NULL
+   );
+   ```
+2. **`src/app/data/flightData.ts`**: 806 lines with static flights across IndiGo, Air India, Akasa Air, Vistara, SpiceJet:
+   ```typescript
+   {
+     "id": 1,
+     "airlineLogo": "https://d3lzcn6mbbadaf.cloudfront.net/media/details/air_indfia.jpg",
+     "airlineName": "Air India",
+     "departureCityAirport": "IXC",
+     "departureTime": "08:00",
+     "arrivalTime": "11:30",
+     "arrivalCityAirport": "DEL",
+     "stops": 0,
+     "departureCity": "Chandigarh Airport",
+     "arrivalCity": "Indira Gandhi International Airport",
+     "price": "₹25,500",
+     "duration": "3h 30m"
+   }
+   ```
+
+### 2.2 Target Normalized Domain Contract (`FlightOffer`)
+The modern architecture abstracts all flight inventory through `FlightProvider` into a standardized dictionary:
+
+```python
+class FlightOffer(BaseModel):
+    offer_id: str                      # Deterministic hash: f"curated_fl_{origin}_{dest}_{hash}"
+    provider: str                      # "IndiGo", "Air India", "Akasa Air"
+    airline: str                       # "IndiGo"
+    flight_number: str                 # "6E-534"
+    departure_time: str                # "06:15 AM"
+    arrival_time: str                  # "07:30 AM"
+    origin_airport: str                # "DEL"
+    destination_airport: str           # "GOI"
+    duration_minutes: int              # 75
+    stops: int                         # 0
+    cabin: str                         # "economy" | "business"
+    baggage: str                       # "15kg Checked • 7kg Cabin"
+    cancellation: str                  # "Free cancellation within 24 hours"
+    price: float                       # 3450.0
+    currency: str                      # "INR"
+    deep_link: str                     # "https://www.goindigo.in"
+    why_recommended: str               # "Morning direct flight with early arrival"
+    provenance: str                    # "CURATED" (never "VERIFIED" without live API)
+    retrieved_at: str                  # ISO timestamp
+    expires_at: str                    # ISO timestamp (UTC + 2h)
+```
+
+### 2.3 Field Transformation Matrix
+
+| Legacy `flightData.ts` Field | Target `FlightOffer` Field | Transformation Rule |
+| :--- | :--- | :--- |
+| `id` | `offer_id` | Server-generated deterministic UUID or corridor hash. |
+| `airlineName` | `airline` / `provider` | Normalized airline brand string. |
+| (Missing in legacy) | `flight_number` | Standardized airline IATA code + flight digits (e.g. `6E-534`, `AI-802`). |
+| `departureCityAirport` | `origin_airport` | Clean 3-letter IATA code. |
+| `arrivalCityAirport` | `destination_airport` | Clean 3-letter IATA code. |
+| `departureTime`, `arrivalTime` | `departure_time`, `arrival_time` | Clean 12-hour or 24-hour time string. |
+| `duration` (`"2h 45m"`) | `duration_minutes` | Parse hours and minutes to total integer minutes: $2 \times 60 + 45 = 165$. |
+| `stops` | `stops` | Integer (0 for non-stop, 1, 2). |
+| `price` (`"₹22,800"`) | `price` | Strip currency symbols (`₹`, `,`), parse to float (`22800.0`). |
+| (Missing in legacy) | `provenance` | Explicitly `"CURATED"` (or `"DEMO"`), avoiding OTA liability. |
+| (Missing in legacy) | `deep_link` | Official airline booking portal deep-link. |
+
+---
+
+## 3. Structured Itinerary Data Mapping
+
+### 3.1 Legacy Itinerary Synthesis Audit
+In `src/app/services/itinerary-generator.service.ts` and `src/app/components/partials/chat-popup/chat-popup.component.ts`:
+- **Chunk Size**: `CHUNK_SIZE = 3` days per LLM invocation.
+- **Legacy Prompt Output Schema**:
+  ```json
+  {
+    "type": "itinerary_chunk",
+    "dailyItinerary": [
+      {
+        "day": 1,
+        "date": "2025-01-10",
+        "activities": [
+          {
+            "time": "09:00",
+            "place_type": "sightseeing",
+            "activity": "Visit Amber Fort",
+            "location": "Amer, Jaipur",
+            "location_coordinates": { "lat": 26.9855, "long": 75.8513 },
+            "weather": { "temperature": "24°C", "condition": "Sunny" },
+            "estimatedCost": 500
+          }
+        ]
+      }
+    ]
+  }
+  ```
+
+### 3.2 Target DashTiny Domain Relational Schema
+In `backend/app/models/models.py`, itineraries are stored across two normalized PostgreSQL tables:
+
+```
+Itinerary (Trips)
+   └── ItineraryDay (trip_days)
+          └── ItineraryActivity (trip_activities)
+```
+
+#### Activity Mapping Matrix:
+| Legacy Chunk Property | Target `ItineraryActivity` Column | Type & Constraints |
+| :--- | :--- | :--- |
+| Generated or implicit | `id` | `VARCHAR(36)` Primary Key (Server UUID) |
+| `day` | `trip_day_id` | Foreign Key to `trip_days.id` on delete CASCADE |
+| `activity` | `title` | `VARCHAR(255)` Not Null |
+| (Missing in legacy) | `description` | `TEXT` Rich context & narrative |
+| `time` (`"09:00"`) | `start_time` | `VARCHAR(10)` or `TIME` |
+| Computed from duration | `duration_minutes` | `INTEGER` CheckConstraint $\ge 0$ |
+| (Missing in legacy) | `transit_minutes` | `INTEGER` CheckConstraint $\ge 0$ |
+| `location_coordinates.lat` | `lat` | `DOUBLE PRECISION` |
+| `location_coordinates.long` | `lng` | `DOUBLE PRECISION` |
+| `estimatedCost` | `estimated_cost` | `DOUBLE PRECISION` CheckConstraint $\ge 0$ |
+| `place_type` | `category` | `VARCHAR(50)` ('sightseeing', 'dining', 'relaxation', etc.) |
+| (Missing in legacy) | `why_recommended` | `TEXT` Explaining rationale |
+| (Missing in legacy) | `source_citation` | `VARCHAR(255)` Official guide / local source |
+| (Missing in legacy) | `provenance` | `"AI_GENERATED"` |
+
+---
+
+## 4. Migration Execution Plan for Reference Data
+
+1. **Step 1 (L1 Database Ingestion)**:
+   - Create PostgreSQL `airports` table with Alembic migration.
+   - Run deduplicated data ingestion script merging `indiaAirport.json` + `airportData.ts` + international airport hubs.
+   - Build FastAPI `/locations/search` and `/locations/airports/{iata_code}` endpoints.
+2. **Step 2 (L2 Flight Provider Normalization)**:
+   - Expand `CuratedFlightProvider` using sanitized corridors from `flightData.ts`.
+   - Wire `/flights/search` API to accept origin, destination, dates, and passengers.
+3. **Step 3 (L4 Chunked Planner Architecture)**:
+   - Adapt `ItineraryGeneratorService`'s 3-day chunking logic inside backend `PlannerService`.
+   - Prevent duplicate activities and repeated dining across merged chunks.
+   - Emit valid `TripProposal` objects for user acceptance.
