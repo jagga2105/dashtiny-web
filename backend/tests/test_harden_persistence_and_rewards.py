@@ -185,7 +185,7 @@ def test_central_award_rewards_idempotency_and_ledger(db_session, test_user):
         user_id=test_user.id,
         delta=50,
         reward_type="BOOKING_SAVED",
-        reason="Verified Booking Reference",
+        reason="Saved Booking Reference",
         reference_type="booking",
         reference_id="bk_99",
         idempotency_key=idemp_key
@@ -201,7 +201,7 @@ def test_central_award_rewards_idempotency_and_ledger(db_session, test_user):
         user_id=test_user.id,
         delta=50,
         reward_type="BOOKING_SAVED",
-        reason="Verified Booking Reference Duplicate",
+        reason="Saved Booking Reference Duplicate",
         reference_type="booking",
         reference_id="bk_99",
         idempotency_key=idemp_key

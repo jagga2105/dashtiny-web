@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import MagicMock
 from fastapi.testclient import TestClient
-from app.models.models import ItineraryActivity, AIRun, Itinerary
+from app.models.models import ItineraryActivity, AIRun, Itinerary, RewardTransaction
 from app.main import app
 from app.db.database import get_db
 
@@ -646,6 +646,15 @@ def test_saved_booking_provenance_and_scope(client, db_session):
     assert len(trip_bookings) == 1
     assert trip_bookings[0]["provenance"] == "SAVED_REFERENCE"
     assert trip_bookings[0]["trip_id"] == trip_id
+
+    # 5. Check reward transaction audit text does NOT claim provider verification
+    reward_tx = db_session.query(RewardTransaction).filter(
+        RewardTransaction.reference_type == "booking",
+        RewardTransaction.reference_id == b_data["booking_id"]
+    ).first()
+    assert reward_tx is not None
+    assert reward_tx.reason == "Saved booking reference for Air India Express (AIX-TEST-999)"
+    assert "verified" not in reward_tx.reason.lower()
 
 def test_community_post_like_authenticated_and_unique(client, db_session):
     """

@@ -261,6 +261,8 @@ def test_booking_no_fake_pnr_and_reward_idempotency(client, db_session, test_use
     assert tx is not None
     assert tx.delta == 50
     assert tx.type == "BOOKING_SAVED"
+    assert tx.reason == "Saved booking reference for Air India (AI-SRINAGAR-771)"
+    assert "verified" not in tx.reason.lower()
 
     # 2. Duplicate PNR on same provider should be rejected
     res_dup = client.post("/api/v1/bookings/create", json=b_payload)
