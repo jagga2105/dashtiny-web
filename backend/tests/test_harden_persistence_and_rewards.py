@@ -277,3 +277,158 @@ def test_hotel_and_flight_search_no_backend_defaults(client):
     res_flight = client.get("/api/v1/bookings/search/flights?origin=&destination=")
     assert res_flight.status_code == 200
     assert res_flight.json() == []
+
+
+def test_reward_ledger_ten_rules_end_to_end(client, db_session, test_user):
+    """
+    Requirements 7, 8, 9, 10, 11:
+    1. award +50
+    2. award +20
+    3. same idempotency key twice -> only one ledger row
+    4. different idempotency keys -> two awards
+    5. negative award with insufficient balance -> rejected (raises ValueError, never silently clamped)
+    6. balance_after is correct
+    7. booking reward appears in RewardTransaction with clean non-verified wording
+    8. community reward appears in RewardTransaction
+    9. voucher redemption appears in RewardTransaction
+    """
+    user_id = test_user.id
+    profile = db_session.query(UserProfile).filter(UserProfile.user_id == user_id).first()
+    profile.reward_coins = 100
+    db_session.commit()
+
+    # 1. award +50
+    bal1, awarded1 = award_rewards(
+        db=db_session,
+        user_id=user_id,
+        delta=50,
+        reward_type="PROMO_BONUS",
+        reason="Early Explorer Bonus",
+        idempotency_key="idemp_rule_50"
+    )
+    db_session.commit()
+    assert awarded1 is True
+    assert bal1 == 150
+
+    # 2. award +20
+    bal2, awarded2 = award_rewards(
+        db=db_session,
+        user_id=user_id,
+        delta=20,
+        reward_type="PROMO_BONUS",
+        reason="Survey Completion",
+        idempotency_key="idemp_rule_20"
+    )
+    db_session.commit()
+    assert awarded2 is True
+    assert bal2 == 170
+
+    # 3. same idempotency key twice -> only one ledger row
+    bal_dup, awarded_dup = award_rewards(
+        db=db_session,
+        user_id=user_id,
+        delta=50,
+        reward_type="PROMO_BONUS",
+        reason="Duplicate Attempt",
+        idempotency_key="idemp_rule_50"
+    )
+    db_session.commit()
+    assert awarded_dup is False
+    assert bal_dup == 170
+
+    tx_count_50 = db_session.query(RewardTransaction).filter(
+        RewardTransaction.idempotency_key == "idemp_rule_50"
+    ).count()
+    assert tx_count_50 == 1
+
+    # 4. different idempotency keys -> two awards
+    tx_count_20 = db_session.query(RewardTransaction).filter(
+        RewardTransaction.idempotency_key == "idemp_rule_20"
+    ).count()
+    assert tx_count_20 == 1
+
+    # 5. negative award with insufficient balance -> rejected with domain error, NEVER silently clamped to 0
+    with pytest.raises(ValueError, match="Insufficient reward coins"):
+        award_rewards(
+            db=db_session,
+            user_id=user_id,
+            delta=-200,  # 170 - 200 = -30 < 0
+            reward_type="PENALTY",
+            reason="Illegal deduction",
+            idempotency_key="idemp_illegal_neg"
+        )
+
+    # Verify balance was NOT silently clamped to 0
+    profile_recheck = db_session.query(UserProfile).filter(UserProfile.user_id == user_id).first()
+    assert profile_recheck.reward_coins == 170
+
+    # 6. balance_after is correct on valid deduction
+    bal_deduct, awarded_deduct = award_rewards(
+        db=db_session,
+        user_id=test_user.id,
+        delta=-70,
+        reward_type="ADJUSTMENT",
+        reason="Valid deduction",
+        idempotency_key="idemp_valid_deduct"
+    )
+    db_session.commit()
+    assert awarded_deduct is True
+    assert bal_deduct == 100
+    deduct_tx = db_session.query(RewardTransaction).filter(
+        RewardTransaction.idempotency_key == "idemp_valid_deduct"
+    ).first()
+    assert deduct_tx.balance_after == 100
+    assert deduct_tx.delta == -70
+
+    # 7. booking reward appears in RewardTransaction with correct non-verified wording
+    bk_res = client.post("/api/v1/bookings/create", json={
+        "category": "flight",
+        "provider": "IndiGo",
+        "pnr_ref": "INDIGO99XYZ",
+        "title": "BLR -> DEL Flight",
+        "amount": 4500.0,
+        "currency": "INR"
+    })
+    assert bk_res.status_code == 200, bk_res.text
+    booking_tx = db_session.query(RewardTransaction).filter(
+        RewardTransaction.reference_type == "booking",
+        RewardTransaction.idempotency_key == "booking_reward_IndiGo_INDIGO99XYZ"
+    ).first()
+    assert booking_tx is not None
+    assert booking_tx.delta == 50
+    assert booking_tx.type == "BOOKING_SAVED"
+    assert booking_tx.reason == "Saved booking reference for IndiGo (INDIGO99XYZ)"
+    assert "verified" not in booking_tx.reason.lower()
+
+    # 8. community reward appears in RewardTransaction
+    post_res = client.post("/api/v1/community/posts", json={
+        "getaway_title": "Monsoon Trek to Kudremukh",
+        "location": "Chikkamagaluru, India",
+        "image_url": "https://images.unsplash.com/photo-kudremukh",
+        "content": "Breathtaking green rolling hills and misty clouds."
+    })
+    assert post_res.status_code == 200, post_res.text
+    post_id = post_res.json()["post_id"]
+    comm_tx = db_session.query(RewardTransaction).filter(
+        RewardTransaction.reference_type == "community_post",
+        RewardTransaction.reference_id == post_id
+    ).first()
+    assert comm_tx is not None
+    assert comm_tx.delta == 20
+    assert comm_tx.type == "TRIP_SHARED"
+
+    # 9. voucher redemption appears in RewardTransaction
+    current_coins = db_session.query(UserProfile).filter(UserProfile.user_id == test_user.id).first().reward_coins
+    assert current_coins >= 100
+    redeem_res = client.post("/api/v1/rewards/redeem", json={"voucher_id": "vch_03"})
+    assert redeem_res.status_code == 200, redeem_res.text
+
+    redemption_tx = db_session.query(RewardTransaction).filter(
+        RewardTransaction.reference_type == "reward_voucher",
+        RewardTransaction.reference_id == "vch_03"
+    ).first()
+    assert redemption_tx is not None
+    assert redemption_tx.delta == -100
+    assert redemption_tx.type == "VOUCHER_REDEEMED"
+    assert redemption_tx.balance_after == current_coins - 100
+

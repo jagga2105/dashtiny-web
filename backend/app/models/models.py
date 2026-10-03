@@ -29,6 +29,10 @@ class User(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
+    __table_args__ = (
+        CheckConstraint("trust_score >= 0.0 AND trust_score <= 100.0", name="ck_user_trust_score"),
+    )
+
     profile = relationship("UserProfile", back_populates="user", uselist=False, cascade="all, delete-orphan")
     itineraries = relationship("Itinerary", back_populates="owner")
     bookings = relationship("Booking", back_populates="user", cascade="all, delete-orphan")
@@ -150,6 +154,8 @@ class ItineraryActivity(Base):
     __table_args__ = (
         CheckConstraint("cost_estimate >= 0", name="ck_activity_cost"),
         CheckConstraint("sort_order >= 0", name="ck_activity_sort_order"),
+        CheckConstraint("duration_minutes >= 0", name="ck_activity_duration"),
+        CheckConstraint("transit_minutes >= 0", name="ck_activity_transit"),
         Index("ix_activity_day_sort", "day_id", "sort_order"),
     )
 
@@ -197,6 +203,10 @@ class SquadExpense(Base):
     amount = Column(Numeric(12, 2), nullable=False)
     category = Column(String(50), nullable=False)  # flight, stay, food, activity, transit
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        CheckConstraint("amount >= 0", name="ck_squad_expense_amount"),
+    )
 
     squad = relationship("SquadRoom", back_populates="expenses")
     paid_by_user = relationship("User", back_populates="expenses_paid")
@@ -250,6 +260,7 @@ class Booking(Base):
 
     __table_args__ = (
         UniqueConstraint("provider", "pnr_ref", name="uq_provider_pnr_ref"),
+        CheckConstraint("amount >= 0", name="ck_booking_amount"),
         CheckConstraint("status IN ('confirmed', 'pending', 'cancelled', 'saved_reference')", name="ck_booking_status"),
         Index("ix_bookings_user_created", "user_id", "created_at"),
         Index("ix_bookings_trip_created", "trip_id", "created_at"),
@@ -314,6 +325,7 @@ class TravelerMemory(Base):
 
     __table_args__ = (
         UniqueConstraint("user_id", "category", "key", name="uq_user_memory_key"),
+        CheckConstraint("confidence >= 0.0 AND confidence <= 1.0", name="ck_memory_confidence"),
         Index("ix_traveler_memories_user_cat_key", "user_id", "category", "key"),
     )
 
@@ -391,7 +403,12 @@ class RewardVoucher(Base):
     coin_cost = Column(Integer, nullable=False)
     category = Column(String(50), nullable=False)
     logo_url = Column(Text, nullable=True)
-    code = Column(String(50), unique=True, nullable=False)
+    code = Column(String(50), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("code", name="uq_reward_voucher_code"),
+        CheckConstraint("coin_cost >= 0", name="ck_voucher_coin_cost"),
+    )
 
 
 class RewardTransaction(Base):
@@ -410,6 +427,7 @@ class RewardTransaction(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (
+        CheckConstraint("balance_after >= 0", name="ck_reward_tx_balance_after"),
         Index("ix_reward_tx_user_created", "user_id", "created_at"),
     )
 
@@ -455,8 +473,8 @@ class TripSnapshot(Base):
     version = Column(Integer, nullable=False, default=1)
     user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     action = Column(String(50), default="ai_query", nullable=False)
-    action_type = Column(String(50), default="AI_QUERY", nullable=True)
-    actor_type = Column(String(50), default="USER", nullable=True)
+    action_type = Column(String(100), default="AI_MODIFY_ITINERARY", nullable=False)
+    actor_type = Column(String(50), default="USER", nullable=False)
     instruction = Column(Text, nullable=True)
     model = Column(String(100), default="deterministic-planner-v1", nullable=True)
     summary = Column(String(255), nullable=True)
@@ -465,6 +483,7 @@ class TripSnapshot(Base):
 
     __table_args__ = (
         UniqueConstraint("trip_id", "version", name="uq_trip_snapshot_version"),
+        CheckConstraint("version >= 1", name="ck_snapshot_version"),
         Index("ix_trip_snapshots_trip_ver", "trip_id", "version"),
     )
 

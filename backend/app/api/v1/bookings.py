@@ -151,7 +151,7 @@ def create_booking(
             user_id=user.id,
             delta=50,
             reward_type="BOOKING_SAVED",
-            reason=f"Saved verified booking reference for {request.provider} ({pnr_clean})",
+            reason=f"Saved booking reference for {request.provider} ({pnr_clean})",
             reference_type="booking",
             reference_id=new_booking.id,
             idempotency_key=idempotency_key,
