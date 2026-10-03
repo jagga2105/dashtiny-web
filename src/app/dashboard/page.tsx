@@ -47,14 +47,20 @@ import { apiService } from '@/services/api';
 interface DestinationItem {
   id: string;
   title: string;
+  destination_name?: string;
+  city?: string;
+  region?: string;
+  country?: string;
+  is_curated?: boolean;
+  editorial_rating?: string;
   location: string;
   vibe: string;
   vibes?: string[];
   categories?: string[];
   duration: string;
   price: string;
-  rating: string;
-  reviews: string;
+  rating?: string;
+  reviews?: string;
   image: string;
   tag: string;
   highlights: string[];
@@ -202,14 +208,18 @@ export default function DashboardPage() {
     {
       id: 'dest_1',
       title: 'Manali Alpine Sanctuary & Snow Retreat',
+      destination_name: 'Manali',
+      city: 'Manali',
+      region: 'Himachal Pradesh',
+      country: 'India',
+      is_curated: true,
+      editorial_rating: "Editor's Snow Retreat Pick",
       location: 'Himachal Pradesh, India',
       vibe: 'mountains',
       vibes: ['mountains', 'adventure'],
       categories: ['mountains', 'weekend', 'budget', 'family'],
       duration: '4 Days / 3 Nights',
       price: '₹14,500',
-      rating: '4.95',
-      reviews: '2,480',
       image: 'https://images.unsplash.com/photo-1626621341517-bbf3d9990a23?w=800&auto=format&fit=crop&q=80',
       tag: 'MANALI · HIMACHAL PRADESH',
       highlights: ['Tandem Paragliding over Valley', 'Private ATV Snow Trek', 'Artisanal Hot Cider Tasting'],
@@ -222,14 +232,18 @@ export default function DashboardPage() {
     {
       id: 'dest_2',
       title: 'Havelock & Radhanagar Turquoise Bay',
+      destination_name: 'Havelock Island',
+      city: 'Havelock',
+      region: 'Andaman Islands',
+      country: 'India',
+      is_curated: true,
+      editorial_rating: 'Curated Coastal Choice',
       location: 'Andaman Islands',
       vibe: 'beach',
       vibes: ['beach', 'wellness'],
       categories: ['beach', 'family', 'wellness'],
       duration: '5 Days / 4 Nights',
       price: '₹28,900',
-      rating: '4.98',
-      reviews: '1,890',
       image: 'https://images.unsplash.com/photo-1544551763-46a013bb70d5?w=800&auto=format&fit=crop&q=80',
       tag: 'HAVELOCK · ANDAMAN ISLANDS',
       highlights: ['PADI Private Reef Scuba', 'Radhanagar Sunset Lounge', 'Bioluminescent Kayaking'],
@@ -242,14 +256,18 @@ export default function DashboardPage() {
     {
       id: 'dest_3',
       title: 'Jaipur Palace & Amer Heritage Estate',
+      destination_name: 'Jaipur',
+      city: 'Jaipur',
+      region: 'Rajasthan',
+      country: 'India',
+      is_curated: true,
+      editorial_rating: 'Heritage Landmark Guide',
       location: 'Rajasthan, India',
       vibe: 'culture',
       vibes: ['culture', 'food'],
       categories: ['culture', 'weekend', 'family', 'food'],
       duration: '3 Days / 2 Nights',
       price: '₹11,200',
-      rating: '4.92',
-      reviews: '3,120',
       image: 'https://images.unsplash.com/photo-1599661046827-dacff0c0f09a?w=800&auto=format&fit=crop&q=80',
       tag: 'JAIPUR · RAJASTHAN',
       highlights: ['Private Royal City Palace Access', 'Amer Fort Champagne Sunset', 'Vintage Car City Tour'],
@@ -261,14 +279,18 @@ export default function DashboardPage() {
     {
       id: 'dest_4',
       title: 'Munnar Tea Estate & Backwater Villa',
+      destination_name: 'Munnar',
+      city: 'Munnar',
+      region: 'Kerala',
+      country: 'India',
+      is_curated: true,
+      editorial_rating: 'Wellness & Spice Sanctuary',
       location: 'Kerala, India',
       vibe: 'wellness',
       vibes: ['wellness', 'mountains'],
       categories: ['wellness', 'weekend', 'mountains', 'family'],
       duration: '4 Days / 3 Nights',
       price: '₹16,800',
-      rating: '4.96',
-      reviews: '1,540',
       image: 'https://images.unsplash.com/photo-1602216056096-3b40cc0c9944?w=800&auto=format&fit=crop&q=80',
       tag: 'MUNNAR · KERALA',
       highlights: ['Private Solar Houseboat Cruise', 'Organic Spice Estate Walk', 'Ayurvedic Wellness Spa'],
@@ -280,14 +302,18 @@ export default function DashboardPage() {
     {
       id: 'dest_5',
       title: 'Gokarna Sanctuary & Cliffside Villa',
+      destination_name: 'Gokarna',
+      city: 'Gokarna',
+      region: 'Karnataka',
+      country: 'India',
+      is_curated: true,
+      editorial_rating: 'Coastal Hidden Gem',
       location: 'Karnataka, India',
       vibe: 'beach',
       vibes: ['beach', 'food'],
       categories: ['beach', 'budget', 'weekend', 'food'],
       duration: '3 Days / 2 Nights',
       price: '₹8,900',
-      rating: '4.88',
-      reviews: '980',
       image: 'https://images.unsplash.com/photo-1512343879784-a960bf40e7f2?w=800&auto=format&fit=crop&q=80',
       tag: 'GOKARNA · KARNATAKA',
       highlights: ['Private Cliff Beach Hike', 'Organic Seafood Tasting', 'Bioluminescence Trek'],
@@ -299,14 +325,18 @@ export default function DashboardPage() {
     {
       id: 'dest_6',
       title: 'Kyoto Imperial Shrines & Bamboo Sanctuary',
+      destination_name: 'Kyoto',
+      city: 'Kyoto',
+      region: 'Kansai',
+      country: 'Japan',
+      is_curated: true,
+      editorial_rating: 'Cultural Sanctuary Pick',
       location: 'Japan',
       vibe: 'culture',
       vibes: ['culture', 'food'],
       categories: ['culture', 'international', 'food'],
       duration: '6 Days / 5 Nights',
       price: '₹72,000',
-      rating: '4.99',
-      reviews: '4,250',
       image: 'https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=800&auto=format&fit=crop&q=80',
       tag: 'KYOTO · JAPAN',
       highlights: ['Private Tea Ceremony in Gion', 'Arashiyama Sunrise Access', 'Michelin Kaiseki Dinner'],
@@ -318,14 +348,18 @@ export default function DashboardPage() {
     {
       id: 'dest_7',
       title: 'Ubud Jungle Sanctuary & Rice Terraces',
+      destination_name: 'Bali',
+      city: 'Ubud',
+      region: 'Bali',
+      country: 'Indonesia',
+      is_curated: true,
+      editorial_rating: 'International Wellness Escape',
       location: 'Bali, Indonesia',
       vibe: 'international',
       vibes: ['beach', 'wellness', 'culture', 'food'],
       categories: ['international', 'beach', 'wellness', 'family', 'food'],
       duration: '5 Days / 4 Nights',
       price: '₹48,000',
-      rating: '4.94',
-      reviews: '2,180',
       image: 'https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=800&auto=format&fit=crop&q=80',
       tag: 'BALI · INDONESIA',
       highlights: ['Ubud Jungle Infinity Villa', 'Tirta Empul Water Purification', 'Sunset Catamaran at Uluwatu'],
@@ -337,14 +371,18 @@ export default function DashboardPage() {
     {
       id: 'dest_8',
       title: 'Rishikesh Yoga & Ganges River Sanctuary',
+      destination_name: 'Rishikesh',
+      city: 'Rishikesh',
+      region: 'Uttarakhand',
+      country: 'India',
+      is_curated: true,
+      editorial_rating: 'Spiritual & Adventure Retreat',
       location: 'Uttarakhand, India',
       vibe: 'wellness',
       vibes: ['wellness', 'mountains', 'budget'],
       categories: ['wellness', 'budget', 'weekend', 'mountains'],
       duration: '3 Days / 2 Nights',
       price: '₹7,800',
-      rating: '4.91',
-      reviews: '1,430',
       image: 'https://images.unsplash.com/photo-1506197603052-3cc9c3a201bd?w=800&auto=format&fit=crop&q=80',
       tag: 'RISHIKESH · UTTARAKHAND',
       highlights: ['White Water River Rafting', 'Triveni Ghat Evening Aarti', 'Cliffside Meditation'],
@@ -405,12 +443,13 @@ export default function DashboardPage() {
   })();
 
   const getCanonicalDestination = (dest: DestinationItem) => {
-    const titleFirst = dest.title.split(' ')[0];
-    if (['Kyoto', 'Goa', 'Manali', 'Rishikesh', 'Munnar', 'Gokarna', 'Ubud', 'Wayanad', 'Jaipur', 'Bali'].includes(titleFirst)) {
-      return titleFirst;
+    if (dest.destination_name) return dest.destination_name;
+    if (dest.city) return dest.city;
+    if (dest.location) {
+      const locPart = dest.location.split(',')[0].trim();
+      if (locPart) return locPart;
     }
-    const locationCity = dest.location.split(',')[0].trim();
-    return locationCity || dest.title;
+    return dest.title;
   };
 
   return (
@@ -603,9 +642,15 @@ export default function DashboardPage() {
                       </p>
                     </div>
 
-                    <p className="text-xs text-slate-600">
-                      {dest.duration} · <span className="font-semibold text-slate-900">{dest.price} est.</span>
-                    </p>
+                    <div className="flex items-center gap-1.5 flex-wrap text-xs text-slate-600">
+                      <span>{dest.duration}</span>
+                      <span>·</span>
+                      <span className="font-semibold text-slate-900">{dest.price} est.</span>
+                      <span className="text-[10px] text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200/60 font-medium">Curated catalog</span>
+                      {dest.editorial_rating && (
+                        <span className="text-[10px] text-slate-400 font-medium hidden sm:inline">· {dest.editorial_rating}</span>
+                      )}
+                    </div>
 
                     <div className="flex flex-wrap gap-1 pt-1">
                       {dest.highlights.slice(0, 2).map((h, i) => (

@@ -32,6 +32,7 @@ interface AuthState {
   loginWithDemo: (demoProfile?: { role?: string; name?: string; email?: string }) => Promise<void>;
   logout: () => void;
   updateCoins: (amount: number) => void;
+  setCoins: (amount: number) => void;
   openAuthModal: (reason?: string, onAuthSuccess?: () => void) => void;
   closeAuthModal: () => void;
 }
@@ -159,6 +160,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set((state) => ({
       user: state.user
         ? { ...state.user, coins: Math.max(0, state.user.coins + delta) }
+        : null,
+    })),
+
+  setCoins: (amount: number) =>
+    set((state) => ({
+      user: state.user
+        ? { ...state.user, coins: Math.max(0, amount) }
         : null,
     })),
 

@@ -9,7 +9,7 @@ This document logs the active design language, typography tokens, color palette,
 - **Design Philosophy**: Calm, premium, visual-first editorial travel companion. 
   - *"One primary action per screen. Never overwhelm users. Travel is emotional. Every screen should inspire."*
 - **Typography**:
-  - **Display / Editorial Headings**: Google `Outfit` (`--font-display` / `font-serif-editorial`) — Modern, humanist, warm geometric display sans-serif (weights: 400 to 900).
+  - **Display / Editorial Headings**: Google `Outfit` (`--font-display` / `.font-display`, aliased to `.font-serif-editorial` for compatibility) — Modern, humanist, warm geometric display sans-serif (weights: 400 to 900).
   - **Body / Interface Copy**: Google `Plus Jakarta Sans` (`--font-sans`) — Highly legible, contemporary typography for UI components and reading (weights: 400 to 800).
 - **Color Palette**:
   - **Canvas Background**: Warm Alabaster Off-White (`#FAFAF9` and `#F8FAFC`) with subtle ambient atmospheric glows (`bg-orange-200/20`, `bg-sky-200/20`).
@@ -31,7 +31,7 @@ Every single data element presented in the DashTiny interface carries its proven
 | :--- | :--- | :--- | :--- |
 | **`VERIFIED`** | Green badge with `ShieldCheck` | `✓ Provider verified` | Live provider inventory with confirmed booking or real-time API quote. |
 | **`AI GENERATED`** | Orange pill with `Sparkles` | `✨ AI Pick` | Personalized recommendation, daily narrative, route pacing. Has "Why recommended" tooltip. |
-| **`CURATED`** | Indigo pill with `BookmarkCheck` | `✓ Curated by DashTiny` | Sourced from DashTiny's internal curated destination registry. |
+| **`CURATED`** | Amber/Indigo pill with `BookmarkCheck` | `✓ Curated catalog` | Sourced from DashTiny's internal curated destination & sample catalog. Marked as estimated price. |
 | **`SAVED REFERENCE`**| Slate ticket badge with `Ticket` | `Saved Reference · Unverified` | User-entered PNR / booking reference not yet verified with external provider. |
 
 ---
@@ -40,27 +40,29 @@ Every single data element presented in the DashTiny interface carries its proven
 
 1. **Top & Bottom Navigation** (`src/components/layout/TopNavbar.tsx` & `BottomNav.tsx`):
    - Clean horizontal pill header on `#FAFAF9` with DashTiny logo, active trip indicator, and DAIna status pill.
-   - Fixed mobile bottom navigation with quick access to Explore, Planner, Trips, Bookings, and Community.
+   - Fixed mobile bottom navigation with quick access to Explore (`/dashboard`), Plan (`/planner`), Trips (`/trips`), and Community (`/community`). Bookings is accessible contextually from dashboard comparisons and trip workspace tabs.
 2. **Explore & Dashboard** (`src/app/dashboard/page.tsx` & `src/app/page.tsx`):
    - Hero destination search with natural language parsing.
    - Vibe filter chips (All, Beach, Mountains, Culture, Weekend Drives, International).
    - Dynamic destination cards with rich imagery, pricing, and provenance signals.
-   - Static data loads once on mount; vibe changes refetch only destination sanctuaries.
+   - **Split data lifecycle**: Static data (trips and drive escapes) loads once on mount; vibe changes refetch only dynamic destination sanctuaries.
+   - Structured canonical destination model (`destination_name`, `city`, `region`, `country`) used for deterministic planner handoffs.
 3. **AI Travel Planner** (`src/app/planner/page.tsx`):
    - Natural language input with live intent parser (`destination`, `days`, `travellers`, `budget`, `vibe`).
-   - Explicit conversational ambiguity state when prompt lacks destination ("Where would you like to go?" with suggestion chips).
-   - "Adapt this itinerary" fork flow when handed off from Community posts.
+   - Explicit conversational ambiguity state when prompt lacks destination ("Where would you like to go?" with suggestion chips; no silent hidden default fallback).
+   - "Adapt this itinerary" fork flow when handed off from Community posts with interactive day-by-day preview and keep/omit stop selection.
    - Human loading language ("Working out the best option… Checking your budget and route").
 4. **Trip Workspace** (`src/app/trips/page.tsx`):
    - Unified execution cockpit for active trips.
+   - Day schedule navigation supporting both a `< Day X of N >` stepper, multi-day jump dropdown, and quick day pills.
    - Day schedule with non-destructive activity removal, 5-state deletion machine (`idle` → `deleting` → `deleted` → `undoing` → `failed`), and rollback on API failure.
-   - Calm editorial "Today's route" map view (replacing dark tactical radar).
-   - Bookings tab strictly scoped to `currentTrip.id` with unverified badges for saved references.
-   - Budget tab with starting heuristic estimate notice ("Starting estimate: Category allocation breakdown based on total trip budget").
+   - Interactive Route Map with tap/click stop inspection, contextual "Why it's here" explanation, and direct "Navigate in Maps" deep link.
+   - Canonical `currentTripBookings` merging direct trip bookings and user-saved bookings for persistent pre-trip checklist tracking.
 5. **Search & Compare Bookings** (`src/app/bookings/page.tsx`):
-   - Full search contract matching (dates, passengers, room types, guests, origins, destinations).
-   - Flight & hotel comparison cards with provider deep links and saved booking reference capture.
+   - Full search contract matching (dates, passengers, room types, guests, origins, destinations) with centralized airport code mapping (`src/lib/airports.ts`).
+   - Transparent catalog notice ("Compare travel options in DashTiny's current catalog") and stale search indicators when query inputs change.
+   - Scoped redirection to `/trips?tripId=<id>` when attaching confirmed references to active trips.
 6. **Community** (`src/app/community/page.tsx`):
-   - Verified traveler getaway posts with authenticated unique post likes (`PostLike`).
-   - "Adapt this itinerary" action carrying structured payloads to Planner.
-   - Squad companion invites ("Invite to trip") without fake unearned coin awards.
+   - Active vibe category filtering across shared traveler trips.
+   - New posts start at 0 likes; server-synchronized reward coins.
+   - "Adapt this itinerary" action carrying structured payloads to Planner for day-by-day preview and customization.

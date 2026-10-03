@@ -18,7 +18,8 @@ import {
   ShieldCheck,
   ExternalLink,
   Search,
-  Briefcase
+  Briefcase,
+  AlertTriangle,
 } from 'lucide-react';
 import { TopNavbar } from '@/components/layout/TopNavbar';
 import { BottomNav } from '@/components/layout/BottomNav';
@@ -27,6 +28,7 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { apiService } from '@/services/api';
 import { useAuthStore } from '@/store/useAuthStore';
+import { getAirportCodeForDestination, getCityNameForDestination } from '@/lib/airports';
 
 type BookingCategory = 'flights' | 'hotels' | 'trains' | 'buses' | 'cabs' | 'my_bookings';
 
@@ -55,6 +57,12 @@ function BookingsContent() {
   const [flightsList, setFlightsList] = useState<any[]>([]);
   const [isSearchingFlights, setIsSearchingFlights] = useState(false);
   const [flightError, setFlightError] = useState<string | null>(null);
+
+  // Stale search tracking
+  const [lastSearchedFlightKey, setLastSearchedFlightKey] = useState<string>('');
+  const [lastSearchedHotelKey, setLastSearchedHotelKey] = useState<string>('');
+
+  const currentFlightKey = `${flightOrigin}-${flightDest}-${departureDate}-${returnDate}-${passengers}-${cabinClass}-${tripType}`;
 
   const lowestFareFlight = flightsList.length > 0
     ? flightsList.reduce((min, f) => (f.price < min.price ? f : min), flightsList[0])
@@ -101,9 +109,9 @@ function BookingsContent() {
     }
     if (prov === 'CURATED') {
       return (
-        <span title="Curated by DashTiny's travel catalog" className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-50 text-slate-700 text-[10px] font-medium border border-slate-200">
+        <span title="Curated sample offer in DashTiny's current catalog" className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-50 text-slate-700 text-[10px] font-medium border border-slate-200">
           <CheckCircle2 className="w-3 h-3 text-slate-500" />
-          Curated schedule
+          Curated sample offer
         </span>
       );
     }
@@ -111,7 +119,7 @@ function BookingsContent() {
       return (
         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 text-[10px] font-medium border border-amber-200">
           <Sparkles className="w-3 h-3 text-amber-500" />
-          Estimated fare
+          Estimated price
         </span>
       );
     }
@@ -130,6 +138,10 @@ function BookingsContent() {
   const [hotelsList, setHotelsList] = useState<any[]>([]);
   const [isSearchingHotels, setIsSearchingHotels] = useState(false);
   const [hotelError, setHotelError] = useState<string | null>(null);
+
+  const currentHotelKey = `${hotelDest}-${hotelGuests}-${hotelCheckIn}-${hotelCheckOut}`;
+  const isFlightSearchStale = lastSearchedFlightKey !== '' && lastSearchedFlightKey !== currentFlightKey && flightsList.length > 0;
+  const isHotelSearchStale = lastSearchedHotelKey !== '' && lastSearchedHotelKey !== currentHotelKey && hotelsList.length > 0;
 
   // Load initial trips and user reservations
   useEffect(() => {
@@ -163,17 +175,13 @@ function BookingsContent() {
     if (selectedTripId && activeTrips.length > 0) {
       const match = activeTrips.find((t) => t.id === selectedTripId);
       if (match) {
-        const dest = (match.destination || '').toLowerCase();
-        if (dest.includes('goa')) {
-          setFlightDest('GOI');
-          setHotelDest('Goa');
-        } else if (dest.includes('manali') || dest.includes('kullu')) {
-          setFlightDest('KUU');
-          setHotelDest('Manali');
-        } else if (dest.includes('jaipur')) {
-          setFlightDest('JAI');
-          setHotelDest('Jaipur');
-        }
+        const dest = match.destination || '';
+        const airportCode = getAirportCodeForDestination(dest);
+        const cityName = getCityNameForDestination(dest);
+        
+        setFlightDest(airportCode);
+        setHotelDest(cityName);
+
         if (match.startDate) {
           setDepartureDate(match.startDate);
           setHotelCheckIn(match.startDate);
@@ -213,6 +221,7 @@ function BookingsContent() {
         tripType: type,
       });
       setFlightsList(results || []);
+      setLastSearchedFlightKey(`${orig}-${dest}-${dep}-${ret}-${pax}-${cabin}-${type}`);
     } catch (err) {
       console.error('Failed to search flights:', err);
       setFlightError('Unable to connect to DashTiny flight search. Please try again.');
@@ -239,6 +248,7 @@ function BookingsContent() {
         checkOut: outDate,
       });
       setHotelsList(results || []);
+      setLastSearchedHotelKey(`${dest}-${guests}-${inDate}-${outDate}`);
     } catch (err) {
       console.error('Failed to search hotels:', err);
       setHotelError('Unable to connect to DashTiny stay search. Please try again.');
@@ -314,7 +324,7 @@ function BookingsContent() {
               Compare Flights & Stays
             </h1>
             <p className="text-slate-600 text-xs sm:text-sm font-medium max-w-2xl">
-              Compare prices across Skyscanner, Booking.com, IndiGo, and Airbnb. Once booked, attach your confirmed reference to your trip workspace.
+              Compare travel options in DashTiny&apos;s current catalog. Once booked, attach your confirmed reference to your trip workspace.
             </p>
           </div>
 
@@ -323,7 +333,7 @@ function BookingsContent() {
             <div className="p-3.5 rounded-2xl bg-white border border-slate-200 shadow-2xs space-y-1.5 shrink-0 min-w-[280px]">
               <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-700">
                 <Briefcase className="w-3.5 h-3.5 text-orange-500" />
-                <span>Attach to Active Trip:</span>
+                <span>Attach to trip:</span>
               </div>
               <select
                 value={selectedTripId}
@@ -332,7 +342,7 @@ function BookingsContent() {
               >
                 {activeTrips.map((t) => (
                   <option key={t.id} value={t.id}>
-                    {t.destination} ({t.startDate})
+                    {t.destination} · {t.startDate || 'Upcoming'}
                   </option>
                 ))}
               </select>
@@ -383,7 +393,7 @@ function BookingsContent() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => router.push('/trips')}
+                onClick={() => router.push(bookingConfirmed.tripId ? `/trips?tripId=${bookingConfirmed.tripId}` : '/trips')}
                 className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs border-0 shadow-2xs cursor-pointer"
               >
                 Open in Trip Workspace →
@@ -572,6 +582,25 @@ function BookingsContent() {
                 </div>
               </Card>
 
+              {/* Stale Flight Search Warning */}
+              {isFlightSearchStale && (
+                <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-950 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span className="font-semibold">Search details changed — click &quot;Update results&quot; to refresh offers for {departureDate}</span>
+                  </div>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={() => loadFlights(flightOrigin, flightDest, departureDate, returnDate, passengers, cabinClass, tripType)}
+                    isLoading={isSearchingFlights}
+                    className="bg-amber-600 hover:bg-amber-700 text-white text-xs px-3.5 py-1.5 rounded-lg shrink-0 cursor-pointer"
+                  >
+                    Update results
+                  </Button>
+                </div>
+              )}
+
               {/* Flight Offers List with Algorithm-Driven Decision Support */}
               <div className="space-y-3">
                 {flightsList.map((fl, idx) => {
@@ -591,12 +620,17 @@ function BookingsContent() {
                           </span>
                           {isLowestFare && (
                             <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10px] font-bold uppercase tracking-wide">
-                              Lowest Fare · ₹{fl.price?.toLocaleString('en-IN')}
+                              Lowest price · ₹{fl.price?.toLocaleString('en-IN')}
                             </span>
                           )}
                           {isFastest && !isLowestFare && (
                             <span className="px-2 py-0.5 rounded bg-sky-100 text-sky-800 text-[10px] font-bold uppercase tracking-wide">
-                              Fastest Transit
+                              Fastest
+                            </span>
+                          )}
+                          {!isLowestFare && !isFastest && (
+                            <span className="px-2 py-0.5 rounded bg-orange-100 text-orange-800 text-[10px] font-bold uppercase tracking-wide">
+                              Recommended for your trip
                             </span>
                           )}
                           {getBookingProvenanceBadge(fl.provenance)}
@@ -625,7 +659,9 @@ function BookingsContent() {
                             <>
                               <span>•</span>
                               <span className="text-emerald-700 font-semibold">
-                                ✓ Lowest total cost among verified providers
+                                {fl.provenance === 'VERIFIED'
+                                  ? '✓ Lowest total cost among verified providers'
+                                  : '✓ Lowest price in current catalog (estimated)'}
                               </span>
                             </>
                           )}
@@ -687,18 +723,24 @@ function BookingsContent() {
               <div className="flex flex-wrap items-center gap-3">
                 <div className="space-y-1">
                   <label className="text-[10px] font-semibold uppercase text-slate-400">Destination</label>
-                  <select
+                  <input
+                    type="text"
                     value={hotelDest}
-                    onChange={(e) => {
-                      setHotelDest(e.target.value);
-                      loadHotels(e.target.value, hotelGuests);
-                    }}
-                    className="text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                  >
-                    <option value="Goa">Goa</option>
-                    <option value="Manali">Manali</option>
-                    <option value="Jaipur">Jaipur</option>
-                  </select>
+                    onChange={(e) => setHotelDest(e.target.value)}
+                    list="hotel-destinations-list"
+                    placeholder="e.g. Kyoto, Goa, Manali"
+                    className="text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500 w-36"
+                  />
+                  <datalist id="hotel-destinations-list">
+                    <option value="Goa" />
+                    <option value="Manali" />
+                    <option value="Jaipur" />
+                    <option value="Kyoto" />
+                    <option value="Bali" />
+                    <option value="Udaipur" />
+                    <option value="Rishikesh" />
+                    <option value="Munnar" />
+                  </datalist>
                 </div>
 
                 <div className="space-y-1">
@@ -754,6 +796,25 @@ function BookingsContent() {
                 </Button>
               </div>
             </Card>
+
+            {/* Stale Hotel Search Warning */}
+            {isHotelSearchStale && (
+              <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-950 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span className="font-semibold">Stay criteria changed — click &quot;Update results&quot; to refresh stays for {hotelDest}</span>
+                </div>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => loadHotels(hotelDest, hotelGuests, hotelCheckIn, hotelCheckOut)}
+                  isLoading={isSearchingHotels}
+                  className="bg-amber-600 hover:bg-amber-700 text-white text-xs px-3.5 py-1.5 rounded-lg shrink-0 cursor-pointer"
+                >
+                  Update results
+                </Button>
+              </div>
+            )}
 
             {/* Hotel Cards Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -902,7 +963,7 @@ function BookingsContent() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => router.push('/trips')}
+                        onClick={() => router.push(b.trip_id ? `/trips?tripId=${b.trip_id}` : '/trips')}
                         className="border-slate-200 text-xs font-semibold hover:bg-slate-50 shrink-0 cursor-pointer"
                       >
                         View in Trip ➔

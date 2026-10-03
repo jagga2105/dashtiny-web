@@ -59,7 +59,7 @@ def create_community_post(
         location=request.location,
         image_url=request.image_url,
         content=request.content,
-        likes_count=1,
+        likes_count=0,
         companions_needed=request.companions_needed or 2
     )
     db.add(new_post)
@@ -78,7 +78,8 @@ def create_community_post(
         "author_name": new_post.author_name,
         "getaway_title": new_post.getaway_title,
         "likes_count": new_post.likes_count,
-        "coins_earned": 20
+        "coins_earned": 20,
+        "total_coins": profile.reward_coins if profile else 20
     }
 
 @router.post("/posts/{post_id}/like")

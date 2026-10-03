@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { Heart, MessageSquare, MapPin, PlusCircle, Users, CheckCircle2, ShieldCheck, GitFork, Filter, CalendarDays, Sparkles } from 'lucide-react';
@@ -31,7 +31,7 @@ interface CommunityTripPost {
 
 export default function CommunityPage() {
   const router = useRouter();
-  const { updateCoins } = useAuthStore();
+  const { updateCoins, setCoins } = useAuthStore();
   const [activeTab, setActiveTab] = useState<'trips' | 'companions'>('trips');
   const [selectedVibeFilter, setSelectedVibeFilter] = useState<string>('All');
   const [dynamicPosts, setDynamicPosts] = useState<any[]>([]);
@@ -136,7 +136,11 @@ export default function CommunityPage() {
       });
 
       if (res && res.status === 'published') {
-        updateCoins(20);
+        if (typeof res.total_coins === 'number') {
+          setCoins(res.total_coins);
+        } else {
+          updateCoins(20);
+        }
         setIsPublishModalOpen(false);
         setNewTitle('');
         setNewLocation('');
@@ -216,7 +220,7 @@ export default function CommunityPage() {
     },
   ];
 
-  const tripsToUse = dynamicPosts.length > 0
+  const allTrips = dynamicPosts.length > 0
     ? dynamicPosts.map((p) => ({
         id: p.id,
         author_name: p.author_name,
@@ -224,7 +228,7 @@ export default function CommunityPage() {
         destination: p.getaway_title || p.location,
         duration: p.duration || 'Flexible',
         budget_est: p.budget_est || 'Shared budget',
-        trip_style: Array.isArray(p.trip_style) ? p.trip_style : ['Travel Story'],
+        trip_style: Array.isArray(p.trip_style) && p.trip_style.length > 0 ? p.trip_style : ['Travel Story'],
         is_identity_verified: Boolean(p.is_identity_verified),
         is_trip_completed: Boolean(p.is_trip_completed),
         location: p.location,
@@ -234,6 +238,33 @@ export default function CommunityPage() {
         comments_count: p.comments_count || 0,
       }))
     : defaultTrips;
+
+  const tripsToUse = useMemo(() => {
+    if (!selectedVibeFilter || selectedVibeFilter === 'All') return allTrips;
+
+    return allTrips.filter((t) => {
+      const combined = [
+        ...(Array.isArray(t.trip_style) ? t.trip_style : []),
+        t.destination,
+        t.location,
+        t.content,
+      ].join(' ').toLowerCase();
+
+      if (selectedVibeFilter === 'Culture & Heritage') {
+        return combined.includes('culture') || combined.includes('heritage') || combined.includes('historic') || combined.includes('temple');
+      }
+      if (selectedVibeFilter === 'Food & Dining') {
+        return combined.includes('food') || combined.includes('dining') || combined.includes('market') || combined.includes('cafe') || combined.includes('seafood') || combined.includes('matcha');
+      }
+      if (selectedVibeFilter === 'Coastal Escapes') {
+        return combined.includes('coastal') || combined.includes('beach') || combined.includes('sea') || combined.includes('cliff') || combined.includes('ocean');
+      }
+      if (selectedVibeFilter === 'Nature & Mountains') {
+        return combined.includes('nature') || combined.includes('mountain') || combined.includes('pine') || combined.includes('chalet') || combined.includes('lake') || combined.includes('trek');
+      }
+      return true;
+    });
+  }, [allTrips, selectedVibeFilter]);
 
   return (
     <div className="min-h-screen pb-24 md:pb-12 flex flex-col bg-[#FAFAF9] text-slate-900 font-sans selection:bg-orange-500 selection:text-white">

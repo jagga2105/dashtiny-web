@@ -60,40 +60,48 @@ export function DAInaChatWidget() {
       if (res && res.reply) {
         let itData: StructuredItineraryData | undefined = undefined;
 
+        // If DAIna detects an itinerary intent, use the ONE canonical Planner service
         if (res.is_itinerary && res.itinerary_data) {
           const parsed = parseTravelPrompt(textToSend);
-          const dest = res.itinerary_data.destination || parsed.destination || 'Goa, India';
-          const daysCount = res.itinerary_data.days_count || parsed.days_count || 3;
-          const budget = res.itinerary_data.budget || parsed.budget || (daysCount * 12000);
+          const dest = res.itinerary_data.destination || parsed.destination;
+          const daysCount = res.itinerary_data.days_count || parsed.days_count || 4;
+          const budget = res.itinerary_data.budget || parsed.budget || 45000;
 
-          // Generate realistic future travel dates
-          const start = new Date(Date.now() + 7 * 86400000);
-          const end = new Date(start.getTime() + daysCount * 86400000);
-          const startDate = start.toISOString().split('T')[0];
-          const endDate = end.toISOString().split('T')[0];
+          if (dest) {
+            try {
+              const planRes = await apiService.generateItinerary({
+                destination: dest,
+                origin: parsed.origin,
+                start_date: parsed.start_date,
+                end_date: parsed.end_date,
+                days_count: daysCount,
+                travellers: parsed.travellers || 2,
+                budget,
+                currency: parsed.currency || 'INR',
+                persona: parsed.persona || 'solo',
+                vibe: parsed.vibe,
+                interests: parsed.interests,
+                raw_prompt: textToSend,
+                prompt: textToSend,
+              });
 
-          itData = {
-            id: `it_chat_${Date.now()}`,
-            title: res.itinerary_data.title || `Custom ${daysCount}-Day ${dest} Getaway`,
-            destination: dest,
-            startDate,
-            endDate,
-            budget,
-            days: [
-              {
-                dayNumber: 1,
-                title: 'Arrival & Curated Stay Check-in',
-                coverImage: 'https://images.unsplash.com/photo-1512343879784-a960bf40e7f2?w=800&auto=format&fit=crop&q=80',
-                weather: '28°C Pleasant 🌤️',
-                activities: [
-                  { time: '10:00 AM', description: `Private Check-in at Selected Sanctuary in ${dest}`, location: dest, placeType: inferPlaceType('hotel stay') },
-                  { time: '01:30 PM', description: `Curated Local Gastronomy Experience`, location: dest, placeType: inferPlaceType('lunch restaurant') },
-                  { time: '05:30 PM', description: `Golden Hour Heritage Walk & Sunset View`, location: dest, placeType: inferPlaceType('sunset beach') },
-                ],
-              },
-            ],
-          };
-          addItinerary(itData);
+              if (planRes && planRes.id) {
+                const formatted: StructuredItineraryData = {
+                  id: planRes.id,
+                  title: planRes.title || `Custom ${daysCount}-Day ${dest} Getaway`,
+                  destination: planRes.destination || dest,
+                  startDate: planRes.startDate || new Date().toISOString().split('T')[0],
+                  endDate: planRes.endDate || new Date(Date.now() + daysCount * 86400000).toISOString().split('T')[0],
+                  budget: planRes.budget || budget,
+                  days: planRes.days || [],
+                };
+                addItinerary(formatted);
+                itData = formatted;
+              }
+            } catch (err) {
+              console.warn('Planner service fallback in chat:', err);
+            }
+          }
         }
 
         setMessages((prev) => [
@@ -101,8 +109,10 @@ export function DAInaChatWidget() {
           {
             id: `bot_${Date.now()}`,
             sender: 'daina',
-            text: res.reply,
-            isItinerary: res.is_itinerary,
+            text: itData
+              ? `${res.reply}\n\n✦ I have crafted and saved your itinerary directly into your Trip Workspace!`
+              : res.reply,
+            isItinerary: Boolean(itData),
             itineraryData: itData,
           },
         ]);
@@ -130,37 +140,6 @@ export function DAInaChatWidget() {
     }
   };
 
-  const handleSaveItineraryToDB = async (itData: StructuredItineraryData) => {
-    try {
-      const dbRes = await apiService.generateItinerary({
-        destination: itData.destination,
-        duration: itData.days.length || 3,
-        budget: itData.budget || 30000,
-        vibe: 'Luxury Leisure',
-        companions: 2,
-      });
-      if (dbRes && dbRes.itinerary) {
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: `bot_saved_${Date.now()}`,
-            sender: 'daina',
-            text: `✦ Confirmed! "${itData.title}" has been saved directly to your Trip Workspace! You can view and manage it anytime in Trips.`,
-          },
-        ]);
-      }
-    } catch {
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: `bot_err_${Date.now()}`,
-          sender: 'daina',
-          text: `✦ Unable to connect to DashTiny services. Failed to save "${itData.title}". Please try again.`,
-        },
-      ]);
-    }
-  };
-
   const handleFormSubmit = async (formResult: TravelInputResult) => {
     const promptSummary = `Trip to ${formResult.destination} from ${formResult.departure} (${formResult.dates}) for ${formResult.groupSize}. Budget: ${formResult.budget}. Style: ${formResult.purpose}.`;
 
@@ -174,48 +153,53 @@ export function DAInaChatWidget() {
     setIsThinking(true);
 
     try {
-      const dbRes = await apiService.generateItinerary({
+      const budgetNum = parseInt(formResult.budget.replace(/[^0-9]/g, ''), 10) || 45000;
+      const travellersNum = parseInt(formResult.groupSize.replace(/[^0-9]/g, ''), 10) || 2;
+      const personaVal = formResult.groupSize.toLowerCase().includes('solo')
+        ? 'solo'
+        : formResult.groupSize.toLowerCase().includes('family')
+        ? 'family'
+        : formResult.groupSize.toLowerCase().includes('friends') || formResult.groupSize.toLowerCase().includes('squad')
+        ? 'squad'
+        : 'couple';
+
+      const planRes = await apiService.generateItinerary({
         destination: formResult.destination,
-        duration: 4,
-        budget: parseInt(formResult.budget.replace(/[^0-9]/g, '')) || 45000,
+        origin: formResult.departure || undefined,
+        days_count: 4,
+        travellers: travellersNum,
+        budget: budgetNum,
+        currency: 'INR',
+        persona: personaVal,
         vibe: formResult.purpose,
-        companions: parseInt(formResult.groupSize.replace(/[^0-9]/g, '')) || 2,
+        raw_prompt: promptSummary,
+        prompt: promptSummary,
       });
 
-      const generatedItinerary: StructuredItineraryData = {
-        id: dbRes?.itinerary?.id || `it_form_${Date.now()}`,
-        title: dbRes?.itinerary?.title || `${formResult.destination} Getaway`,
-        destination: formResult.destination,
-        startDate: formResult.dates.split('to')[0]?.trim() || '2026-08-10',
-        endDate: formResult.dates.split('to')[1]?.trim() || '2026-08-14',
-        budget: parseInt(formResult.budget.replace(/[^0-9]/g, '')) || 50000,
-        days: dbRes?.days || [
+      if (planRes && planRes.id) {
+        const generatedItinerary: StructuredItineraryData = {
+          id: planRes.id,
+          title: planRes.title || `${formResult.destination} Getaway`,
+          destination: planRes.destination || formResult.destination,
+          startDate: planRes.startDate || formResult.dates.split('to')[0]?.trim() || new Date().toISOString().split('T')[0],
+          endDate: planRes.endDate || formResult.dates.split('to')[1]?.trim() || new Date(Date.now() + 4 * 86400000).toISOString().split('T')[0],
+          budget: planRes.budget || budgetNum,
+          days: planRes.days || [],
+        };
+
+        addItinerary(generatedItinerary);
+
+        setMessages((prev) => [
+          ...prev,
           {
-            dayNumber: 1,
-            title: `Arrival & ${formResult.accommodation} Check-in`,
-            coverImage: 'https://images.unsplash.com/photo-1544551763-46a013bb70d5?w=800&auto=format&fit=crop&q=80',
-            weather: '27°C Pleasant 🌤️',
-            activities: [
-              { time: '11:00 AM', description: `Check-in at ${formResult.accommodation}`, location: formResult.destination, placeType: 'H' },
-              { time: '02:00 PM', description: `Curated Dining (${formResult.specialRequirements})`, location: formResult.destination, placeType: 'R' },
-              { time: '06:00 PM', description: 'Sunset Heritage Tour', location: formResult.destination, placeType: 'TA' },
-            ],
+            id: `bot_${Date.now()}`,
+            sender: 'daina',
+            text: `✦ Confirmed! "${generatedItinerary.title}" was generated by the DAIna Planner and saved directly to your Trip Workspace!`,
+            isItinerary: true,
+            itineraryData: generatedItinerary,
           },
-        ],
-      };
-
-      addItinerary(generatedItinerary);
-
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: `bot_${Date.now()}`,
-          sender: 'daina',
-          text: `✦ Tailored Itinerary created and saved to your Trip Workspace for ${formResult.destination}!`,
-          isItinerary: true,
-          itineraryData: generatedItinerary,
-        },
-      ]);
+        ]);
+      }
     } catch {
       setMessages((prev) => [
         ...prev,
@@ -348,21 +332,24 @@ export function DAInaChatWidget() {
                       <Button
                         variant="secondary"
                         size="sm"
-                        className="flex-1 text-[11px] py-1 border border-slate-200 text-slate-700 hover:bg-slate-50 font-medium"
-                        onClick={() => handleSaveItineraryToDB(msg.itineraryData!)}
+                        className="flex-1 text-[11px] py-1 border border-slate-200 text-slate-700 hover:bg-slate-50 font-medium cursor-pointer"
+                        onClick={() => {
+                          setIsOpen(false);
+                          router.push(msg.itineraryData?.id ? `/trips?tripId=${msg.itineraryData.id}` : '/trips');
+                        }}
                       >
-                        Save trip
+                        Trip Workspace →
                       </Button>
                       <Button
                         variant="primary"
                         size="sm"
-                        className="flex-1 text-[11px] py-1 bg-orange-500 hover:bg-orange-600 text-white font-semibold"
+                        className="flex-1 text-[11px] py-1 bg-orange-500 hover:bg-orange-600 text-white font-semibold cursor-pointer"
                         onClick={() => {
                           setIsOpen(false);
-                          router.push('/planner');
+                          router.push(msg.itineraryData?.destination ? `/planner?destination=${encodeURIComponent(msg.itineraryData.destination)}` : '/planner');
                         }}
                       >
-                        Open Planner →
+                        Refine in Planner →
                       </Button>
                     </div>
                   </div>

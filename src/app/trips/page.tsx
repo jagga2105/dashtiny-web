@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, useMemo, Suspense } from 'react';
 import Image from 'next/image';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
@@ -28,6 +28,11 @@ import {
   MoveHorizontal,
   ChevronDown,
   ChevronUp,
+  ChevronLeft,
+  ChevronRight,
+  Navigation,
+  ExternalLink,
+  X,
 } from 'lucide-react';
 import { TopNavbar } from '@/components/layout/TopNavbar';
 import { BottomNav } from '@/components/layout/BottomNav';
@@ -86,6 +91,7 @@ function TripsContent() {
   // Day filter for Itinerary & Interactive Map
   const [selectedDayIdx, setSelectedDayIdx] = useState<number | 'all'>('all');
   const [hoveredWaypoint, setHoveredWaypoint] = useState<any | null>(null);
+  const [selectedStop, setSelectedStop] = useState<any | null>(null);
   const [expandedWhy, setExpandedWhy] = useState<{ [key: string]: boolean }>({});
 
   // DashTiny Embedded Copilot Action State
@@ -97,12 +103,19 @@ function TripsContent() {
 
   const currentTrip = trips[activeTripIndex] || trips[0];
 
-  // Strictly trip-scoped bookings: only bookings belonging to currentTrip.id
-  const currentTripBookings = currentTrip ? (
-    (currentTrip.bookings && currentTrip.bookings.length > 0)
-      ? currentTrip.bookings
-      : realBookings.filter((b: any) => b.trip_id === currentTrip.id)
-  ) : [];
+  // Canonical strictly trip-scoped bookings: combines direct embedded bookings and realBookings matching currentTrip.id
+  const currentTripBookings = useMemo(() => {
+    if (!currentTrip?.id) return [];
+    const direct = currentTrip.bookings || [];
+    const fromReal = realBookings.filter((b: any) => b.trip_id === currentTrip.id);
+    const map = new Map<string, any>();
+    [...direct, ...fromReal].forEach((b) => {
+      if (!b) return;
+      const key = b.id || b.pnr_ref || `${b.category}_${b.title}`;
+      map.set(key, b);
+    });
+    return Array.from(map.values());
+  }, [currentTrip, realBookings]);
 
   // Persistent removal of itinerary activity with state machine & automatic rollback on failure
   const handleRemoveActivity = async (act: any, dayIdx: number, itemIdx: number) => {
@@ -254,7 +267,12 @@ function TripsContent() {
     }
   }, [tripIdParam, trips, activeTripIndex]);
 
-  // Load and derive persistent checklist from currentTrip
+  // Reset selected stop when switching days or trips
+  useEffect(() => {
+    setSelectedStop(null);
+  }, [selectedDayIdx, activeTripIndex]);
+
+  // Load and derive persistent checklist from canonical currentTripBookings
   useEffect(() => {
     if (!currentTrip?.id) return;
     try {
@@ -263,8 +281,8 @@ function TripsContent() {
       if (stored) {
         userChecks = JSON.parse(stored);
       }
-      const hasFlightBooking = (currentTrip.bookings || []).some((b: any) => b.category === 'flight');
-      const hasHotelBooking = (currentTrip.bookings || []).some((b: any) => b.category === 'hotel');
+      const hasFlightBooking = currentTripBookings.some((b: any) => b.category === 'flight');
+      const hasHotelBooking = currentTripBookings.some((b: any) => b.category === 'hotel');
 
       setChecklist(
         DEFAULT_CHECKLIST.map((item) => {
@@ -277,7 +295,7 @@ function TripsContent() {
     } catch {
       // Fallback to default clean state
     }
-  }, [currentTrip?.id, currentTrip?.bookings]);
+  }, [currentTrip?.id, currentTripBookings]);
 
   const toggleChecklist = (id: string) => {
     setChecklist((prev) => {
@@ -643,24 +661,90 @@ function TripsContent() {
                   );
                 })()}
 
-                {/* Day Selector Pills */}
-                <div className="flex items-center justify-between gap-3 overflow-x-auto pb-1 no-scrollbar">
-                  <div className="flex items-center gap-1.5">
+                {/* Day Navigation Cockpit: Stepper + Jump Dropdown + Pills */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-2.5 rounded-2xl border border-slate-200 shadow-2xs">
+                  {/* Left: Day Stepper & Quick Dropdown */}
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center rounded-xl border border-slate-200 bg-slate-50 p-0.5">
+                      <button
+                        onClick={() => {
+                          if (selectedDayIdx === 'all' || selectedDayIdx === 1) {
+                            setSelectedDayIdx('all');
+                          } else {
+                            setSelectedDayIdx(selectedDayIdx - 1);
+                          }
+                        }}
+                        disabled={selectedDayIdx === 'all'}
+                        className="p-1.5 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-white disabled:opacity-30 disabled:pointer-events-none transition-colors cursor-pointer"
+                        aria-label="Previous day"
+                        title="Previous day"
+                      >
+                        <ChevronLeft className="w-4 h-4" />
+                      </button>
+
+                      <div className="px-3 py-1 text-xs font-bold text-slate-800 flex items-center gap-1">
+                        {selectedDayIdx === 'all' ? (
+                          <span>All ({currentTrip.days?.length || 0}) Days</span>
+                        ) : (
+                          <span>Day {selectedDayIdx} of {currentTrip.days?.length || 0}</span>
+                        )}
+                      </div>
+
+                      <button
+                        onClick={() => {
+                          if (selectedDayIdx === 'all') {
+                            setSelectedDayIdx(1);
+                          } else if (typeof selectedDayIdx === 'number' && selectedDayIdx < (currentTrip.days?.length || 0)) {
+                            setSelectedDayIdx(selectedDayIdx + 1);
+                          }
+                        }}
+                        disabled={typeof selectedDayIdx === 'number' && selectedDayIdx >= (currentTrip.days?.length || 0)}
+                        className="p-1.5 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-white disabled:opacity-30 disabled:pointer-events-none transition-colors cursor-pointer"
+                        aria-label="Next day"
+                        title="Next day"
+                      >
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    {/* Compact Jump Dropdown for multi-day itineraries */}
+                    {(currentTrip.days?.length || 0) > 4 && (
+                      <select
+                        value={selectedDayIdx}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setSelectedDayIdx(val === 'all' ? 'all' : Number(val));
+                        }}
+                        className="text-xs bg-slate-50 border border-slate-200 text-slate-700 rounded-xl px-2.5 py-1.5 font-semibold focus:outline-none focus:ring-2 focus:ring-orange-500 cursor-pointer"
+                        aria-label="Jump to specific day"
+                      >
+                        <option value="all">All Days ({currentTrip.days?.length || 0})</option>
+                        {currentTrip.days?.map((d: any) => (
+                          <option key={d.dayNumber} value={d.dayNumber}>
+                            Day {d.dayNumber}: {d.title ? d.title.slice(0, 24) : `Day ${d.dayNumber}`}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+
+                  {/* Right: Quick Day Pills */}
+                  <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 max-w-full">
                     <button
                       onClick={() => setSelectedDayIdx('all')}
-                      className={`px-3.5 py-1.5 rounded-xl text-xs transition-all cursor-pointer font-semibold ${
+                      className={`px-3 py-1.5 rounded-xl text-xs transition-all cursor-pointer font-semibold shrink-0 ${
                         selectedDayIdx === 'all'
                           ? 'bg-slate-900 text-white shadow-2xs'
                           : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
                       }`}
                     >
-                      All Days ({currentTrip.days?.length || 0})
+                      All
                     </button>
                     {currentTrip.days?.map((d: any) => (
                       <button
                         key={d.dayNumber}
                         onClick={() => setSelectedDayIdx(d.dayNumber)}
-                        className={`px-3.5 py-1.5 rounded-xl text-xs transition-all cursor-pointer font-semibold shrink-0 ${
+                        className={`px-3 py-1.5 rounded-xl text-xs transition-all cursor-pointer font-semibold shrink-0 ${
                           selectedDayIdx === d.dayNumber
                             ? 'bg-orange-600 text-white shadow-2xs'
                             : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
@@ -670,10 +754,6 @@ function TripsContent() {
                       </button>
                     ))}
                   </div>
-
-                  <span className="text-xs text-slate-500 font-medium hidden sm:inline-block">
-                    Click an action button to manipulate activities via DAIna
-                  </span>
                 </div>
 
                 {/* 2-COLUMN DESKTOP COCKPIT: Timeline (60%) + Sticky Map (40%) */}
@@ -885,6 +965,7 @@ function TripsContent() {
                               const posX = getX(Number(act.lng));
                               const posY = getY(Number(act.lat));
                               const isHovered = hoveredWaypoint?.id === act.id;
+                              const isSelected = selectedStop?.id === act.id;
 
                               return (
                                 <button
@@ -893,7 +974,7 @@ function TripsContent() {
                                   style={{ left: `${posX}%`, top: `${posY}%` }}
                                   className="absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer group z-20 min-w-[28px] min-h-[28px] flex items-center justify-center p-0.5 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500"
                                   aria-label={`Stop ${act.seqNum || idx + 1}: ${act.description} at ${act.location}`}
-                                  onClick={() => setHoveredWaypoint(hoveredWaypoint?.id === act.id ? null : act)}
+                                  onClick={() => setSelectedStop(selectedStop?.id === act.id ? null : act)}
                                   onMouseEnter={() => setHoveredWaypoint(act)}
                                   onMouseLeave={() => setHoveredWaypoint(null)}
                                   onFocus={() => setHoveredWaypoint(act)}
@@ -902,24 +983,28 @@ function TripsContent() {
                                   {/* Node badge */}
                                   <div
                                     className={`w-7 h-7 rounded-xl flex items-center justify-center font-bold text-[11px] transition-all border shadow-md ${
-                                      isHovered
-                                        ? 'bg-orange-500 text-white scale-125 border-white ring-2 ring-orange-500/50'
+                                      isSelected
+                                        ? 'bg-orange-500 text-white scale-125 border-white ring-4 ring-orange-500/50 z-30'
+                                        : isHovered
+                                        ? 'bg-orange-500 text-white scale-115 border-white ring-2 ring-orange-500/50'
                                         : 'bg-slate-900 text-orange-400 border-orange-500/60 hover:scale-110'
                                     }`}
                                   >
                                     {act.seqNum || idx + 1}
                                   </div>
 
-                                  {/* Tooltip on hover/focus */}
-                                  <div
-                                    className={`absolute left-1/2 -translate-x-1/2 bottom-9 w-48 p-2.5 rounded-xl bg-slate-900/95 backdrop-blur-md border border-slate-700 shadow-xl text-left pointer-events-none transition-all ${
-                                      isHovered ? 'opacity-100 scale-100' : 'opacity-0 scale-95'
-                                    }`}
-                                  >
-                                    <p className="text-[10px] font-mono text-orange-400 font-semibold">{act.time}</p>
-                                    <p className="text-xs font-semibold text-white truncate">{act.description}</p>
-                                    <p className="text-[10px] text-slate-400 truncate">{act.location}</p>
-                                  </div>
+                                  {/* Tooltip on hover/focus when not selected */}
+                                  {!selectedStop && (
+                                    <div
+                                      className={`absolute left-1/2 -translate-x-1/2 bottom-9 w-48 p-2.5 rounded-xl bg-slate-900/95 backdrop-blur-md border border-slate-700 shadow-xl text-left pointer-events-none transition-all ${
+                                        isHovered ? 'opacity-100 scale-100' : 'opacity-0 scale-95'
+                                      }`}
+                                    >
+                                      <p className="text-[10px] font-mono text-orange-400 font-semibold">{act.time}</p>
+                                      <p className="text-xs font-semibold text-white truncate">{act.description}</p>
+                                      <p className="text-[10px] text-slate-400 truncate">{act.location}</p>
+                                    </div>
+                                  )}
                                 </button>
                               );
                             })}
@@ -936,6 +1021,64 @@ function TripsContent() {
                           </div>
                         )}
                       </div>
+
+                      {/* Selected Stop Interactive Inspector Card */}
+                      {selectedStop && (
+                        <div className="relative z-20 my-2 p-3.5 rounded-2xl bg-slate-900/95 border border-orange-500/40 shadow-xl space-y-2.5 animate-in fade-in slide-in-from-bottom-2">
+                          <div className="flex items-start justify-between gap-2 border-b border-slate-800 pb-2">
+                            <div className="flex items-center gap-2">
+                              <span className="w-6 h-6 rounded-lg bg-orange-500 text-white font-bold text-xs flex items-center justify-center">
+                                {selectedStop.seqNum || validPoints.findIndex((p: any) => p.id === selectedStop.id) + 1}
+                              </span>
+                              <div>
+                                <span className="text-[10px] font-mono text-orange-400 font-semibold uppercase tracking-wider block">
+                                  {selectedStop.time || 'Scheduled Stop'}
+                                </span>
+                                <h5 className="text-xs font-bold text-white leading-tight">
+                                  {selectedStop.description}
+                                </h5>
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => setSelectedStop(null)}
+                              className="p-1 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+                              aria-label="Close stop details"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+
+                          <div className="space-y-1.5 text-xs">
+                            <p className="text-slate-300 text-[11px] flex items-center gap-1.5 truncate">
+                              <MapPin className="w-3.5 h-3.5 text-orange-400 shrink-0" />
+                              <span>{selectedStop.location}</span>
+                            </p>
+                            <div className="p-2 rounded-xl bg-slate-950/80 border border-slate-800 text-[11px] text-slate-300 leading-relaxed">
+                              <span className="text-orange-400 font-semibold">Why it's here: </span>
+                              {selectedStop.why || selectedStop.notes || `Curated stop slotted for smooth sequence and minimal transit in ${currentTrip.destination}.`}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 pt-1">
+                            <a
+                              href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${selectedStop.description} ${selectedStop.location} ${currentTrip.destination}`)}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-semibold text-xs transition-colors shadow-2xs cursor-pointer"
+                            >
+                              <Navigation className="w-3.5 h-3.5" />
+                              <span>Navigate in Maps</span>
+                              <ExternalLink className="w-3 h-3 ml-0.5 opacity-80" />
+                            </a>
+                            <button
+                              onClick={() => setSelectedStop(null)}
+                              className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium transition-colors cursor-pointer"
+                            >
+                              Done
+                            </button>
+                          </div>
+                        </div>
+                      )}
 
                       {/* Map Footer Bar */}
                       <div className="relative z-10 flex items-center justify-between pt-2 border-t border-slate-800 text-[11px] text-slate-400">

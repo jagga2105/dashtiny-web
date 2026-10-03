@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   ChevronRight,
   ChevronLeft,
@@ -118,14 +118,58 @@ export function AITripArchitectModal({ isOpen, onClose, destination, onComplete 
   const [step, setStep] = useState(0);
   const [answers, setAnswers] = useState<Partial<ArchitectAnswers>>({});
 
-  // Escape key support for accessibility
+  const modalContainerRef = useRef<HTMLDivElement>(null);
+
+  // Focus trapping & Escape key support for accessibility
   useEffect(() => {
     if (!isOpen) return;
+
+    const previousFocusedElement = document.activeElement as HTMLElement | null;
+
+    const focusableSelectors = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+    const focusTimer = setTimeout(() => {
+      const focusable = modalContainerRef.current?.querySelectorAll<HTMLElement>(focusableSelectors);
+      if (focusable && focusable.length > 0) {
+        focusable[0].focus();
+      }
+    }, 50);
+
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') {
+        onClose();
+        return;
+      }
+
+      if (e.key === 'Tab') {
+        const focusable = modalContainerRef.current?.querySelectorAll<HTMLElement>(focusableSelectors);
+        if (!focusable || focusable.length === 0) {
+          e.preventDefault();
+          return;
+        }
+
+        const firstElement = focusable[0];
+        const lastElement = focusable[focusable.length - 1];
+
+        if (e.shiftKey) {
+          if (document.activeElement === firstElement) {
+            e.preventDefault();
+            lastElement.focus();
+          }
+        } else {
+          if (document.activeElement === lastElement) {
+            e.preventDefault();
+            firstElement.focus();
+          }
+        }
+      }
     };
+
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    return () => {
+      clearTimeout(focusTimer);
+      window.removeEventListener('keydown', handleKeyDown);
+      previousFocusedElement?.focus();
+    };
   }, [isOpen, onClose]);
 
   if (!isOpen) return null;
@@ -169,7 +213,10 @@ export function AITripArchitectModal({ isOpen, onClose, destination, onComplete 
       <div className="absolute inset-0" onClick={onClose} />
 
       {/* Modal Container */}
-      <div className="relative w-full max-w-lg bg-white rounded-3xl border border-slate-200 shadow-2xl overflow-hidden z-10 animate-in zoom-in-95">
+      <div
+        ref={modalContainerRef}
+        className="relative w-full max-w-lg bg-white rounded-3xl border border-slate-200 shadow-2xl overflow-hidden z-10 animate-in zoom-in-95"
+      >
         {/* Progress bar */}
         <div className="absolute top-0 inset-x-0 h-1 bg-slate-100">
           <div
@@ -185,14 +232,12 @@ export function AITripArchitectModal({ isOpen, onClose, destination, onComplete 
               <BrainCircuit className="w-4 h-4" />
             </div>
             <div>
-              <h2 id="architect-modal-title" className="text-xs uppercase tracking-wider font-bold text-slate-800">
-                Refine Trip Details · {step + 1} of {STEPS.length}
+              <h2 id="architect-modal-title" className="text-sm font-serif-editorial font-bold text-slate-900 leading-tight">
+                Make your trip feel like yours
               </h2>
-              {destination && (
-                <p className="text-[11px] text-slate-500 font-medium">
-                  Destination: <span className="text-orange-600 font-semibold">{destination}</span>
-                </p>
-              )}
+              <p className="text-[11px] text-slate-500 font-medium">
+                What&apos;s most important to you? <span className="text-slate-400 font-normal">· {step + 1} of {STEPS.length}</span>
+              </p>
             </div>
           </div>
           <button

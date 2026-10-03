@@ -40,6 +40,49 @@ function PlannerContent() {
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  // Structured Source Template Highlights for true adaptation flow
+  const getSourceTemplateHighlights = (dest: string, sourceId: string) => {
+    const d = (dest || '').toLowerCase();
+    if (sourceId === 'trip_1' || d.includes('kyoto') || d.includes('japan')) {
+      return [
+        { id: 'h1', day: 1, title: 'Evening Gion Lantern Walk & Pontocho Dining', tag: 'Culture & Dining', keep: true },
+        { id: 'h2', day: 2, title: 'Early Fushimi Inari (Zero Crowds) & Tofuku-ji Zen Gardens', tag: 'Iconic & Sacred', keep: true },
+        { id: 'h3', day: 3, title: 'Nishiki Market Food Crawl & Philosopher’s Path Walk', tag: 'Gastronomy & Stroll', keep: true },
+        { id: 'h4', day: 4, title: 'Arashiyama Bamboo Grove & Tenryu-ji Temple Morning', tag: 'Nature & Heritage', keep: true },
+        { id: 'h5', day: 5, title: 'Day Excursion to Uji: Byodoin Phoenix Hall & Matcha Tasting', tag: 'Artisanal Excursion', keep: true },
+        { id: 'h6', day: 6, title: 'Kiyomizu-dera Panoramic Terrace & Pottery Lane Departure', tag: 'Scenic & Farewell', keep: true },
+      ];
+    }
+    if (sourceId === 'trip_2' || d.includes('goa')) {
+      return [
+        { id: 'h1', day: 1, title: 'Check-in at Cliffside Sanctuary & Palolem Sunset Walk', tag: 'Relaxed Arrival', keep: true },
+        { id: 'h2', day: 2, title: 'Agonda Beach Kayaking & Authentic Goan Seafood Thali', tag: 'Coastal & Dining', keep: true },
+        { id: 'h3', day: 3, title: 'Cabo de Rama Historic Fort & Cliff Cafe Golden Hour', tag: 'Scenic Heritage', keep: true },
+        { id: 'h4', day: 4, title: 'Galgibaga Turtle Sanctuary & Old Bakery Breakfast', tag: 'Slow Travel', keep: true },
+      ];
+    }
+    return [
+      { id: 'h1', day: 1, title: `Arrival, Check-in & Scenic Neighborhood Walk in ${dest || 'Destination'}`, tag: 'Arrival', keep: true },
+      { id: 'h2', day: 2, title: `Iconic Landmark Tour & Verified Local Gastronomy in ${dest || 'Destination'}`, tag: 'Highlights', keep: true },
+      { id: 'h3', day: 3, title: `Cultural Immersion & Hidden Local Sanctuary in ${dest || 'Destination'}`, tag: 'Discovery', keep: true },
+      { id: 'h4', day: 4, title: `Golden Hour Scenic Spot & Farewell Dining Experience`, tag: 'Departure', keep: true },
+    ];
+  };
+
+  const [sourceHighlights, setSourceHighlights] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (isAdapting) {
+      setSourceHighlights(getSourceTemplateHighlights(paramDestination, sourceTripId));
+    }
+  }, [isAdapting, paramDestination, sourceTripId]);
+
+  const toggleHighlight = (id: string) => {
+    setSourceHighlights((prev) =>
+      prev.map((h) => (h.id === id ? { ...h, keep: !h.keep } : h))
+    );
+  };
+
   // Initialize or fetch latest itinerary from PostgreSQL
   useEffect(() => {
     async function loadLatest() {
@@ -81,9 +124,17 @@ function PlannerContent() {
 
     // Natural language request parsing fallback to structured URL params
     const parsed = parseTravelPrompt(textToUse);
-    const dest = parsed.destination || paramDestination || 'Kyoto';
-    const days = parsed.days_count || (paramDuration ? parseInt(paramDuration, 10) : 5);
-    const budgetVal = parsed.budget || (paramBudget ? parseInt(paramBudget, 10) : 50000);
+    const dest = parsed.destination || paramDestination;
+    
+    // Explicit Destination Enforcement — No silent Kyoto default
+    if (!dest) {
+      setErrorMsg("Please specify a destination (e.g. Kyoto, Goa, Manali, Paris) so DAIna can tailor your itinerary.");
+      setIsGenerating(false);
+      return;
+    }
+
+    const days = parsed.days_count || (paramDuration ? parseInt(paramDuration, 10) : 4);
+    const budgetVal = parsed.budget || (paramBudget ? parseInt(paramBudget, 10) : 45000);
     const vibeVal = parsed.vibe || paramVibe || 'culture';
     const interestsVal = parsed.interests && parsed.interests.length > 0 ? parsed.interests : (paramInterests ? paramInterests.split(',') : ['culture', 'sightseeing']);
 
@@ -93,6 +144,12 @@ function PlannerContent() {
     if (hasExplicitPersonaInPrompt && parsed.persona) {
       setSelectedPersona(parsed.persona as PersonaType);
     }
+
+    // Adapt source itinerary stops into DAIna generation prompt
+    const keptHighlights = sourceHighlights.filter((h) => h.keep).map((h) => h.title);
+    const finalPrompt = (isAdapting && keptHighlights.length > 0)
+      ? `${textToUse || `Trip to ${dest}`}. Adapting ${paramAuthor || 'community'} source itinerary. Keep core stops: ${keptHighlights.join('; ')}. Personalize pacing, stays, and budget for ${effectivePersona}.`
+      : (textToUse || `Trip to ${dest}`);
 
     try {
       const res = await apiService.generateItinerary({
@@ -107,8 +164,8 @@ function PlannerContent() {
         persona: effectivePersona,
         vibe: vibeVal,
         interests: interestsVal,
-        raw_prompt: textToUse || `Trip to ${dest}`,
-        prompt: textToUse || `Trip to ${dest}`,
+        raw_prompt: finalPrompt,
+        prompt: finalPrompt,
       });
 
       if (res && res.id) {
@@ -197,6 +254,91 @@ function PlannerContent() {
               <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>
+        )}
+
+        {/* Community Source Itinerary Preview & Adaptation Card */}
+        {isAdapting && sourceHighlights.length > 0 && (
+          <section className="p-6 rounded-2xl bg-white border border-orange-200/90 shadow-sm space-y-4 animate-in fade-in">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-2">
+                  <span className="px-2 py-0.5 rounded-full bg-orange-100 text-orange-800 text-[10px] font-bold uppercase tracking-wider">
+                    Source Template
+                  </span>
+                  <span className="text-xs text-slate-500 font-medium">
+                    by {paramAuthor || 'Community Traveler'}
+                  </span>
+                </div>
+                <h3 className="text-base font-serif-editorial font-bold text-slate-900">
+                  Preview &amp; Select Stops to Adapt
+                </h3>
+              </div>
+              <span className="text-xs font-semibold text-orange-600 bg-orange-50 px-2.5 py-1 rounded-lg border border-orange-200 shrink-0">
+                {sourceHighlights.filter((h) => h.keep).length} of {sourceHighlights.length} stops kept
+              </span>
+            </div>
+
+            <p className="text-xs text-slate-600">
+              Keep the highlights you love from this {paramDestination || 'getaway'}, remove stops you don&apos;t want, and DAIna will optimize the schedule and verified bookings for you:
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+              {sourceHighlights.map((hl) => (
+                <div
+                  key={hl.id}
+                  onClick={() => toggleHighlight(hl.id)}
+                  className={`p-3 rounded-xl border text-xs cursor-pointer transition-all flex items-start justify-between gap-2.5 ${
+                    hl.keep
+                      ? 'bg-orange-50/40 border-orange-200 text-slate-900 shadow-2xs'
+                      : 'bg-slate-50 border-slate-200 text-slate-400 line-through'
+                  }`}
+                >
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-mono font-bold text-[10px] text-orange-600">Day {hl.day}</span>
+                      <span className="text-[10px] font-medium px-1.5 py-0.2 rounded bg-white border border-slate-200 text-slate-500">
+                        {hl.tag}
+                      </span>
+                    </div>
+                    <p className={`font-semibold ${hl.keep ? 'text-slate-800' : 'text-slate-400'}`}>
+                      {hl.title}
+                    </p>
+                  </div>
+                  <span
+                    className={`px-2 py-0.5 rounded text-[10px] font-bold shrink-0 ${
+                      hl.keep ? 'bg-orange-500 text-white' : 'bg-slate-200 text-slate-600'
+                    }`}
+                  >
+                    {hl.keep ? 'Keep' : 'Omitted'}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            <div className="pt-2 flex items-center justify-between text-xs border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() =>
+                  setSourceHighlights((prev) =>
+                    prev.map((h) => ({ ...h, keep: !prev.every((p) => p.keep) }))
+                  )
+                }
+                className="text-slate-500 hover:text-slate-800 font-medium underline cursor-pointer text-xs"
+              >
+                {sourceHighlights.every((h) => h.keep) ? 'Deselect all' : 'Select all stops'}
+              </button>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => handleBuildPlan()}
+                isLoading={isGenerating}
+                className="bg-orange-600 hover:bg-orange-700 text-white text-xs px-4 py-1.5 rounded-xl cursor-pointer"
+              >
+                <Sparkles className="w-3.5 h-3.5 mr-1" />
+                Adapt with DAIna ({sourceHighlights.filter((h) => h.keep).length} stops)
+              </Button>
+            </div>
+          </section>
         )}
 
         {/* Primary Conversational Input Card */}
@@ -303,7 +445,7 @@ function PlannerContent() {
             </div>
           )}
 
-          {/* Conversational Confirmation Card */}
+          {/* Conversational Confirmation Card with Inferred vs Explicit Indicators */}
           {parsedIntent && (parsedIntent.destination || paramDestination) && (
             <div className="mt-4 p-4 rounded-xl bg-orange-50/70 border border-orange-200 space-y-3">
               <div className="flex items-center justify-between">
@@ -317,24 +459,30 @@ function PlannerContent() {
               <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-800">
                 <span className="px-2.5 py-1 rounded-lg bg-white border border-orange-200/80 shadow-2xs">
                   📍 {parsedIntent.destination || paramDestination}
+                  <span className="text-[10px] text-slate-400 font-normal ml-1">· {parsedIntent.destination ? 'from prompt' : 'destination'}</span>
                 </span>
                 <span className="px-2.5 py-1 rounded-lg bg-white border border-orange-200/80 shadow-2xs">
-                  ⏱️ {parsedIntent.days_count || (paramDuration ? `${paramDuration} Days` : '5 Days')}
+                  ⏱️ {parsedIntent.days_count || (paramDuration ? `${paramDuration} Days` : '4 Days')}
+                  <span className="text-[10px] text-slate-400 font-normal ml-1">· {parsedIntent.days_count ? 'explicit' : 'suggested'}</span>
                 </span>
                 <span className="px-2.5 py-1 rounded-lg bg-white border border-orange-200/80 shadow-2xs">
                   👥 {parsedIntent.travellers} {parsedIntent.travellers === 1 ? 'traveler' : 'travelers'}
+                  <span className="text-[10px] text-slate-400 font-normal ml-1">· {parsedIntent.travellers !== 2 ? 'explicit' : 'inferred'}</span>
                 </span>
                 <span className="px-2.5 py-1 rounded-lg bg-white border border-orange-200/80 shadow-2xs">
-                  💰 ₹{(parsedIntent.budget || (paramBudget ? parseInt(paramBudget, 10) : 50000)).toLocaleString('en-IN')}
+                  💰 ₹{(parsedIntent.budget || (paramBudget ? parseInt(paramBudget, 10) : 45000)).toLocaleString('en-IN')}
+                  <span className="text-[10px] text-slate-400 font-normal ml-1">· {parsedIntent.budget ? 'explicit' : 'estimated'}</span>
                 </span>
                 {parsedIntent.origin && (
                   <span className="px-2.5 py-1 rounded-lg bg-white border border-orange-200/80 shadow-2xs">
                     🛫 From {parsedIntent.origin}
+                    <span className="text-[10px] text-slate-400 font-normal ml-1">· explicit</span>
                   </span>
                 )}
                 {(parsedIntent.vibe || paramVibe) && (
                   <span className="px-2.5 py-1 rounded-lg bg-white border border-orange-200/80 shadow-2xs">
                     ✨ {parsedIntent.vibe || paramVibe}
+                    <span className="text-[10px] text-slate-400 font-normal ml-1">· inferred</span>
                   </span>
                 )}
               </div>

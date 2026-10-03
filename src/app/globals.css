@@ -33,7 +33,8 @@
   }
 }
 
-/* === Display Font Utility === */
+/* === Display Font Utility (Outfit display sans-serif) === */
+.font-display,
 .font-serif-editorial {
   font-family: var(--font-display, 'Outfit', system-ui, sans-serif);
   letter-spacing: -0.03em;
