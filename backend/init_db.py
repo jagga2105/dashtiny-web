@@ -45,6 +45,15 @@ def seed_default_vouchers():
     finally:
         db.close()
 
+def seed_default_airports():
+    from app.db.seed_airports import seed_airports
+    db = SessionLocal()
+    try:
+        count = seed_airports(db)
+        print(f"✅ Canonical airport dataset initialized ({count} records in DB).")
+    finally:
+        db.close()
+
 def init_db():
     print("Applying all Alembic database migrations to dashtiny_db...")
     ini_path = os.path.join(os.path.dirname(__file__), "alembic.ini")
@@ -54,6 +63,7 @@ def init_db():
     command.upgrade(alembic_cfg, "head")
     print("✅ All Alembic migrations applied successfully to head!")
     seed_default_vouchers()
+    seed_default_airports()
 
 if __name__ == "__main__":
     init_db()

@@ -98,16 +98,30 @@ Traveler Action / Copilot Prompt
 - Python 3.11+
 - PostgreSQL & Redis (optional for local dev / testing)
 
-### 2. Frontend Setup
+### 2. ⚡ One-Command All-in-One Runner (Recommended)
+You can start PostgreSQL, apply all migrations, seed reference datasets, launch the FastAPI backend, and start the Next.js frontend with a single command:
+
 ```bash
-# Clone the repository
-git clone https://github.com/jagga2105/dashtiny-web.git
-cd dashtiny-web
+./start.sh
+# or
+npm run dev:all
+```
 
-# Install dependencies
+This central script:
+- Verifies and starts PostgreSQL (Homebrew or Docker).
+- Automatically applies all Alembic migrations (`alembic upgrade head`).
+- Seeds default vouchers and canonical airport datasets into `dashtiny_db`.
+- Starts the FastAPI backend with hot-reload on `http://localhost:8000` (docs: `/docs`).
+- Starts Next.js on `http://localhost:3000` with Turbopack.
+- Gracefully shuts down all services cleanly upon `Ctrl+C` without dangling ports.
+
+---
+
+### 3. Individual Component Setup
+
+#### Frontend Setup
+```bash
 npm install
-
-# Start the Next.js development server
 npm run dev
 ```
 Open [http://localhost:3000](http://localhost:3000) to view the application.
