@@ -1,17 +1,24 @@
+import uuid
+from datetime import date, timedelta
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from jose import jwt
 from pydantic import BaseModel
 from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 
 from app.config import settings
 from app.db.database import get_db
-from app.models.models import CommunityPost, User, UserProfile, PostLike, Itinerary
+from app.models.models import (
+    CommunityPost, User, UserProfile, PostLike, Itinerary,
+    ItineraryDay, ItineraryActivity
+)
 from app.api.deps import get_current_user
 from app.api.v1.trips import COMMUNITY_PUBLIC_SNAPSHOTS
+from app.services.trip_revision_service import create_revision, serialize_trip_days
 
 router = APIRouter(prefix="/community", tags=["Community Feed & Squad Match"])
+
 
 class CreatePostRequest(BaseModel):
     getaway_title: str
@@ -20,6 +27,7 @@ class CreatePostRequest(BaseModel):
     image_url: Optional[str] = "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=800&auto=format&fit=crop&q=80"
     companions_needed: Optional[int] = 2
     source_trip_id: Optional[str] = None
+
 
 @router.get("/feed")
 def get_community_feed(db: Session = Depends(get_db)):
@@ -87,11 +95,12 @@ def get_community_feed(db: Session = Depends(get_db)):
             "is_identity_verified": is_verified,
             "is_trip_completed": is_completed,
             "likes_count": p.likes_count or 0,
-            "comments_count": 0,
+            "comments_count": None,  # Explicitly None to avoid presenting fake comments
             "companions_needed": p.companions_needed,
             "created_at": str(p.created_at)
         })
     return results
+
 
 @router.post("/posts")
 def create_community_post(
@@ -101,7 +110,8 @@ def create_community_post(
 ):
     """
     Publish real travel story to community feed in PostgreSQL.
-    Optionally links to an authoritative user trip and marks it public.
+    Explicitly requires source_trip ownership when linking to a trip.
+    Never exposes private bookings or notes.
     """
     if request.source_trip_id:
         trip = db.query(Itinerary).filter(Itinerary.id == request.source_trip_id).first()
@@ -161,6 +171,7 @@ def create_community_post(
         "total_coins": total_coins
     }
 
+
 @router.post("/posts/{post_id}/like")
 def like_community_post(
     post_id: str,
@@ -169,28 +180,233 @@ def like_community_post(
 ):
     """
     Authenticated like for community post.
-    Enforces unique like per traveler in PostgreSQL (post_likes table).
+    Enforces unique like per traveler with atomic counter update to prevent concurrency race conditions.
     """
     post = db.query(CommunityPost).filter(CommunityPost.id == post_id).first()
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
 
-    existing_like = db.query(PostLike).filter(
-        PostLike.post_id == post_id,
-        PostLike.user_id == user.id
-    ).first()
-
-    if existing_like:
+    try:
+        with db.begin_nested():
+            new_like = PostLike(post_id=post.id, user_id=user.id)
+            db.add(new_like)
+            db.flush()
+    except IntegrityError:
         return {
             "status": "already_liked",
             "post_id": post.id,
-            "likes_count": post.likes_count,
+            "likes_count": post.likes_count or 0,
             "message": "You have already liked this getaway post."
         }
 
-    new_like = PostLike(post_id=post.id, user_id=user.id)
-    db.add(new_like)
-    post.likes_count = (post.likes_count or 0) + 1
+    # Concurrency-safe atomic counter increment in database
+    db.query(CommunityPost).filter(CommunityPost.id == post_id).update(
+        {CommunityPost.likes_count: func.coalesce(CommunityPost.likes_count, 0) + 1}
+    )
     db.commit()
-    return {"status": "liked", "post_id": post.id, "likes_count": post.likes_count}
+    db.refresh(post)
 
+    return {
+        "status": "liked",
+        "post_id": post.id,
+        "likes_count": post.likes_count
+    }
+
+
+@router.post("/posts/{post_id}/fork", status_code=status.HTTP_201_CREATED)
+def fork_community_trip(
+    post_id: str,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Forks a public community trip into a brand new private trip owned by the current user.
+    - Clones itinerary, days, and activities.
+    - Sets is_public = False on the new trip (private by default).
+    - NEVER exposes private bookings, squad rooms, notes, or traveler information.
+    - Creates initial revision with action_type = 'COMMUNITY_FORKED'.
+    """
+    post = db.query(CommunityPost).filter(CommunityPost.id == post_id).first()
+    if not post:
+        raise HTTPException(status_code=404, detail="Community post not found")
+
+    source_trip = None
+    if post.source_trip_id:
+        source_trip = db.query(Itinerary).filter(Itinerary.id == post.source_trip_id).first()
+
+    today = date.today()
+    if source_trip:
+        if not source_trip.is_public and source_trip.owner_id != user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Source trip is private and cannot be forked."
+            )
+
+        duration_days = (source_trip.end_date - source_trip.start_date).days if (source_trip.start_date and source_trip.end_date) else 3
+        if duration_days < 1:
+            duration_days = 3
+
+        new_trip = Itinerary(
+            owner_id=user.id,
+            title=f"Trip to {source_trip.destination} (from {post.author_name or 'Community'})",
+            destination=source_trip.destination,
+            origin=source_trip.origin or "",
+            travellers=1,
+            total_budget=source_trip.total_budget,
+            currency=source_trip.currency,
+            start_date=today + timedelta(days=14),
+            end_date=today + timedelta(days=14 + duration_days),
+            vibe=source_trip.vibe,
+            persona=source_trip.persona,
+            is_public=False
+        )
+        db.add(new_trip)
+        db.flush()
+
+        # Clone days and activities
+        for day in sorted(source_trip.days, key=lambda d: d.day_number):
+            new_day = ItineraryDay(
+                itinerary_id=new_trip.id,
+                day_number=day.day_number,
+                title=day.title,
+                weather_summary=day.weather_summary,
+                cover_image_url=day.cover_image_url
+            )
+            db.add(new_day)
+            db.flush()
+
+            for act in sorted(day.activities, key=lambda a: a.sort_order):
+                new_act = ItineraryActivity(
+                    day_id=new_day.id,
+                    time_slot=act.time_slot,
+                    description=act.description,
+                    location=act.location,
+                    place_type=act.place_type,
+                    cost_estimate=act.cost_estimate,
+                    provenance="USER_GENERATED",
+                    lat=act.lat,
+                    lng=act.lng,
+                    source_citation=f"Forked from {post.getaway_title}",
+                    why_recommended=act.why_recommended,
+                    duration_minutes=act.duration_minutes,
+                    transit_minutes=act.transit_minutes,
+                    transit_mode=act.transit_mode,
+                    transit_source=act.transit_source,
+                    transit_confidence=act.transit_confidence,
+                    sort_order=act.sort_order
+                )
+                db.add(new_act)
+            db.flush()
+
+    elif post.id in COMMUNITY_PUBLIC_SNAPSHOTS:
+        snap = COMMUNITY_PUBLIC_SNAPSHOTS[post.id]
+        dest = snap.get("destination", post.location)
+        duration_days = snap.get("duration_days", 4)
+
+        new_trip = Itinerary(
+            owner_id=user.id,
+            title=f"Trip to {dest} (from {post.author_name or 'Community'})",
+            destination=dest,
+            origin="DEL",
+            travellers=1,
+            total_budget=40000.0,
+            currency="INR",
+            start_date=today + timedelta(days=14),
+            end_date=today + timedelta(days=14 + duration_days),
+            vibe=snap.get("vibe", "Discovery"),
+            persona="SOLO",
+            is_public=False
+        )
+        db.add(new_trip)
+        db.flush()
+
+        for d_idx, day_data in enumerate(snap.get("days", [])):
+            new_day = ItineraryDay(
+                itinerary_id=new_trip.id,
+                day_number=d_idx + 1,
+                title=day_data.get("title", f"Day {d_idx + 1}"),
+                weather_summary=day_data.get("weather", "Weather unavailable")
+            )
+            db.add(new_day)
+            db.flush()
+
+            for a_idx, act_data in enumerate(day_data.get("activities", [])):
+                new_act = ItineraryActivity(
+                    day_id=new_day.id,
+                    time_slot=act_data.get("time", "10:00 AM"),
+                    description=act_data.get("description", "Sightseeing"),
+                    location=act_data.get("location", dest),
+                    place_type=act_data.get("placeType", "TA"),
+                    cost_estimate=act_data.get("costEstimate", 0.0),
+                    provenance="USER_GENERATED",
+                    lat=act_data.get("lat"),
+                    lng=act_data.get("lng"),
+                    source_citation=f"Community guide: {post.getaway_title}",
+                    why_recommended=act_data.get("whyRecommended"),
+                    duration_minutes=act_data.get("durationMinutes", 60),
+                    transit_minutes=act_data.get("transitMinutes", 15),
+                    transit_mode=act_data.get("transitMode", "WALK"),
+                    transit_source="ESTIMATED",
+                    transit_confidence="ESTIMATED",
+                    sort_order=a_idx
+                )
+                db.add(new_act)
+            db.flush()
+    else:
+        # Generic single-day template
+        new_trip = Itinerary(
+            owner_id=user.id,
+            title=f"Trip to {post.location} (from {post.author_name or 'Community'})",
+            destination=post.location,
+            origin="DEL",
+            travellers=1,
+            total_budget=30000.0,
+            currency="INR",
+            start_date=today + timedelta(days=14),
+            end_date=today + timedelta(days=17),
+            vibe="Discovery",
+            persona="SOLO",
+            is_public=False
+        )
+        db.add(new_trip)
+        db.flush()
+
+        day1 = ItineraryDay(itinerary_id=new_trip.id, day_number=1, title="Arrival & Exploration")
+        db.add(day1)
+        db.flush()
+
+        act1 = ItineraryActivity(
+            day_id=day1.id,
+            time_slot="10:00 AM",
+            description=f"Explore {post.location}",
+            location=post.location,
+            place_type="TA",
+            cost_estimate=500.0,
+            provenance="USER_GENERATED",
+            sort_order=0
+        )
+        db.add(act1)
+        db.flush()
+
+    # Record initial revision
+    create_revision(
+        db=db,
+        trip_id=new_trip.id,
+        user_id=user.id,
+        action_type="COMMUNITY_FORKED",
+        days_data=serialize_trip_days(new_trip),
+        summary=f"Forked from community getaway: {post.getaway_title} by {post.author_name}",
+        actor_type="USER"
+    )
+
+    db.commit()
+    db.refresh(new_trip)
+
+    return {
+        "status": "success",
+        "message": f"Successfully forked '{post.getaway_title}' into your private trips!",
+        "new_trip_id": new_trip.id,
+        "title": new_trip.title,
+        "destination": new_trip.destination,
+        "is_public": new_trip.is_public
+    }

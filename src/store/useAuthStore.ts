@@ -31,7 +31,6 @@ interface AuthState {
   loginWithGoogle: (googleProfile?: Partial<User>) => Promise<void>;
   loginWithDemo: (demoProfile?: { role?: string; name?: string; email?: string }) => Promise<void>;
   logout: () => void;
-  updateCoins: (amount: number) => void;
   setCoins: (amount: number) => void;
   openAuthModal: (reason?: string, onAuthSuccess?: () => void) => void;
   closeAuthModal: () => void;
@@ -130,22 +129,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   loginWithGoogle: async (googleProfile) => {
-    try {
-      const apiRes = await apiService.loginWithGoogle({
-        google_id: `google_${Date.now()}`,
-        email: googleProfile?.email || 'traveler@gmail.com',
-        full_name: googleProfile?.full_name || 'Traveler',
-        avatar_url: googleProfile?.avatar_url,
-      });
-      get().login(apiRes.user, apiRes.access_token);
-    } catch {
-      // Graceful sandbox fallback if production Google OAuth is unconfigured
-      await get().loginWithDemo({
-        role: 'google_sandbox',
-        name: googleProfile?.full_name || 'Demo Explorer [Sandbox]',
-        email: googleProfile?.email || 'demo.explorer@dashtiny.travel',
-      });
-    }
+    // Explicit Google login: NEVER automatically fall back to demo mode
+    const apiRes = await apiService.loginWithGoogle({
+      google_id: `google_${Date.now()}`,
+      email: googleProfile?.email || 'traveler@gmail.com',
+      full_name: googleProfile?.full_name || 'Traveler',
+      avatar_url: googleProfile?.avatar_url,
+    });
+    get().login(apiRes.user, apiRes.access_token);
   },
 
   logout: () => {
@@ -155,16 +146,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
     set({ user: null, token: null, isAuthenticated: false, isAuthModalOpen: false, pendingAuthAction: null });
   },
-
-  updateCoins: (delta: number) =>
-    set((state) => {
-      if (!state.user) return { user: null };
-      const updated = { ...state.user, coins: Math.max(0, state.user.coins + delta) };
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('dashtiny_user', JSON.stringify(updated));
-      }
-      return { user: updated };
-    }),
 
   setCoins: (amount: number) =>
     set((state) => {

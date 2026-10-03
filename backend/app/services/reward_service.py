@@ -1,7 +1,7 @@
 from typing import Optional, Dict, Any, Tuple
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
-from app.models.models import UserProfile, RewardTransaction
+from app.models.models import User, UserProfile, RewardTransaction
 
 
 class InsufficientRewardBalanceError(ValueError):
@@ -41,19 +41,23 @@ def award_rewards(
     and persists an immutable RewardTransaction audit record within the current transaction.
 
     Lock Order & Concurrency Design:
-    1. Lock UserProfile row first (via with_for_update()).
-    2. Check idempotency key: if existing, return (current_balance, False).
-    3. Validate that negative awards do not exceed balance (no silent clamping to 0).
+    1. Lock parent User row to serialize concurrent initialization of UserProfile if missing.
+    2. Lock UserProfile row (via with_for_update()).
+    3. Check idempotency key: if existing, return (current_balance, False).
+    4. Validate that negative awards do not exceed balance (no silent clamping to 0).
        Raises InsufficientRewardBalanceError immediately without mutating balance
        or creating any transaction records, leaving caller transactions rollback-safe.
-    4. Persist RewardTransaction and update balance.
-    5. Defensively handle IntegrityError for concurrent duplicate idempotency keys.
-    6. Caller owns the transaction (no commit inside award_rewards).
+    5. Persist RewardTransaction and update balance.
+    6. Defensively handle IntegrityError for concurrent duplicate idempotency keys.
+    7. Caller owns the transaction (no commit inside award_rewards).
 
     Returns:
         (balance_after, was_awarded: bool)
     """
-    # 1. Acquire row lock on UserProfile FIRST to serialize concurrent requests for this user
+    # 1. Lock parent User row to safely serialize profile initialization
+    db.query(User).filter(User.id == user_id).with_for_update().first()
+
+    # 2. Acquire row lock on UserProfile
     profile = db.query(UserProfile).filter(UserProfile.user_id == user_id).with_for_update().first()
     current_balance = (profile.reward_coins or 0) if profile else 0
 

@@ -410,6 +410,33 @@ export const apiService = {
     });
   },
 
+  // AI Proposal Lifecycle (Propose -> Approve -> Commit)
+  async createAIProposal(tripId: string, instruction: string) {
+    return request<any>('/ai/proposals', {
+      method: 'POST',
+      body: JSON.stringify({ trip_id: tripId, instruction }),
+    });
+  },
+
+  async acceptAIProposal(proposalId: string) {
+    return request<any>(`/ai/proposals/${proposalId}/accept`, {
+      method: 'POST',
+    });
+  },
+
+  async rejectAIProposal(proposalId: string) {
+    return request<any>(`/ai/proposals/${proposalId}/reject`, {
+      method: 'POST',
+    });
+  },
+
+  // Fork Public Community Trip
+  async forkCommunityTrip(postId: string) {
+    return request<any>(`/community/posts/${postId}/fork`, {
+      method: 'POST',
+    });
+  },
+
   // Conversational Action & Diff API (POST /ai/query)
   async executeAIAction(tripId: string, instruction: string) {
     return request<any>('/ai/query', {

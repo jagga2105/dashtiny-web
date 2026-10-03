@@ -260,16 +260,17 @@ class Booking(Base):
     title = Column(String(255), nullable=False)
     amount = Column(Numeric(12, 2), nullable=False)
     currency = Column(String(10), default="INR")
-    status = Column(String(50), default="confirmed")  # confirmed, pending, cancelled, saved_reference
+    status = Column(String(50), default="saved_reference")  # draft, saved_reference, pending, confirmed, cancelled
     pnr_ref = Column(String(50), nullable=True)
-    provenance = Column(String(50), default="PROVIDER_VERIFIED")  # Provider Inventory
+    provenance = Column(String(50), default="USER_PROVIDED")  # USER_PROVIDED, CURATED, PARTNER_VERIFIED
     details = Column(JSON, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (
         UniqueConstraint("provider", "pnr_ref", name="uq_provider_pnr_ref"),
         CheckConstraint("amount >= 0", name="ck_booking_amount"),
-        CheckConstraint("status IN ('confirmed', 'pending', 'cancelled', 'saved_reference')", name="ck_booking_status"),
+        CheckConstraint("status IN ('draft', 'saved_reference', 'pending', 'confirmed', 'cancelled', 'DRAFT', 'SAVED_REFERENCE', 'PENDING', 'CONFIRMED', 'CANCELLED')", name="ck_booking_status"),
+        CheckConstraint("provenance IN ('USER_PROVIDED', 'SAVED_REFERENCE', 'CURATED', 'PARTNER_VERIFIED', 'PROVIDER_VERIFIED')", name="ck_booking_provenance"),
         Index("ix_bookings_user_created", "user_id", "created_at"),
         Index("ix_bookings_trip_created", "trip_id", "created_at"),
     )
@@ -515,6 +516,7 @@ class TripSnapshot(Base):
     model = Column(String(100), default="deterministic-planner-v1", nullable=True)
     summary = Column(String(255), nullable=True)
     days_data = Column(JSON, nullable=False)
+    parent_version = Column(Integer, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (
@@ -524,3 +526,32 @@ class TripSnapshot(Base):
     )
 
     trip = relationship("Itinerary", back_populates="snapshots")
+
+
+class TripProposal(Base):
+    __tablename__ = "trip_proposals"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    trip_id = Column(String(36), ForeignKey("itineraries.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    parent_version = Column(Integer, nullable=False, default=1)
+    instruction = Column(Text, nullable=False)
+    summary = Column(String(255), nullable=True)
+    changes = Column(JSON, nullable=False, default=list)
+    before_state = Column(JSON, nullable=False, default=dict)
+    after_state = Column(JSON, nullable=False, default=dict)
+    verification = Column(JSON, nullable=True, default=dict)
+    provenance = Column(JSON, nullable=True, default=dict)
+    status = Column(String(50), default="pending", nullable=False)  # pending, accepted, rejected, expired
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    __table_args__ = (
+        CheckConstraint("status IN ('pending', 'accepted', 'rejected', 'expired')", name="ck_trip_proposal_status"),
+        CheckConstraint("parent_version >= 1", name="ck_proposal_parent_version"),
+        Index("ix_trip_proposals_trip_status", "trip_id", "status"),
+    )
+
+    trip = relationship("Itinerary", backref="proposals")
+    user = relationship("User")
+

@@ -31,6 +31,22 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
 
+    # Environment and Deployment Settings
+    ENVIRONMENT: str = "development"
+    DEMO_MODE: bool = True
+    CORS_ORIGINS: str = "http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001"
+
+    @property
+    def cors_origins_list(self) -> list:
+        if self.ENVIRONMENT.lower() == "production" and self.CORS_ORIGINS:
+            return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]
+        # Allow default local origins in dev
+        origins = [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]
+        for default_dev in ["http://localhost:3000", "http://127.0.0.1:3000"]:
+            if default_dev not in origins:
+                origins.append(default_dev)
+        return origins
+
     # AI Planner / LLM Configuration (Free Tier: Gemini 3.5 Flash, Groq, or local Ollama)
     GEMINI_API_KEY: Optional[str] = None
     GROQ_API_KEY: Optional[str] = None

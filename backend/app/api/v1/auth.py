@@ -134,7 +134,8 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
             detail="No account found with this email. Please register."
         )
 
-    # For seeded or passwordless users, set a default or check password
+    # Strictly check password hash for registered accounts.
+    # Passwordless accounts require OAuth or an explicit password reset/setup flow.
     if user.password_hash:
         if not verify_password(request.password, user.password_hash):
             raise HTTPException(
@@ -142,9 +143,10 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
                 detail="Incorrect password. Please try again."
             )
     else:
-        # User has no password set yet (e.g. seeded), set it now
-        user.password_hash = hash_password(request.password)
-        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This account does not have a password set. Please log in with your OAuth provider or complete password setup."
+        )
 
     token = create_access_token({"sub": user.id, "email": user.email})
     return {
@@ -158,8 +160,15 @@ def demo_login(request: DemoLoginRequest = DemoLoginRequest(), db: Session = Dep
     """
     Explicit Sandbox Demo Mode:
     Provides an ephemeral/sandbox explorer identity for development and previewing.
-    Architecturally separated from production OAuth.
+    Strictly gated behind ENVIRONMENT=development/sandbox and DEMO_MODE=true.
     """
+    is_dev_env = settings.ENVIRONMENT.lower() in ["development", "dev", "sandbox", "test"]
+    if not (settings.DEMO_MODE and is_dev_env):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Demo login is disabled in this environment. Please authenticate with registered credentials or production OAuth."
+        )
+
     demo_email = request.email or f"{request.role or 'demo_explorer'}@dashtiny.travel"
     demo_name = request.full_name or "Demo Explorer [Sandbox]"
     avatar = request.avatar_url or "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80"

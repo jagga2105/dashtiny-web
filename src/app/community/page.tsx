@@ -35,7 +35,7 @@ interface CommunityTripPost {
 
 export default function CommunityPage() {
   const router = useRouter();
-  const { updateCoins, setCoins } = useAuthStore();
+  const { setCoins } = useAuthStore();
   const [activeTab, setActiveTab] = useState<'trips' | 'companions'>('trips');
   const [selectedVibeFilter, setSelectedVibeFilter] = useState<string>('All');
   const [dynamicPosts, setDynamicPosts] = useState<any[]>([]);
@@ -156,8 +156,6 @@ export default function CommunityPage() {
       if (res && res.status === 'published') {
         if (typeof res.total_coins === 'number') {
           setCoins(res.total_coins);
-        } else {
-          updateCoins(20);
         }
         setIsPublishModalOpen(false);
         setNewTitle('');

@@ -6,7 +6,7 @@ from datetime import date, datetime, timezone
 import concurrent.futures
 
 # Ensure backend root is on sys.path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
@@ -47,8 +47,8 @@ pytestmark = pytest.mark.skipif(
 @pytest.fixture(scope="module")
 def pg_engine():
     # Run Alembic migrations from scratch on the PostgreSQL test database
-    ini_path = os.path.join(os.path.dirname(__file__), "..", "alembic.ini")
-    script_path = os.path.join(os.path.dirname(__file__), "..", "alembic")
+    ini_path = os.path.join(os.path.dirname(__file__), "..", "..", "alembic.ini")
+    script_path = os.path.join(os.path.dirname(__file__), "..", "..", "alembic")
     alembic_cfg = Config(ini_path)
     alembic_cfg.set_main_option("script_location", script_path)
     alembic_cfg.set_main_option("sqlalchemy.url", POSTGRES_URL)

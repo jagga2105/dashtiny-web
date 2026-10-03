@@ -56,6 +56,7 @@ interface AIDiffChange {
 }
 
 interface CopilotProposal {
+  proposalId?: string;
   summary: string;
   changes: AIDiffChange[];
   proposedTrip: any;
@@ -318,23 +319,32 @@ function TripsContent() {
 
     try {
       const activeTrip = trips[activeTripIndex];
-      if (!activeTrip) return;
-      const tripId = activeTrip.id || 'latest';
-      const res = await apiService.executeAIAction(tripId, instruction);
+      if (!activeTrip || !activeTrip.id) {
+        setCopilotError('Please select a saved trip first before requesting AI adjustments.');
+        return;
+      }
 
-      if (res && res.status === 'success') {
+      // Propose -> Approval -> Commit: create proposal without mutating the Trip
+      const res = await apiService.createAIProposal(activeTrip.id, instruction);
+
+      if (res && res.proposal_id) {
+        const afterDays = res.after?.days || activeTrip.days;
         setPendingProposal({
+          proposalId: res.proposal_id,
           summary: res.summary,
           changes: res.changes || [],
-          proposedTrip: res.trip || null,
+          proposedTrip: {
+            ...activeTrip,
+            days: afterDays
+          },
           previousTrip: JSON.parse(JSON.stringify(activeTrip)),
         });
       } else {
-        setCopilotError('DAIna could not propose this adjustment right now. Please try a different request.');
+        setCopilotError('DAIna could not generate a proposal right now. Please try a different request.');
       }
-    } catch (err) {
-      console.error('Failed to execute AI Copilot diff:', err);
-      setCopilotError('DAIna is temporarily unavailable. Please try again.');
+    } catch (err: any) {
+      console.error('Failed to create AI Copilot proposal:', err);
+      setCopilotError(err?.message || 'DAIna is temporarily unavailable. Please try again.');
     } finally {
       setIsExecutingCopilot(false);
     }
@@ -345,20 +355,42 @@ function TripsContent() {
     const applied = pendingProposal;
     setPendingProposal(null);
 
-    if (applied.proposedTrip) {
-      setTrips((prev) =>
-        prev.map((t, idx) => (idx === activeTripIndex ? { ...t, ...applied.proposedTrip } : t))
-      );
-    } else {
-      await loadData();
-    }
+    try {
+      if (applied.proposalId) {
+        // Accept proposal on backend: atomically commits append-only revision
+        const acceptRes = await apiService.acceptAIProposal(applied.proposalId);
+        if (acceptRes && acceptRes.trip) {
+          setTrips((prev) =>
+            prev.map((t, idx) => (idx === activeTripIndex ? { ...t, ...acceptRes.trip } : t))
+          );
+        } else {
+          await loadData();
+        }
+      } else {
+        await loadData();
+      }
 
-    setLastDiffResult({
-      summary: applied.summary,
-      changes: applied.changes,
-      canUndo: true,
-      previousTrip: applied.previousTrip,
-    });
+      setLastDiffResult({
+        summary: applied.summary,
+        changes: applied.changes,
+        canUndo: true,
+        previousTrip: applied.previousTrip,
+      });
+    } catch (err: any) {
+      console.error('Failed to accept AI proposal:', err);
+      setCopilotError(err?.message || 'Failed to commit proposed changes to the trip.');
+    }
+  };
+
+  const handleRejectProposal = async () => {
+    if (pendingProposal?.proposalId) {
+      try {
+        await apiService.rejectAIProposal(pendingProposal.proposalId);
+      } catch (err) {
+        console.warn('Failed to reject proposal on server:', err);
+      }
+    }
+    setPendingProposal(null);
   };
 
   const handleUndoCopilotDiff = async () => {
@@ -791,7 +823,7 @@ function TripsContent() {
                             </h3>
                           </div>
                           <span className="text-xs text-slate-500 font-medium">
-                            {day.weather || 'Sunny · 28°C'}
+                            {day.weather || 'Weather unavailable'}
                           </span>
                         </div>
 
@@ -1231,7 +1263,7 @@ function TripsContent() {
                           DAIna suggests: {pendingProposal.summary}
                         </span>
                         <button
-                          onClick={() => setPendingProposal(null)}
+                          onClick={handleRejectProposal}
                           className="text-xs text-amber-700 hover:text-amber-950 cursor-pointer"
                           aria-label="Dismiss suggestion"
                         >
@@ -1262,7 +1294,7 @@ function TripsContent() {
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={() => setPendingProposal(null)}
+                          onClick={handleRejectProposal}
                           className="bg-white border-slate-200 text-slate-700 hover:bg-slate-50 text-xs px-3 py-1.5 cursor-pointer"
                         >
                           Keep current plan

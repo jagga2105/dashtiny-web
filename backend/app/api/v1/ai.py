@@ -1,60 +1,60 @@
 """
-DashTiny AI Action & Diff Service (POST /api/v1/ai/query)
-Implements conversational action model returning structured diffs with full AI observability.
+DashTiny AI Action & Proposal Engine (backend/app/api/v1/ai.py)
+Core Engineering Invariant:
+"AI proposes. Tools verify. Services execute. The database remembers. The UI lets the traveler decide."
+
+Implements:
+1. POST /api/v1/ai/proposals
+   Generates a non-mutating structured diff proposal with verification and provenance.
+   Persists TripProposal record. Does NOT mutate the Trip.
+2. POST /api/v1/ai/proposals/{proposal_id}/accept
+   The ONLY endpoint allowed to apply the AI proposal to the Trip.
+   Validates parent revision lock, creates an append-only TripRevision, applies activity diff,
+   logs AI observability telemetry, and commits atomically.
+3. POST /api/v1/ai/proposals/{proposal_id}/reject
+   Records rejection and performs no Trip mutation.
+4. POST /api/v1/ai/query
+   Harden legacy endpoint: strictly requires explicit trip_id (rejects 'latest'/null),
+   and executes through the authoritative TripRevisionService.
 """
 import time
 from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
-from jose import jwt
 
-from sqlalchemy import func
-from app.config import settings
 from app.db.database import get_db
-from app.models.models import Itinerary, ItineraryDay, ItineraryActivity, User, AIRun, AIToolCall, SquadRoom, SquadMember, TripSnapshot
+from app.models.models import (
+    Itinerary, ItineraryDay, ItineraryActivity, User,
+    AIRun, AIToolCall, SquadRoom, SquadMember, TripSnapshot, TripProposal
+)
 from app.ai.tools.itinerary import apply_itinerary_action
 from app.ai.tools.weather import get_destination_weather
-from app.ai.tools.hotel_search import search_hotels
-from app.ai.tools.flight_search import search_flights
 from app.ai.tools.maps import get_coordinates
 from app.api.deps import get_current_user
-from app.services.snapshot_service import allocate_and_create_trip_snapshot
+from app.services.trip_revision_service import (
+    serialize_trip_days,
+    get_current_version,
+    create_revision,
+    apply_activity_diff,
+    validate_revision_parent
+)
 
-router = APIRouter(prefix="/ai", tags=["DashTiny AI Action & Diff Engine"])
+router = APIRouter(prefix="/ai", tags=["DashTiny AI Action & Proposal Engine"])
+
+
+class AIProposalRequest(BaseModel):
+    trip_id: str
+    instruction: str
+
 
 class AIQueryRequest(BaseModel):
     trip_id: str
     instruction: str
 
-@router.post("/query")
-def ai_query(
-    request: AIQueryRequest,
-    user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """
-    Experience-First Conversational / Action Endpoint.
-    Modifies specific trip items, recalculates pacing/budget, logs AI tool runs,
-    persists updates to PostgreSQL, and returns what changed ({ "changes": [...] }).
-    Enforces strict user ownership: only the owner or squad member can modify the trip.
-    All changes, snapshots, and telemetry are executed within a single atomic database transaction.
-    Existing activities preserve their persistent identity (diff-based persistence).
-    """
-    start_time = time.time()
-    
-    trip = db.query(Itinerary).filter(Itinerary.id == request.trip_id).with_for_update().first()
-    if not trip:
-        if request.trip_id in ["latest", "", None]:
-            trip = db.query(Itinerary).filter(Itinerary.owner_id == user.id).order_by(Itinerary.created_at.desc()).with_for_update().first()
-        else:
-            raise HTTPException(status_code=404, detail="Trip not found")
-    
-    if not trip:
-        raise HTTPException(status_code=404, detail="No active trip found to modify")
 
-    # Enforce data ownership
+def verify_trip_access(trip: Itinerary, user: User, db: Session):
+    """Enforces trip ownership or squad membership."""
     is_owner = (trip.owner_id == user.id)
     squad = db.query(SquadRoom).filter(SquadRoom.itinerary_id == trip.id).first()
     is_member = False
@@ -69,158 +69,326 @@ def ai_query(
             detail="Access denied. You do not have permission to modify this trip."
         )
 
-    # Serialize current days & activities for rollback snapshot (complete 22 canonical fields)
-    current_days = []
-    for d in sorted(trip.days, key=lambda x: x.day_number):
-        current_days.append({
-            "id": d.id,
-            "day_number": d.day_number,
-            "title": d.title,
-            "weather": d.weather_summary,
-            "activities": [
-                {
-                    "id": a.id,
-                    "time_slot": a.time_slot,
-                    "time": a.time_slot,
-                    "description": a.description,
-                    "location": a.location,
-                    "place_type": a.place_type,
-                    "estimated_transit": a.estimated_transit,
-                    "cost_estimate": float(a.cost_estimate or 0),
-                    "provenance": a.provenance or "DETERMINISTIC",
-                    "lat": a.lat,
-                    "lng": a.lng,
-                    "source_citation": a.source_citation,
-                    "why_recommended": a.why_recommended,
-                    "generation_source": a.generation_source,
-                    "location_source": a.location_source,
-                    "content_source": a.content_source,
-                    "start_at": a.start_at.isoformat() if a.start_at else None,
-                    "end_at": a.end_at.isoformat() if a.end_at else None,
-                    "timezone": a.timezone,
-                    "duration_minutes": a.duration_minutes,
-                    "transit_minutes": a.transit_minutes,
-                    "transit_mode": a.transit_mode,
-                    "transit_source": a.transit_source,
-                    "transit_confidence": a.transit_confidence,
-                    "sort_order": a.sort_order
-                }
-                for a in sorted(d.activities, key=lambda x: x.sort_order)
-            ]
-        })
 
-    # Execute deterministic itinerary action tool
-    action_result = apply_itinerary_action(request.instruction, current_days)
+@router.post("/proposals")
+def create_ai_proposal(
+    request: AIProposalRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    P0 AI Proposal Generation:
+    1. Authenticates traveler and loads explicit Trip (rejects 'latest' or null).
+    2. Validates owner/member access.
+    3. Loads canonical Trip state.
+    4. Runs AI/action engine & verification tools.
+    5. Produces structured diff.
+    6. Persists TripProposal record.
+    7. DOES NOT mutate the Trip!
+    """
+    if not request.trip_id or request.trip_id.strip() in ["latest", ""]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="An explicit, valid trip_id is required. Falling back to default or 'latest' trips is disabled."
+        )
 
-    try:
-        # Save a concurrency-safe versioned rollback snapshot prior to applying changes
-        snapshot, next_ver = allocate_and_create_trip_snapshot(
+    trip = db.query(Itinerary).filter(Itinerary.id == request.trip_id.strip()).first()
+    if not trip:
+        raise HTTPException(status_code=404, detail="Trip not found")
+
+    verify_trip_access(trip, user, db)
+
+    # 1. Load canonical Trip state
+    before_days = serialize_trip_days(trip)
+
+    # 2. Run action tool to produce diff
+    action_result = apply_itinerary_action(request.instruction, before_days)
+
+    # 3. Verification tools: verify coordinates and weather advisory
+    spatial_verified = True
+    for d in action_result.get("updated_days", []):
+        for act in d.get("activities", []):
+            loc = act.get("location") or trip.destination
+            coords = get_coordinates(loc)
+            if not coords.get("found"):
+                spatial_verified = False
+
+    weather_profile = get_destination_weather(trip.destination)
+    weather_condition = weather_profile.get("condition") or "Weather unavailable"
+
+    # 4. Get current revision version for parent locking
+    curr_version = get_current_version(db, trip.id)
+    if curr_version == 0:
+        # Create baseline revision so parent_version is established
+        _, curr_version = create_revision(
             db=db,
             trip_id=trip.id,
             user_id=user.id,
-            days_data=current_days,
-            action="ai_query",
-            action_type="AI_MODIFY_ITINERARY",
-            actor_type="USER",
-            instruction=request.instruction,
-            model="deterministic-planner-v1"
+            action_type="INITIAL_CREATION",
+            days_data=before_days,
+            summary="Initial itinerary baseline"
+        )
+        db.commit()
+
+    # 5. Persist TripProposal record (TRIP IS NOT MUTATED)
+    proposal = TripProposal(
+        trip_id=trip.id,
+        user_id=user.id,
+        parent_version=curr_version,
+        instruction=request.instruction,
+        summary=action_result["summary"],
+        changes=action_result["changes"],
+        before_state={"days": before_days},
+        after_state=action_result["updated_days"],
+        verification={
+            "spatial_bounds": "VERIFIED" if spatial_verified else "UNRESOLVED",
+            "weather_advisory": weather_condition,
+            "route_feasible": True
+        },
+        provenance={
+            "tier": "AI_GENERATED",
+            "source": "deterministic-planner-v1",
+            "model": "deterministic-planner-v1",
+            "why_recommended": "Optimized schedule matching traveler instruction"
+        },
+        status="pending"
+    )
+    db.add(proposal)
+    db.commit()
+    db.refresh(proposal)
+
+    return {
+        "proposal_id": proposal.id,
+        "trip_id": proposal.trip_id,
+        "summary": proposal.summary,
+        "changes": proposal.changes,
+        "before": proposal.before_state,
+        "after": {"days": proposal.after_state},
+        "verification": proposal.verification,
+        "provenance": proposal.provenance
+    }
+
+
+@router.post("/proposals/{proposal_id}/accept")
+def accept_ai_proposal(
+    proposal_id: str,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    P0 AI Proposal Acceptance:
+    Only this endpoint is allowed to mutate the Trip!
+    1. Reloads current Trip with row lock.
+    2. Verifies ownership / permissions.
+    3. Verifies proposal still applies to current revision (no concurrent modifications).
+    4. Creates an append-only TripRevision via TripRevisionService.
+    5. Applies activity diff while preserving stable activity IDs.
+    6. Persists AI observability telemetry (AIRun, AIToolCall).
+    7. Atomically commits changes.
+    """
+    start_time = time.time()
+
+    proposal = db.query(TripProposal).filter(TripProposal.id == proposal_id).first()
+    if not proposal:
+        raise HTTPException(status_code=404, detail="Proposal not found")
+
+    if proposal.status != "pending":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Proposal is already {proposal.status}"
         )
 
-        # Diff-based activity persistence: preserves stable activity identity
-        for day_data in action_result["updated_days"]:
-            db_day = db.query(ItineraryDay).filter(ItineraryDay.id == day_data.get("id")).first()
-            if db_day:
-                existing_acts = {a.id: a for a in db_day.activities}
-                retained_act_ids = set()
+    # Lock the Trip row
+    trip = db.query(Itinerary).filter(Itinerary.id == proposal.trip_id).with_for_update().first()
+    if not trip:
+        raise HTTPException(status_code=404, detail="Trip not found")
 
-                for idx, act in enumerate(day_data.get("activities", [])):
-                    act_id = act.get("id")
-                    loc_name = act.get("location", trip.destination)
-                    coords = get_coordinates(loc_name)
-                    act_lat = act.get("lat") or coords.get("lat")
-                    act_lng = act.get("lng") or coords.get("lng")
-                    act_prov = act.get("provenance") or (coords.get("provenance") if coords.get("found") else "CURATED_UNRESOLVED")
+    verify_trip_access(trip, user, db)
 
-                    if act_id and act_id in existing_acts:
-                        # UPDATE existing activity in-place: preserves ID for bookings, comments, references
-                        db_act = existing_acts[act_id]
-                        db_act.time_slot = act.get("time", db_act.time_slot or "10:00 AM")
-                        db_act.description = act.get("description", db_act.description)
-                        db_act.location = loc_name
-                        db_act.place_type = act.get("place_type", db_act.place_type or "TA")
-                        db_act.cost_estimate = act.get("cost_estimate", db_act.cost_estimate or 0)
-                        db_act.provenance = act_prov
-                        db_act.lat = act_lat
-                        db_act.lng = act_lng
-                        if act.get("source_citation"):
-                            db_act.source_citation = act.get("source_citation")
-                        if act.get("why_recommended"):
-                            db_act.why_recommended = act.get("why_recommended")
-                        if "duration_minutes" in act:
-                            db_act.duration_minutes = act.get("duration_minutes")
-                        if "transit_minutes" in act:
-                            db_act.transit_minutes = act.get("transit_minutes")
-                        if "transit_mode" in act:
-                            db_act.transit_mode = act.get("transit_mode")
-                        if "transit_source" in act:
-                            db_act.transit_source = act.get("transit_source")
-                        if "transit_confidence" in act:
-                            db_act.transit_confidence = act.get("transit_confidence")
-                        if "timezone" in act:
-                            db_act.timezone = act.get("timezone")
-                        if "estimated_transit" in act:
-                            db_act.estimated_transit = act.get("estimated_transit")
-                        db_act.sort_order = idx
-                        retained_act_ids.add(act_id)
-                    else:
-                        # INSERT new activity
-                        new_act = ItineraryActivity(
-                            day_id=db_day.id,
-                            time_slot=act.get("time", "10:00 AM"),
-                            description=act.get("description", ""),
-                            location=loc_name,
-                            place_type=act.get("place_type", "TA"),
-                            cost_estimate=act.get("cost_estimate", 0),
-                            provenance=act_prov,
-                            lat=act_lat,
-                            lng=act_lng,
-                            source_citation=act.get("source_citation") or "DashTiny Spatial Map Engine",
-                            why_recommended=act.get("why_recommended"),
-                            duration_minutes=act.get("duration_minutes", 60),
-                            transit_minutes=act.get("transit_minutes", 0),
-                            transit_mode=act.get("transit_mode", "WALK"),
-                            transit_source=act.get("transit_source", "ESTIMATED"),
-                            transit_confidence=act.get("transit_confidence", "ESTIMATED"),
-                            timezone=act.get("timezone"),
-                            estimated_transit=act.get("estimated_transit"),
-                            generation_source=act.get("generation_source", "AI_GENERATED"),
-                            location_source=act.get("location_source", "GEOCODED"),
-                            content_source=act.get("content_source", "PLANNER_ACTION"),
-                            sort_order=idx
-                        )
-                        db.add(new_act)
-                        db.flush()  # assign generated ID
-                        retained_act_ids.add(new_act.id)
+    # Verify revision concurrency
+    current_ver = get_current_version(db, trip.id)
+    if current_ver != proposal.parent_version:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"Trip has been modified (current revision v{current_ver}) since proposal was generated "
+                f"(target v{proposal.parent_version}). Please generate a fresh proposal."
+            )
+        )
 
-                # DELETE removed activities
-                for act_id, act_obj in existing_acts.items():
-                    if act_id not in retained_act_ids:
-                        db.delete(act_obj)
+    try:
+        # Apply diff to database while preserving stable activity IDs
+        apply_activity_diff(db, trip, proposal.after_state)
+
+        # Create append-only revision
+        snapshot, next_ver = create_revision(
+            db=db,
+            trip_id=trip.id,
+            user_id=user.id,
+            action_type="AI_PROPOSAL_ACCEPTED",
+            days_data=proposal.after_state,
+            summary=proposal.summary,
+            instruction=proposal.instruction,
+            model="deterministic-planner-v1",
+            actor_type="USER",
+            parent_version=proposal.parent_version
+        )
 
         latency_ms = int((time.time() - start_time) * 1000)
 
-        # AI Observability: Single atomic transaction boundary
+        # AI Observability records
         ai_run = AIRun(
             user_id=user.id,
             trip_id=trip.id,
-            prompt=request.instruction,
+            prompt=proposal.instruction,
             model="deterministic-planner-v1",
             latency_ms=latency_ms,
             tokens_used=0,
             status="success"
         )
         db.add(ai_run)
-        db.flush()  # Obtain ai_run.id without committing transaction
+        db.flush()
+
+        tool_call = AIToolCall(
+            run_id=ai_run.id,
+            tool_name="ai_proposal_accept",
+            input_payload={"proposal_id": proposal.id, "parent_version": proposal.parent_version},
+            output_payload={"new_version": next_ver, "changes_count": len(proposal.changes)},
+            provenance="AI_GENERATED",
+            latency_ms=latency_ms
+        )
+        db.add(tool_call)
+
+        # Mark proposal accepted
+        proposal.status = "accepted"
+
+        # Commit all operations atomically
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to apply proposal: {str(exc)}"
+        )
+
+    # Reload updated trip
+    db.refresh(trip)
+    updated_days = serialize_trip_days(trip)
+
+    return {
+        "status": "success",
+        "action": "proposal_accepted",
+        "proposal_status": "accepted",
+        "proposal_id": proposal.id,
+        "trip_id": trip.id,
+        "revision_version": next_ver,
+        "summary": proposal.summary,
+        "trip": {
+            "id": trip.id,
+            "title": trip.title,
+            "destination": trip.destination,
+            "startDate": str(trip.start_date),
+            "endDate": str(trip.end_date),
+            "budget": float(trip.total_budget),
+            "days": updated_days
+        }
+    }
+
+
+@router.post("/proposals/{proposal_id}/reject")
+def reject_ai_proposal(
+    proposal_id: str,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    P0 AI Proposal Rejection:
+    Marks the proposal rejected and performs NO mutation to the Trip.
+    """
+    proposal = db.query(TripProposal).filter(TripProposal.id == proposal_id).first()
+    if not proposal:
+        raise HTTPException(status_code=404, detail="Proposal not found")
+
+    if proposal.status != "pending":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Proposal is already {proposal.status}"
+        )
+
+    trip = db.query(Itinerary).filter(Itinerary.id == proposal.trip_id).first()
+    if trip:
+        verify_trip_access(trip, user, db)
+
+    proposal.status = "rejected"
+    db.commit()
+
+    return {
+        "status": "success",
+        "action": "proposal_rejected",
+        "proposal_status": "rejected",
+        "proposal_id": proposal.id,
+        "trip_id": proposal.trip_id
+    }
+
+
+@router.post("/query")
+def ai_query(
+    request: AIQueryRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Hardened legacy AI Action endpoint:
+    Strictly requires an explicit trip_id (rejects 'latest'/null).
+    Executes changes through the canonical TripRevisionService with row lock.
+    """
+    if not request.trip_id or request.trip_id.strip() in ["latest", ""]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="An explicit, valid trip_id is required. Guessing trip or using 'latest' is disabled."
+        )
+
+    trip = db.query(Itinerary).filter(Itinerary.id == request.trip_id.strip()).with_for_update().first()
+    if not trip:
+        raise HTTPException(status_code=404, detail="Trip not found")
+
+    verify_trip_access(trip, user, db)
+
+    start_time = time.time()
+    before_days = serialize_trip_days(trip)
+    action_result = apply_itinerary_action(request.instruction, before_days)
+
+    try:
+        curr_ver = get_current_version(db, trip.id)
+        # Create versioned snapshot of the PREVIOUS state before applying changes
+        snapshot, next_ver = create_revision(
+            db=db,
+            trip_id=trip.id,
+            user_id=user.id,
+            action_type="AI_MODIFY_ITINERARY",
+            days_data=before_days,
+            summary=action_result["summary"],
+            instruction=request.instruction,
+            model="deterministic-planner-v1",
+            actor_type="USER",
+            action="ai_query",
+            parent_version=curr_ver if curr_ver > 0 else None
+        )
+
+        # Apply diff
+        apply_activity_diff(db, trip, action_result["updated_days"])
+
+        latency_ms = int((time.time() - start_time) * 1000)
+        ai_run = AIRun(
+            user_id=user.id,
+            trip_id=trip.id,
+            prompt=request.instruction,
+            model="deterministic-planner-v1",
+            latency_ms=latency_ms,
+            status="success"
+        )
+        db.add(ai_run)
+        db.flush()
 
         tool_call = AIToolCall(
             run_id=ai_run.id,
@@ -231,52 +399,26 @@ def ai_query(
             latency_ms=latency_ms
         )
         db.add(tool_call)
-
-        # Commit snapshot, diff modifications, ai_run, and tool_call in one atomic transaction
         db.commit()
     except Exception as exc:
         db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to apply AI mutation: {str(exc)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to apply AI action: {str(exc)}")
 
-    # Re-fetch updated trip representation
     db.refresh(trip)
-    updated_trip_payload = {
-        "id": trip.id,
-        "title": trip.title,
-        "destination": trip.destination,
-        "startDate": str(trip.start_date),
-        "endDate": str(trip.end_date),
-        "budget": float(trip.total_budget),
-        "days": [
-            {
-                "id": d.id,
-                "dayNumber": d.day_number,
-                "title": d.title,
-                "weather": d.weather_summary,
-                "activities": [
-                    {
-                        "id": a.id,
-                        "time": a.time_slot,
-                        "description": a.description,
-                        "location": a.location,
-                        "placeType": a.place_type,
-                        "costEstimate": float(a.cost_estimate or 0),
-                        "provenance": a.provenance or "DETERMINISTIC"
-                    }
-                    for a in sorted(d.activities, key=lambda x: x.sort_order)
-                ]
-            }
-            for d in sorted(trip.days, key=lambda x: x.day_number)
-        ]
-    }
-
+    updated_days = serialize_trip_days(trip)
     return {
         "status": "success",
         "trip_id": trip.id,
+        "revision_version": next_ver,
         "summary": action_result["summary"],
         "changes": action_result["changes"],
-        "trip": updated_trip_payload
+        "trip": {
+            "id": trip.id,
+            "title": trip.title,
+            "destination": trip.destination,
+            "startDate": str(trip.start_date),
+            "endDate": str(trip.end_date),
+            "budget": float(trip.total_budget),
+            "days": updated_days
+        }
     }

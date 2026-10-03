@@ -119,30 +119,47 @@ API Documentation is available at [http://localhost:8000/docs](http://localhost:
 ### 4. Running Backend Tests
 ```bash
 cd backend
-./venv/bin/pytest tests/ -v
+
+# Fast Unit Tests (In-memory SQLite)
+./venv/bin/pytest tests/unit -v
+
+# Real PostgreSQL Integration Tests
+POSTGRES_TEST_DATABASE_URL="postgresql://postgres:postgres@localhost:5432/dashtiny_empty_test" ./venv/bin/pytest tests/integration -v
+
+# Verify Migration Integrity
+./venv/bin/python scripts/verify_migrations.py
 ```
 
 ---
 
 ## 📡 API Reference Overview
 
-For full technical specifications and governance rules, consult [ARCHITECTURE.md](file:///Users/kumkumpandey/Applications/dashtiny-web/ARCHITECTURE.md).
+For full technical specifications and governance rules, consult [ARCHITECTURE.md](file:///Users/kumkumpandey/Applications/dashtiny-web/ARCHITECTURE.md) and [docs/DASHTINY_CURRENT_STATE.md](file:///Users/kumkumpandey/Applications/dashtiny-web/docs/DASHTINY_CURRENT_STATE.md).
 
 | Endpoint | Method | Description |
 | :--- | :--- | :--- |
 | `/api/v1/auth/register` | `POST` | Create a new traveler account |
 | `/api/v1/auth/login` | `POST` | Authenticate with password or sandbox OTP and receive JWT |
+| `/api/v1/auth/demo` | `POST` | Development/sandbox demo login (strictly gated behind `DEMO_MODE=true`) |
 | `/api/v1/planner/generate` | `POST` | Synthesize multi-day itinerary with hybrid deterministic & optional LLM generation and spatial verification |
 | `/api/v1/trips/my-trips` | `GET` | Fetch authenticated user's trips as canonical `TripSummary` objects |
-| `/api/v1/trips/{id}` | `GET` | Retrieve complete trip workspace with days, activities, and budget |
+| `/api/v1/trips/{id}` | `GET` | Retrieve complete trip workspace with days, activities, and budget (eagerly loaded) |
 | `/api/v1/trips/{id}/public` | `GET` | Privacy-governed public trip snapshot (strictly requires explicit publication) |
-| `/api/v1/bookings/search/flights` | `GET` | Query normalized flight inventory offers based on origin, dates, and passengers |
-| `/api/v1/bookings/search/hotels` | `GET` | Query normalized stay inventory scaled to party size |
-| `/api/v1/bookings/create` | `POST` | Attach confirmed booking reference to trip with server-authoritative reward coin tracking |
+| `/api/v1/trips/{id}/undo` | `POST` | Server-authoritative append-only revision rollback |
+| `/api/v1/ai/proposals` | `POST` | Generate structured diff proposal without mutating Trip |
+| `/api/v1/ai/proposals/{id}/accept` | `POST` | Atomically lock Trip, create TripRevision, apply diff, and record telemetry |
+| `/api/v1/ai/proposals/{id}/reject` | `POST` | Mark proposal rejected without mutating Trip |
+| `/api/v1/bookings/search/flights` | `GET` | Query normalized flight inventory offers via provider abstraction layer |
+| `/api/v1/bookings/search/hotels` | `GET` | Query normalized stay inventory via provider abstraction layer |
+| `/api/v1/bookings/create` | `POST` | Attach booking reference to trip with server-authoritative reward coin tracking |
 | `/api/v1/community/feed` | `GET` | Curated community feed with canonical `CommunityTripCard` attributes |
 | `/api/v1/community/posts` | `POST` | Publish travel story linked to an active DashTiny trip (`source_trip_id`) |
-| `/api/v1/squad/rooms/{code}` | `GET` | Join collaborative squad room and access shared ledger |
-| `/api/v1/ai/query` | `POST` | Execute targeted conversational diff on active itinerary |
+| `/api/v1/community/posts/{id}/like` | `POST` | Concurrency-safe atomic post liking |
+| `/api/v1/community/posts/{id}/fork` | `POST` | Fork public trip into private user-owned trip canvas |
+| `/api/v1/squads` | `POST`, `GET` | Create squad room and list squads for trip |
+| `/api/v1/squads/{id}/expenses` | `POST`, `GET` | Log squad expense and list expenses |
+| `/api/v1/squads/{id}/summary` | `GET` | Database-calculated split math and member balances |
+| `/health` | `GET` | Health endpoint reporting database and redis connectivity |
 
 ---
 

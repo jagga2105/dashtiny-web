@@ -21,7 +21,7 @@ interface VoucherItem {
 }
 
 export default function RewardsPage() {
-  const { user, updateCoins, setCoins } = useAuthStore();
+  const { user, setCoins } = useAuthStore();
   const [redeemed, setRedeemed] = useState<string | null>(null);
   const [unlockedCode, setUnlockedCode] = useState<string | null>(null);
   const [isRedeeming, setIsRedeeming] = useState(false);
@@ -97,8 +97,6 @@ export default function RewardsPage() {
           setCoins(res.remaining_credits);
         } else if (typeof res.remaining_coins === 'number') {
           setCoins(res.remaining_coins);
-        } else {
-          updateCoins(-cost);
         }
         setRedeemed(vouchId);
         setUnlockedCode(res.voucher_code || 'UNLOCKED');

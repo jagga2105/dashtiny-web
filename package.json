@@ -9,16 +9,12 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@apollo/client": "^4.0.2",
     "axios": "^1.11.0",
     "clsx": "^2.1.1",
-    "graphql": "^16.11.0",
-    "jsonwebtoken": "^9.0.2",
     "lucide-react": "^1.27.0",
     "next": "15.5.2",
     "react": "19.1.0",
     "react-dom": "19.1.0",
-    "react-hook-form": "^7.62.0",
     "tailwind-merge": "^3.6.0",
     "zustand": "^5.0.14"
   },

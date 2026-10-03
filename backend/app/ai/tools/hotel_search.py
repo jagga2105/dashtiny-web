@@ -240,6 +240,14 @@ def search_hotels(
         item["nightly_rate"] = item["price_per_night"]
         item["total_price"] = item["price_per_night"] * nights
         item["total_amount"] = item["total_price"]
+        item["price"] = float(item["total_price"])
+        item["offer_id"] = item["id"]
+        item["provider"] = item.get("provider", "Curated Stays Partner")
+        item["availability_state"] = "ESTIMATED"
+        from datetime import datetime, timezone, timedelta
+        now_utc = datetime.now(timezone.utc)
+        item["retrieved_at"] = now_utc.isoformat()
+        item["expires_at"] = (now_utc + timedelta(hours=4)).isoformat()
         scaled_results.append(item)
 
     return scaled_results

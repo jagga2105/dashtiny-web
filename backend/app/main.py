@@ -13,10 +13,16 @@ app = FastAPI(
     openapi_url=f"{settings.API_V1_STR}/openapi.json"
 )
 
-# CORS Middleware configuration
+# Environment-driven CORS
+cors_origins = settings.cors_origins_list
+if settings.ENVIRONMENT in ["development", "dev", "test"] and "*" in cors_origins:
+    allow_origins = ["*"]
+else:
+    allow_origins = cors_origins
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Adjust for production
+    allow_origins=allow_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -40,21 +46,24 @@ def root():
         "status": "online",
         "service": settings.PROJECT_NAME,
         "version": settings.VERSION,
+        "environment": settings.ENVIRONMENT,
         "docs": "/docs"
     }
 
 @app.get("/health")
 def healthcheck(response: Response):
     """
-    Authentic health check verifying PostgreSQL database and Redis cache connectivity.
+    Standardized health check verifying PostgreSQL database and Redis cache connectivity.
+    Returns: { "status": "healthy|degraded|unhealthy", "database": "connected|disconnected", "redis": "connected|disconnected" }
+    Never leaks raw exception strings.
     """
     db_status = "disconnected"
     try:
         with SessionLocal() as db_session:
             db_session.execute(text("SELECT 1"))
         db_status = "connected"
-    except Exception as e:
-        db_status = f"error: {str(e)[:50]}"
+    except Exception:
+        db_status = "disconnected"
 
     redis_status = "disconnected"
     try:
@@ -64,17 +73,16 @@ def healthcheck(response: Response):
     except Exception:
         redis_status = "disconnected"
 
-    # Degraded if database is down
     if db_status != "connected":
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
         overall_status = "unhealthy"
+    elif redis_status != "connected":
+        overall_status = "degraded"
     else:
         overall_status = "healthy"
 
     return {
         "status": overall_status,
-        "api": "healthy",
         "database": db_status,
-        "redis": redis_status,
-        "version": settings.VERSION
+        "redis": redis_status
     }

@@ -300,7 +300,7 @@ function PlannerContent() {
             {isAdapting
               ? (paramAuthor
                   ? `Adapting ${paramDestination || 'this'} itinerary from ${paramAuthor} with your preferred pace and budget.`
-                  : `Adapting ${paramDestination || 'this'} itinerary with personalized pacing and verified recommendations.`)
+                  : `Adapting ${paramDestination || 'this'} itinerary with personalized pacing and curated recommendations.`)
               : "Tell DAIna what you're looking for. We'll build a personalized day-by-day plan with stays, dining, and activities."}
           </p>
         </div>

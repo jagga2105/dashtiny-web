@@ -8,6 +8,11 @@ from app.config import settings
 from app.db.database import get_db
 from app.models.models import Itinerary, ItineraryDay, ItineraryActivity, SquadRoom, SquadMember, Booking, User, CommunityPost, TripSnapshot
 from app.api.deps import get_current_user
+from app.services.trip_revision_service import (
+    serialize_trip_days,
+    record_mutation,
+    restore_revision
+)
 
 router = APIRouter(prefix="/trips", tags=["My Trips & Active Passages"])
 
@@ -43,7 +48,7 @@ def get_my_trips(user: User = Depends(get_current_user), db: Session = Depends(g
                 "dayNumber": d.day_number,
                 "title": d.title,
                 "coverImage": d.cover_image_url or "https://images.unsplash.com/photo-1512343879784-a960bf40e7f2?w=800&auto=format&fit=crop&q=80",
-                "weather": d.weather_summary or "28°C Sunny ☀️",
+                "weather": d.weather_summary or "Weather unavailable",
                 "activities": [
                     {
                         "id": a.id,
@@ -174,11 +179,20 @@ def get_public_trip_snapshot(trip_id: str, db: Session = Depends(get_db)):
     Get public read-only itinerary snapshot for community adaptation/forking.
     Accessible without personal authorization tokens; strips private bookings and user data.
     Only exposes trips that are explicitly public or linked to a CommunityPost, or known demo IDs.
+    Uses selectinload to eagerly fetch days and activities, eliminating N+1 queries.
     """
     if trip_id in COMMUNITY_PUBLIC_SNAPSHOTS:
         return COMMUNITY_PUBLIC_SNAPSHOTS[trip_id]
 
-    it = db.query(Itinerary).filter(Itinerary.id == trip_id).first()
+    it = (
+        db.query(Itinerary)
+        .filter(Itinerary.id == trip_id)
+        .options(
+            selectinload(Itinerary.days).selectinload(ItineraryDay.activities),
+            selectinload(Itinerary.owner)
+        )
+        .first()
+    )
     if it:
         # Enforce public/published privacy boundary
         is_published = bool(it.is_public)
@@ -193,24 +207,19 @@ def get_public_trip_snapshot(trip_id: str, db: Session = Depends(get_db)):
                 detail="Public itinerary snapshot not found or not published to community."
             )
 
-        owner = db.query(User).filter(User.id == it.owner_id).first()
-        days = db.query(ItineraryDay).filter(ItineraryDay.itinerary_id == it.id).order_by(ItineraryDay.day_number.asc()).all()
+        owner = it.owner
+        sorted_days = sorted(it.days, key=lambda d: d.day_number)
         stops = []
-        for d in days:
-            acts = db.query(ItineraryActivity).filter(ItineraryActivity.day_id == d.id).order_by(ItineraryActivity.sort_order.asc()).all()
-            for idx, a in enumerate(acts):
-                a_id = getattr(a, "id", None) or (a.get("id") if isinstance(a, dict) else None) or f"d{d.day_number}_a{idx}"
-                a_time = getattr(a, "time_slot", None) or (a.get("time") if isinstance(a, dict) else None) or "10:00"
-                a_title = getattr(a, "description", None) or getattr(a, "title", None) or (a.get("description") or a.get("title") if isinstance(a, dict) else None) or "Local Experience"
-                a_location = getattr(a, "location", None) or (a.get("location") if isinstance(a, dict) else None) or it.destination
-                a_tag = getattr(a, "place_type", None) or getattr(a, "tag", None) or (a.get("tag") or a.get("place_type") if isinstance(a, dict) else None) or "Sightseeing"
+        for d in sorted_days:
+            sorted_acts = sorted(d.activities, key=lambda a: a.sort_order)
+            for idx, a in enumerate(sorted_acts):
                 stops.append({
-                    "id": a_id,
+                    "id": a.id,
                     "day": d.day_number,
-                    "time": a_time,
-                    "title": a_title,
-                    "location": a_location,
-                    "tag": a_tag,
+                    "time": a.time_slot,
+                    "title": a.description,
+                    "location": a.location or it.destination,
+                    "tag": a.place_type or "TA",
                     "keep": True
                 })
         return {
@@ -221,7 +230,7 @@ def get_public_trip_snapshot(trip_id: str, db: Session = Depends(get_db)):
             "destination": it.destination,
             "origin": it.origin or "",
             "travellers": it.travellers or 2,
-            "duration_days": len(days) or 3,
+            "duration_days": len(sorted_days) or 3,
             "budget_est": f"₹{int(it.total_budget):,} est." if it.total_budget else "Flexible",
             "vibe": it.vibe or it.persona or "Discovery",
             "stops": stops
@@ -238,28 +247,64 @@ def get_trip_details(
     """
     Get full details, days, activities, and linked bookings for a specific trip.
     Enforces data ownership: user must be the trip owner or a member of the trip squad.
+    Eagerly loads days, activities, bookings, and squad in batch to completely eliminate N+1 queries.
     """
-    it = db.query(Itinerary).filter(Itinerary.id == trip_id).first()
+    it = (
+        db.query(Itinerary)
+        .filter(Itinerary.id == trip_id)
+        .options(
+            selectinload(Itinerary.days).selectinload(ItineraryDay.activities),
+            selectinload(Itinerary.bookings),
+            selectinload(Itinerary.squad_room).selectinload(SquadRoom.members)
+        )
+        .first()
+    )
     if not it:
         raise HTTPException(status_code=404, detail="Trip not found")
 
     # Enforce data ownership
     is_owner = (it.owner_id == user.id)
-    squad = db.query(SquadRoom).filter(SquadRoom.itinerary_id == it.id).first()
+    squad = it.squad_room
     is_member = False
     if squad:
-        is_member = db.query(SquadMember).filter(
-            SquadMember.squad_id == squad.id,
-            SquadMember.user_id == user.id
-        ).first() is not None
+        is_member = any(m.user_id == user.id for m in squad.members)
     if not is_owner and not is_member:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Access denied. You do not have access to this itinerary."
         )
 
-    days = db.query(ItineraryDay).filter(ItineraryDay.itinerary_id == it.id).order_by(ItineraryDay.day_number.asc()).all()
-    trip_bookings = db.query(Booking).filter(Booking.trip_id == it.id).all()
+    trip_bookings = it.bookings
+    sorted_days = sorted(it.days, key=lambda d: d.day_number)
+
+    formatted_days = [
+        {
+            "id": d.id,
+            "dayNumber": d.day_number,
+            "title": d.title,
+            "coverImage": d.cover_image_url,
+            "weather": d.weather_summary or "Weather unavailable",
+            "activities": [
+                {
+                    "id": a.id,
+                    "time": a.time_slot,
+                    "description": a.description,
+                    "location": a.location,
+                    "placeType": a.place_type,
+                    "estimatedTransit": a.estimated_transit,
+                    "crowdWarning": a.crowd_warning,
+                    "costEstimate": float(a.cost_estimate or 0),
+                    "lat": a.lat,
+                    "lng": a.lng,
+                    "provenance": a.provenance or "DETERMINISTIC",
+                    "whyRecommended": a.why_recommended,
+                    "source_citation": a.source_citation
+                }
+                for a in sorted(d.activities, key=lambda x: x.sort_order)
+            ]
+        }
+        for d in sorted_days
+    ]
 
     return {
         "id": it.id,
@@ -278,7 +323,7 @@ def get_trip_details(
         "is_public": bool(it.is_public),
         "source_trip_id": it.source_trip_id,
         "squad_room_code": squad.room_code if squad else None,
-        "daysCount": len(days),
+        "daysCount": len(sorted_days),
         "bookingsCount": len(trip_bookings),
         "bookings": [
             {
@@ -299,39 +344,11 @@ def get_trip_details(
             }
             for b in trip_bookings
         ],
-        "days": [
-            {
-                "dayNumber": d.day_number,
-                "title": d.title,
-                "coverImage": d.cover_image_url,
-                "weather": d.weather_summary,
-                "activities": [
-                    {
-                        "id": a.id,
-                        "time": a.time_slot,
-                        "description": a.description,
-                        "location": a.location,
-                        "placeType": a.place_type,
-                        "estimatedTransit": a.estimated_transit,
-                        "crowdWarning": a.crowd_warning,
-                        "costEstimate": float(a.cost_estimate or 0),
-                        "lat": a.lat,
-                        "lng": a.lng,
-                        "provenance": a.provenance or "DETERMINISTIC",
-                        "whyRecommended": a.why_recommended,
-                        "source_citation": a.source_citation
-                    }
-                    for a in db.query(ItineraryActivity).filter(ItineraryActivity.day_id == d.id).all()
-                ]
-            }
-            for d in days
-        ]
+        "days": formatted_days
     }
 
 class AddActivityRequest(BaseModel):
-    id: Optional[str] = None
-    day_id: Optional[str] = None
-    day_number: Optional[int] = 1
+    day_id: str
     time_slot: str = "10:00 AM"
     description: str
     location: Optional[str] = None
@@ -353,6 +370,7 @@ def delete_trip_activity(
     """
     Persistently remove an itinerary activity from a trip.
     Enforces user data ownership and validates activity membership in the trip.
+    Records an append-only revision in TripRevisionService.
     """
     it = db.query(Itinerary).filter(Itinerary.id == trip_id).first()
     if not it:
@@ -381,7 +399,18 @@ def delete_trip_activity(
     if not day or day.itinerary_id != it.id:
         raise HTTPException(status_code=400, detail="Activity does not belong to the specified trip")
 
+    desc = activity.description
     db.delete(activity)
+    db.flush()
+
+    # Record mutation revision
+    record_mutation(
+        db=db,
+        trip_id=it.id,
+        user_id=user.id,
+        action_type="USER_ACTIVITY_REMOVED",
+        summary=f"Removed activity: {desc}"
+    )
     db.commit()
 
     return {
@@ -400,8 +429,9 @@ def add_trip_activity(
     db: Session = Depends(get_db)
 ):
     """
-    Add or restore an itinerary activity to a trip day.
-    Used for user-initiated additions and undoing deletions.
+    Add an itinerary activity to an explicit trip day.
+    Requires validated day_id; no silent fallbacks to day_number or day 1.
+    Activity ID is server-generated; records append-only revision in TripRevisionService.
     """
     it = db.query(Itinerary).filter(Itinerary.id == trip_id).first()
     if not it:
@@ -421,32 +451,28 @@ def add_trip_activity(
             detail="Access denied. You do not have permission to modify this trip."
         )
 
-    # Locate destination day
-    target_day = None
-    if request.day_id:
-        target_day = db.query(ItineraryDay).filter(
-            ItineraryDay.id == request.day_id,
-            ItineraryDay.itinerary_id == it.id
-        ).first()
+    # Locate destination day explicitly
+    if not request.day_id or not request.day_id.strip():
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="day_id is required."
+        )
+
+    target_day = db.query(ItineraryDay).filter(
+        ItineraryDay.id == request.day_id.strip(),
+        ItineraryDay.itinerary_id == it.id
+    ).first()
 
     if not target_day:
-        target_day = db.query(ItineraryDay).filter(
-            ItineraryDay.itinerary_id == it.id,
-            ItineraryDay.day_number == (request.day_number or 1)
-        ).first()
-
-    if not target_day:
-        # Fallback to first day
-        target_day = db.query(ItineraryDay).filter(ItineraryDay.itinerary_id == it.id).order_by(ItineraryDay.day_number.asc()).first()
-
-    if not target_day:
-        raise HTTPException(status_code=404, detail="No days found in trip to attach activity")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Specified day_id not found in this trip."
+        )
 
     # Get max sort order in day
     current_count = db.query(ItineraryActivity).filter(ItineraryActivity.day_id == target_day.id).count()
 
     new_act = ItineraryActivity(
-        id=request.id if request.id else None,
         day_id=target_day.id,
         time_slot=request.time_slot,
         description=request.description,
@@ -461,6 +487,16 @@ def add_trip_activity(
         sort_order=current_count
     )
     db.add(new_act)
+    db.flush()
+
+    # Record mutation revision
+    record_mutation(
+        db=db,
+        trip_id=it.id,
+        user_id=user.id,
+        action_type="USER_ACTIVITY_ADDED",
+        summary=f"Added activity: {new_act.description}"
+    )
     db.commit()
     db.refresh(new_act)
 
@@ -491,7 +527,7 @@ def get_trip_snapshots(
     db: Session = Depends(get_db)
 ):
     """
-    List versioned trip rollback snapshots available for history and undo.
+    List versioned trip revisions available for history and undo.
     """
     it = db.query(Itinerary).filter(Itinerary.id == trip_id).first()
     if not it:
@@ -517,6 +553,7 @@ def get_trip_snapshots(
         {
             "id": s.id,
             "version": s.version,
+            "parent_version": s.parent_version,
             "action": s.action,
             "action_type": s.action_type,
             "summary": s.summary,
@@ -533,11 +570,10 @@ def undo_trip_change(
     db: Session = Depends(get_db)
 ):
     """
-    Rolls back the most recent AI modification for the specified trip by restoring
-    the immediately previous active TripSnapshot revision and applying diff updates
-    to preserve stable activity references.
-    Revisions are preserved in history and marked as 'reverted' so undo advances
-    sequentially backwards through revisions without repeatedly restoring the same snapshot.
+    Safe Append-Only Undo Endpoint.
+    Restores prior revision domain state and creates a brand NEW append-only UNDO revision:
+    revision N+3, type=UNDO, parent=N+2, restores state of N+1.
+    History is never destroyed or mutated into fake states.
     """
     it = db.query(Itinerary).filter(Itinerary.id == trip_id).with_for_update().first()
     if not it:
@@ -555,128 +591,15 @@ def undo_trip_change(
     if not is_owner and not is_member:
         raise HTTPException(status_code=403, detail="Not authorized to modify this trip")
 
-    # Find the latest active revision that has not been reverted
-    snapshot = db.query(TripSnapshot).filter(
-        TripSnapshot.trip_id == it.id,
-        TripSnapshot.action != "reverted"
-    ).order_by(TripSnapshot.version.desc(), TripSnapshot.created_at.desc()).first()
-
-    if not snapshot:
-        raise HTTPException(status_code=400, detail="No previous trip snapshot available to undo")
-
-    def _parse_iso_dt(val):
-        if not val:
-            return None
-        try:
-            return datetime.fromisoformat(val)
-        except Exception:
-            return None
-
     try:
-        # Restore days_data using diff-based update to maintain stable activity IDs
-        for day_data in snapshot.days_data:
-            db_day = db.query(ItineraryDay).filter(ItineraryDay.id == day_data.get("id")).first()
-            if db_day:
-                existing_acts = {a.id: a for a in db_day.activities}
-                retained_act_ids = set()
-
-                for idx, act in enumerate(day_data.get("activities", [])):
-                    act_id = act.get("id")
-                    time_val = act.get("time_slot") or act.get("time") or "10:00 AM"
-                    desc_val = act.get("description", "")
-                    loc_val = act.get("location", it.destination)
-                    pt_val = act.get("place_type") or act.get("placeType") or "TA"
-                    cost_val = float(act.get("cost_estimate") or act.get("costEstimate") or 0.0)
-                    prov_val = act.get("provenance") or "DETERMINISTIC"
-                    lat_val = act.get("lat")
-                    lng_val = act.get("lng")
-                    src_val = act.get("source_citation") or "Restored Snapshot"
-                    why_val = act.get("why_recommended") or act.get("whyRecommended")
-                    start_at_val = _parse_iso_dt(act.get("start_at"))
-                    end_at_val = _parse_iso_dt(act.get("end_at"))
-                    tz_val = act.get("timezone")
-                    dur_val = act.get("duration_minutes", 60)
-                    trans_min_val = act.get("transit_minutes", 0)
-                    trans_mode_val = act.get("transit_mode", "WALK")
-                    trans_src_val = act.get("transit_source", "ESTIMATED")
-                    trans_conf_val = act.get("transit_confidence", "ESTIMATED")
-                    est_trans_val = act.get("estimated_transit")
-                    gen_src_val = act.get("generation_source")
-                    loc_src_val = act.get("location_source")
-                    cnt_src_val = act.get("content_source")
-                    order_val = act.get("sort_order", idx)
-
-                    if act_id and act_id in existing_acts:
-                        db_act = existing_acts[act_id]
-                        db_act.time_slot = time_val
-                        db_act.description = desc_val
-                        db_act.location = loc_val
-                        db_act.place_type = pt_val
-                        db_act.cost_estimate = cost_val
-                        db_act.provenance = prov_val
-                        db_act.lat = lat_val
-                        db_act.lng = lng_val
-                        db_act.source_citation = src_val
-                        db_act.why_recommended = why_val
-                        db_act.start_at = start_at_val
-                        db_act.end_at = end_at_val
-                        db_act.timezone = tz_val
-                        db_act.duration_minutes = dur_val
-                        db_act.transit_minutes = trans_min_val
-                        db_act.transit_mode = trans_mode_val
-                        db_act.transit_source = trans_src_val
-                        db_act.transit_confidence = trans_conf_val
-                        if est_trans_val:
-                            db_act.estimated_transit = est_trans_val
-                        if gen_src_val:
-                            db_act.generation_source = gen_src_val
-                        if loc_src_val:
-                            db_act.location_source = loc_src_val
-                        if cnt_src_val:
-                            db_act.content_source = cnt_src_val
-                        db_act.sort_order = order_val
-                        retained_act_ids.add(act_id)
-                    else:
-                        new_act = ItineraryActivity(
-                            id=act_id if act_id and len(act_id) > 10 else None,
-                            day_id=db_day.id,
-                            time_slot=time_val,
-                            description=desc_val,
-                            location=loc_val,
-                            place_type=pt_val,
-                            cost_estimate=cost_val,
-                            provenance=prov_val,
-                            lat=lat_val,
-                            lng=lng_val,
-                            source_citation=src_val,
-                            why_recommended=why_val,
-                            start_at=start_at_val,
-                            end_at=end_at_val,
-                            timezone=tz_val,
-                            duration_minutes=dur_val,
-                            transit_minutes=trans_min_val,
-                            transit_mode=trans_mode_val,
-                            transit_source=trans_src_val,
-                            transit_confidence=trans_conf_val,
-                            estimated_transit=est_trans_val,
-                            generation_source=gen_src_val,
-                            location_source=loc_src_val,
-                            content_source=cnt_src_val,
-                            sort_order=order_val
-                        )
-                        db.add(new_act)
-                        db.flush()
-                        retained_act_ids.add(new_act.id)
-
-                for act_id, act_obj in existing_acts.items():
-                    if act_id not in retained_act_ids:
-                        db.delete(act_obj)
-
-        # Mark this snapshot revision as reverted rather than deleting it
-        restored_version = snapshot.version
-        snapshot.action = "reverted"
-        snapshot.action_type = "AI_MODIFY_ITINERARY_REVERTED"
+        new_undo_snap, restored_version = restore_revision(
+            db=db,
+            trip_id=it.id,
+            user_id=user.id
+        )
         db.commit()
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
     except Exception as exc:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to undo trip change: {str(exc)}")
@@ -688,9 +611,13 @@ def undo_trip_change(
 
     return {
         "status": "success",
+        "action": "undo",
         "message": f"Trip successfully reverted to snapshot v{restored_version}",
         "trip_id": it.id,
         "restored_version": restored_version,
+        "new_revision_version": new_undo_snap.version,
+        "summary": new_undo_snap.summary,
         "remaining_active_revisions": remaining_active
     }
+
 
