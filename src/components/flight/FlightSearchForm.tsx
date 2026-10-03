@@ -16,6 +16,7 @@ interface FlightSearchFormProps {
   initialTripType?: 'oneway' | 'roundtrip';
   isLoading?: boolean;
   onSearch: (params: FlightSearchParams) => void;
+  onParamsChange?: (params: FlightSearchParams) => void;
   className?: string;
 }
 
@@ -29,6 +30,7 @@ export function FlightSearchForm({
   initialTripType = 'roundtrip',
   isLoading = false,
   onSearch,
+  onParamsChange,
   className = '',
 }: FlightSearchFormProps) {
   const todayStr = new Date().toISOString().split('T')[0];
@@ -67,6 +69,20 @@ export function FlightSearchForm({
   React.useEffect(() => {
     if (initialTripType) setTripType(initialTripType);
   }, [initialTripType]);
+
+  React.useEffect(() => {
+    if (onParamsChange) {
+      onParamsChange({
+        origin,
+        destination,
+        departureDate,
+        returnDate: tripType === 'roundtrip' ? returnDate : undefined,
+        passengers,
+        cabinClass,
+        tripType,
+      });
+    }
+  }, [origin, destination, departureDate, returnDate, passengers, cabinClass, tripType, onParamsChange]);
 
   // Swap Origin and Destination
   const handleSwap = () => {

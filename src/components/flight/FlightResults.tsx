@@ -9,48 +9,46 @@ import {
   Scale,
   Sparkles,
   ArrowRight,
-  Info,
+  Clock,
+  RotateCcw,
 } from 'lucide-react';
 import {
   FlightOffer,
   FlightSearchResponse,
   FlightFilterState,
   FlightSortOption,
-  TimeSlotId,
+  FlightSearchParams,
 } from '@/types/flight';
 import { FlightFilters } from './FlightFilters';
 import { FlightSort } from './FlightSort';
 import { FlightOfferCard } from './FlightOfferCard';
 import { FlightComparison } from './FlightComparison';
 import { FlightProvenance } from './FlightProvenance';
+import {
+  DEFAULT_FLIGHT_FILTERS,
+  filterFlightOffers,
+  getAvailableAirlines,
+  getPriceBounds,
+} from '@/lib/flight/filtering';
+import {
+  computeFlightDecisionMetrics,
+  sortFlightOffers,
+  formatFlightDuration,
+  computeFactualWhyThisFits,
+} from '@/lib/flight/ranking';
 
 interface FlightResultsProps {
   searchResponse: FlightSearchResponse | null;
   isLoading: boolean;
   error?: string | null;
   isStale?: boolean;
+  previousSearchParams?: FlightSearchParams | null;
+  currentSearchParams?: FlightSearchParams | null;
   onRefreshSearch?: () => void;
   selectedOfferId?: string | null;
   onSelectOffer: (offer: FlightOffer) => void;
+  onRetrySearch?: () => void;
   className?: string;
-}
-
-const DEFAULT_FILTERS: FlightFilterState = {
-  stops: [],
-  airlines: [],
-  maxPrice: 100000,
-  departureSlots: [],
-  arrivalSlots: [],
-};
-
-function getTimeSlot(timeStr: string): TimeSlotId {
-  // timeStr is format "HH:MM"
-  const hour = parseInt(timeStr.split(':')[0], 10) || 0;
-  if (hour < 6) return 'early_morning';
-  if (hour < 12) return 'morning';
-  if (hour < 18) return 'afternoon';
-  if (hour < 22) return 'evening';
-  return 'night';
 }
 
 export function FlightResults({
@@ -58,278 +56,384 @@ export function FlightResults({
   isLoading,
   error,
   isStale = false,
+  previousSearchParams,
+  currentSearchParams,
   onRefreshSearch,
   selectedOfferId,
   onSelectOffer,
+  onRetrySearch,
   className = '',
 }: FlightResultsProps) {
-  const [filters, setFilters] = useState<FlightFilterState>(DEFAULT_FILTERS);
+  const [filters, setFilters] = useState<FlightFilterState>(DEFAULT_FLIGHT_FILTERS);
   const [currentSort, setCurrentSort] = useState<FlightSortOption>('balanced');
   const [comparedOffers, setComparedOffers] = useState<FlightOffer[]>([]);
   const [isComparisonOpen, setIsComparisonOpen] = useState(false);
   const [showMobileFilters, setShowMobileFilters] = useState(false);
+  const [comparisonLimitWarning, setComparisonLimitWarning] = useState(false);
 
-  // Calculate price boundaries from raw offers
-  const rawOffers = searchResponse?.offers || [];
+  // Raw offers from search response
+  const rawOffers: FlightOffer[] = useMemo(() => {
+    return searchResponse?.offers || [];
+  }, [searchResponse?.offers]);
 
-  const { minCatalogPrice, maxCatalogPrice, availableAirlines } = useMemo(() => {
-    if (rawOffers.length === 0) {
-      return { minCatalogPrice: 0, maxCatalogPrice: 50000, availableAirlines: [] };
-    }
-    let min = Infinity;
-    let max = -Infinity;
-    const airlineMap = new Map<string, number>();
-
-    rawOffers.forEach((o) => {
-      if (o.price < min) min = o.price;
-      if (o.price > max) max = o.price;
-      airlineMap.set(o.airline, (airlineMap.get(o.airline) || 0) + 1);
-    });
-
-    const airlines = Array.from(airlineMap.entries()).map(([name, count]) => ({
-      name,
-      count,
-    }));
-
-    return {
-      minCatalogPrice: min === Infinity ? 0 : min,
-      maxCatalogPrice: max === -Infinity ? 50000 : max,
-      availableAirlines: airlines,
-    };
+  // Price bounds and available airlines
+  const { minPrice, maxPrice } = useMemo(() => {
+    return getPriceBounds(rawOffers);
   }, [rawOffers]);
 
-  // Adjust maxPrice filter if catalog max changes
+  const availableAirlines = useMemo(() => {
+    return getAvailableAirlines(rawOffers);
+  }, [rawOffers]);
+
+  // Sync max price filter when catalog changes
   useEffect(() => {
-    if (maxCatalogPrice > 0 && (filters.maxPrice === 100000 || filters.maxPrice < minCatalogPrice)) {
-      setFilters((prev) => ({ ...prev, maxPrice: maxCatalogPrice }));
+    if (maxPrice > 0 && (filters.maxPrice === 100000 || filters.maxPrice < minPrice)) {
+      setFilters((prev) => ({ ...prev, maxPrice }));
     }
-  }, [maxCatalogPrice, minCatalogPrice]);
+  }, [maxPrice, minPrice, filters.maxPrice]);
 
-  // Filter raw offers client-side
+  // Filtered offers derived state
   const filteredOffers = useMemo(() => {
-    return rawOffers.filter((offer) => {
-      // Stops filter
-      if (filters.stops.length > 0) {
-        const matchesStop = filters.stops.some((s) => {
-          if (s >= 2) return offer.stops >= 2;
-          return offer.stops === s;
-        });
-        if (!matchesStop) return false;
-      }
-
-      // Airline filter
-      if (filters.airlines.length > 0) {
-        if (!filters.airlines.includes(offer.airline)) return false;
-      }
-
-      // Max price filter
-      if (filters.maxPrice > 0 && offer.price > filters.maxPrice) {
-        return false;
-      }
-
-      // Departure slot filter
-      if (filters.departureSlots.length > 0) {
-        const slot = getTimeSlot(offer.departure_time);
-        if (!filters.departureSlots.includes(slot)) return false;
-      }
-
-      // Arrival slot filter
-      if (filters.arrivalSlots.length > 0) {
-        const slot = getTimeSlot(offer.arrival_time);
-        if (!filters.arrivalSlots.includes(slot)) return false;
-      }
-
-      return true;
-    });
+    return filterFlightOffers(rawOffers, filters);
   }, [rawOffers, filters]);
 
-  // Determine badges (cheapest, fastest, balanced) from current filtered set
-  const { cheapestOfferId, fastestOfferId, balancedOfferId } = useMemo(() => {
-    if (filteredOffers.length === 0) {
-      return { cheapestOfferId: null, fastestOfferId: null, balancedOfferId: null };
-    }
-
-    let minPrice = Infinity;
-    let minPriceId: string | null = null;
-    let minDur = Infinity;
-    let minDurId: string | null = null;
-
-    filteredOffers.forEach((o) => {
-      if (o.price < minPrice) {
-        minPrice = o.price;
-        minPriceId = o.offer_id;
-      }
-      if (o.duration_minutes < minDur) {
-        minDur = o.duration_minutes;
-        minDurId = o.offer_id;
-      }
-    });
-
-    // Balanced option heuristic: direct flight under 3h with lowest price, or overall fastest under median price
-    const directOffers = filteredOffers.filter((o) => o.stops === 0);
-    const candidateList = directOffers.length > 0 ? directOffers : filteredOffers;
-    let balancedId = candidateList[0]?.offer_id || null;
-
-    return {
-      cheapestOfferId: minPriceId,
-      fastestOfferId: minDurId,
-      balancedOfferId: balancedId,
-    };
+  // Decision metrics and highlights
+  const decisionMetrics = useMemo(() => {
+    return computeFlightDecisionMetrics(filteredOffers);
   }, [filteredOffers]);
 
-  // Sort filtered offers
+  // Sorted offers derived state
   const sortedOffers = useMemo(() => {
-    const list = [...filteredOffers];
+    return sortFlightOffers(
+      filteredOffers,
+      currentSort,
+      decisionMetrics.balancedOffer?.offer_id
+    );
+  }, [filteredOffers, currentSort, decisionMetrics.balancedOffer?.offer_id]);
 
-    switch (currentSort) {
-      case 'cheapest':
-        list.sort((a, b) => a.price - b.price);
-        break;
-      case 'fastest':
-        list.sort((a, b) => a.duration_minutes - b.duration_minutes);
-        break;
-      case 'earliest':
-        list.sort((a, b) => a.departure_time.localeCompare(b.departure_time));
-        break;
-      case 'latest':
-        list.sort((a, b) => b.departure_time.localeCompare(a.departure_time));
-        break;
-      case 'balanced':
-      default:
-        // Balanced sort: balanced offer first, then by non-stop then price
-        list.sort((a, b) => {
-          if (a.offer_id === balancedOfferId) return -1;
-          if (b.offer_id === balancedOfferId) return 1;
-          if (a.stops !== b.stops) return a.stops - b.stops;
-          return a.price - b.price;
-        });
-        break;
-    }
-
-    return list;
-  }, [filteredOffers, currentSort, balancedOfferId]);
-
-  // Toggle comparison handler
+  // Toggle comparison handler with strict 3-offer limit and warning banner
   const handleToggleCompare = (offer: FlightOffer) => {
     const exists = comparedOffers.some((o) => o.offer_id === offer.offer_id);
     if (exists) {
       setComparedOffers((prev) => prev.filter((o) => o.offer_id !== offer.offer_id));
+      setComparisonLimitWarning(false);
     } else {
       if (comparedOffers.length < 3) {
         setComparedOffers((prev) => [...prev, offer]);
+        setComparisonLimitWarning(false);
+      } else {
+        setComparisonLimitWarning(true);
       }
     }
   };
 
   const handleRemoveCompare = (offerId: string) => {
     setComparedOffers((prev) => prev.filter((o) => o.offer_id !== offerId));
+    setComparisonLimitWarning(false);
   };
 
   const handleResetFilters = () => {
     setFilters({
       stops: [],
       airlines: [],
-      maxPrice: maxCatalogPrice,
+      maxPrice,
       departureSlots: [],
       arrivalSlots: [],
     });
   };
 
+  // 1. Loading Skeleton UX (3 to 5 skeleton cards)
   if (isLoading) {
     return (
-      <div className="py-16 text-center space-y-4" data-testid="flight-search-loading">
-        <div className="w-12 h-12 rounded-full border-3 border-orange-500/20 border-t-orange-600 animate-spin mx-auto" />
-        <p className="text-base font-medium text-slate-800">
-          Searching contemporary airline corridors...
-        </p>
-        <p className="text-xs text-slate-500 max-w-sm mx-auto">
-          Querying normalized provider catalog across IndiGo, Air India, Akasa Air, and regional carriers.
-        </p>
+      <div className={`space-y-4 ${className}`} data-testid="flight-search-loading">
+        <div className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-2xs flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-5 h-5 rounded-full border-2 border-orange-500 border-t-transparent animate-spin shrink-0" />
+            <div>
+              <p className="text-xs font-bold text-slate-800">
+                Searching contemporary airline corridors...
+              </p>
+              <p className="text-[11px] text-slate-500">
+                Fetching catalog schedules across IndiGo, Air India, Akasa Air, and SpiceJet
+              </p>
+            </div>
+          </div>
+          <div className="h-6 w-24 bg-slate-100 rounded-lg animate-pulse" />
+        </div>
+
+        {/* Skeleton Offer Cards preserving approximate card height */}
+        <div className="space-y-3.5">
+          {[1, 2, 3, 4].map((i) => (
+            <div
+              key={i}
+              className="p-5 rounded-2xl bg-white border border-slate-200/70 shadow-2xs space-y-4 animate-pulse"
+              style={{ minHeight: '190px' }}
+            >
+              <div className="flex justify-between items-center">
+                <div className="flex gap-2">
+                  <div className="h-5 w-24 bg-slate-200 rounded-full" />
+                  <div className="h-5 w-24 bg-slate-100 rounded-full" />
+                </div>
+                <div className="h-6 w-16 bg-slate-100 rounded-lg" />
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-[1fr,auto] gap-6 items-center">
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-slate-200" />
+                    <div className="space-y-1">
+                      <div className="h-4 w-32 bg-slate-200 rounded" />
+                      <div className="h-3 w-20 bg-slate-100 rounded" />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-4 items-center">
+                    <div className="space-y-1">
+                      <div className="h-5 w-16 bg-slate-200 rounded" />
+                      <div className="h-3 w-12 bg-slate-100 rounded" />
+                    </div>
+                    <div className="h-2 w-full bg-slate-200 rounded-full" />
+                    <div className="space-y-1 text-right">
+                      <div className="h-5 w-16 bg-slate-200 rounded ml-auto" />
+                      <div className="h-3 w-12 bg-slate-100 rounded ml-auto" />
+                    </div>
+                  </div>
+                </div>
+                <div className="space-y-2 md:text-right">
+                  <div className="h-6 w-24 bg-slate-200 rounded md:ml-auto" />
+                  <div className="h-8 w-28 bg-orange-200 rounded-xl md:ml-auto" />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
 
+  // 2. Error State
   if (error) {
     return (
       <div
-        className="p-6 rounded-3xl bg-rose-50 border border-rose-200 text-rose-800 space-y-3"
+        className={`p-6 rounded-3xl bg-rose-50 border border-rose-200 text-rose-900 space-y-4 ${className}`}
         data-testid="flight-search-error"
       >
         <div className="flex items-center gap-3">
           <AlertCircle className="w-6 h-6 text-rose-600 shrink-0" />
-          <h3 className="font-bold text-base">Search Request Notice</h3>
+          <div>
+            <h3 className="font-bold text-base text-rose-950">
+              We couldn&apos;t load flight options.
+            </h3>
+            <p className="text-xs text-rose-800">
+              {error}
+            </p>
+          </div>
         </div>
-        <p className="text-sm text-rose-700">{error}</p>
+        {onRetrySearch && (
+          <button
+            type="button"
+            onClick={onRetrySearch}
+            className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl transition-colors cursor-pointer shadow-2xs"
+          >
+            Retry
+          </button>
+        )}
       </div>
     );
   }
 
+  // 3. Initial Empty State (before search)
   if (!searchResponse) {
     return (
-      <div className="py-16 text-center space-y-3 bg-slate-50/50 rounded-3xl border border-dashed border-slate-200">
-        <Plane className="w-10 h-10 text-slate-300 mx-auto" />
-        <h3 className="font-serif-editorial text-lg font-bold text-slate-700">
-          Ready to Search Flights
+      <div
+        className={`py-16 px-6 text-center space-y-3 bg-white rounded-3xl border border-dashed border-slate-200 shadow-2xs ${className}`}
+        data-testid="ready-to-compare-flights"
+      >
+        <div className="w-12 h-12 rounded-2xl bg-orange-50 border border-orange-100 flex items-center justify-center text-orange-600 mx-auto">
+          <Plane className="w-6 h-6" />
+        </div>
+        <h3 className="font-serif-editorial text-lg font-bold text-slate-800">
+          Ready to compare flights
         </h3>
-        <p className="text-sm text-slate-500 max-w-md mx-auto">
-          Select origin and destination airports above using our verified airport resolver to view contemporary airline schedules and fares.
+        <p className="text-xs text-slate-500 max-w-md mx-auto">
+          Ready to search flights — specify your departure and arrival airports above to view contemporary schedules, fares, and baggage rules.
         </p>
       </div>
     );
   }
 
+  // Extract search summary metadata
+  const searchSummary = searchResponse.search;
+  const travelersLabel = searchSummary
+    ? `${searchSummary.passengers} ${searchSummary.passengers === 1 ? 'traveler' : 'travelers'}`
+    : '1 traveler';
+  const cabinLabel = searchSummary?.cabin_class
+    ? searchSummary.cabin_class.replace('_', ' ')
+    : 'Economy';
+
   return (
     <div className={`space-y-6 ${className}`} data-testid="flight-results-container">
-      {/* Stale Search Notice Banner */}
+      {/* Comparison limit warning modal/banner */}
+      {comparisonLimitWarning && (
+        <div
+          className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-950 text-xs flex items-center justify-between gap-3 animate-in fade-in"
+          data-testid="comparison-limit-banner"
+        >
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+            <span>
+              <strong>Comparison limit reached.</strong> Remove one flight to compare another.
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setComparisonLimitWarning(false)}
+            className="text-amber-800 hover:text-amber-950 font-bold px-2 cursor-pointer"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {/* Stale Search Notice Banner (Visually de-emphasized results) */}
       {isStale && (
         <div
-          className="flex items-center justify-between p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 shadow-2xs animate-in fade-in"
+          className="p-4 rounded-2xl bg-amber-50/90 border border-amber-200 text-amber-950 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs animate-in fade-in"
           data-testid="stale-search-banner"
         >
-          <div className="flex items-center gap-2.5">
-            <AlertCircle className="w-5 h-5 text-amber-600 shrink-0" />
-            <div>
-              <p className="text-sm font-bold">Search parameters updated</p>
-              <p className="text-xs text-amber-700">
-                You changed your trip parameters above. Re-run search to see current available fares for the new selection.
-              </p>
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 font-bold text-sm text-amber-900">
+              <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+              <span>Search changed</span>
             </div>
+            <p className="text-xs text-amber-800">
+              Search parameters updated.
+            </p>
+            {previousSearchParams && (
+              <p className="text-amber-800">
+                These results are for:{' '}
+                <strong>
+                  {previousSearchParams.origin} → {previousSearchParams.destination} · {previousSearchParams.departureDate}
+                </strong>
+              </p>
+            )}
+            {currentSearchParams && (
+              <p className="text-amber-900 font-medium">
+                Current search:{' '}
+                <strong>
+                  {currentSearchParams.origin} → {currentSearchParams.destination} · {currentSearchParams.departureDate}
+                </strong>
+              </p>
+            )}
           </div>
           {onRefreshSearch && (
             <button
               type="button"
               onClick={onRefreshSearch}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold rounded-xl cursor-pointer transition-colors shadow-2xs shrink-0"
+              className="flex items-center justify-center gap-1.5 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl transition-colors cursor-pointer shrink-0 shadow-2xs"
               data-testid="refresh-search-btn"
             >
               <RefreshCw className="w-3.5 h-3.5" />
-              <span>Update Results</span>
+              <span>Update results</span>
             </button>
           )}
         </div>
       )}
 
-      {/* Provenance and Context Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 bg-slate-50/80 rounded-2xl border border-slate-200/80">
+      {/* Search Summary Header */}
+      <div
+        className={`p-4 rounded-2xl bg-white border border-slate-200/90 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-3 transition-opacity ${
+          isStale ? 'opacity-70' : 'opacity-100'
+        }`}
+        data-testid="search-summary-header"
+      >
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <h2 className="text-base font-bold text-slate-900 font-serif-editorial">
+              {rawOffers.length > 0 ? `${rawOffers.length} options` : 'No flight options found'}
+            </h2>
+            <span className="text-slate-300">·</span>
+            <span className="text-xs font-bold text-orange-600 uppercase">
+              {searchSummary?.origin} → {searchSummary?.destination}
+            </span>
+          </div>
+          <p className="text-xs text-slate-500 font-medium">
+            {searchSummary?.departure_date}
+            {searchSummary?.return_date ? ` – ${searchSummary.return_date}` : ''} · {travelersLabel} ·{' '}
+            <span className="capitalize">{cabinLabel}</span>
+          </p>
+        </div>
+
         <FlightProvenance
           provenance={searchResponse.provenance}
           availabilityState={searchResponse.availability_state}
           retrievedAt={searchResponse.retrieved_at}
         />
-        <div className="text-xs text-slate-500 font-medium">
-          Showing <span className="font-bold text-slate-800">{filteredOffers.length}</span> of{' '}
-          <span className="font-bold text-slate-800">{rawOffers.length}</span> offers
-        </div>
       </div>
 
-      {/* Search Layout Grid: Left Sidebar (Filters), Right Content (Sort + Cards) */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
+      {/* Decision Summary Pill Bar (Cheapest, Fastest, Balanced) */}
+      {filteredOffers.length > 0 && (
+        <div
+          className={`grid grid-cols-1 sm:grid-cols-3 gap-3 transition-opacity ${
+            isStale ? 'opacity-70' : 'opacity-100'
+          }`}
+          data-testid="decision-summary-bar"
+        >
+          {/* Cheapest Metric */}
+          {decisionMetrics.lowestFare !== null && (
+            <div className="p-3.5 rounded-2xl bg-emerald-50/70 border border-emerald-200/80 space-y-0.5">
+              <span className="text-[10px] font-bold tracking-wider uppercase text-emerald-800">
+                Cheapest
+              </span>
+              <div className="text-lg font-bold font-serif-editorial text-emerald-950">
+                ₹{decisionMetrics.lowestFare.toLocaleString('en-IN')}
+              </div>
+              <p className="text-[10px] text-emerald-700">Lowest fare in current catalog</p>
+            </div>
+          )}
+
+          {/* Fastest Metric */}
+          {decisionMetrics.fastestDuration !== null && (
+            <div className="p-3.5 rounded-2xl bg-blue-50/70 border border-blue-200/80 space-y-0.5">
+              <span className="text-[10px] font-bold tracking-wider uppercase text-blue-800">
+                Fastest
+              </span>
+              <div className="text-lg font-bold font-serif-editorial text-blue-950">
+                {formatFlightDuration(decisionMetrics.fastestDuration)}
+              </div>
+              <p className="text-[10px] text-blue-700">Quickest direct or transit flight</p>
+            </div>
+          )}
+
+          {/* Balanced Option Metric */}
+          {decisionMetrics.balancedFare !== null && decisionMetrics.balancedDuration !== null && (
+            <div className="p-3.5 rounded-2xl bg-orange-50/70 border border-orange-200/80 space-y-0.5">
+              <div className="flex items-center gap-1 text-[10px] font-bold tracking-wider uppercase text-orange-800">
+                <Sparkles className="w-3 h-3 text-orange-600" />
+                <span>Balanced</span>
+              </div>
+              <div className="text-lg font-bold font-serif-editorial text-orange-950">
+                ₹{decisionMetrics.balancedFare.toLocaleString('en-IN')}{' '}
+                <span className="text-xs font-normal text-orange-800">
+                  · {formatFlightDuration(decisionMetrics.balancedDuration)}
+                </span>
+              </div>
+              <p className="text-[10px] text-orange-700">Recommended for your trip pacing</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Main Results Layout: Sidebar Filters + Right Column (Sort + Cards) */}
+      <div
+        className={`grid grid-cols-1 lg:grid-cols-[280px,1fr] gap-6 items-start transition-opacity ${
+          isStale ? 'opacity-70' : 'opacity-100'
+        }`}
+      >
         {/* Mobile Filter Toggle */}
-        <div className="lg:hidden col-span-1 flex items-center justify-between">
+        <div className="lg:hidden flex items-center justify-between">
           <button
             type="button"
             onClick={() => setShowMobileFilters(!showMobileFilters)}
-            className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 shadow-2xs"
+            className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 shadow-2xs cursor-pointer"
           >
             <Filter className="w-4 h-4 text-orange-500" />
             <span>{showMobileFilters ? 'Hide Filters' : 'Filter Results'}</span>
@@ -340,26 +444,22 @@ export function FlightResults({
         </div>
 
         {/* Filters Sidebar */}
-        <div
-          className={`lg:col-span-1 ${
-            showMobileFilters ? 'block' : 'hidden lg:block'
-          } sticky top-24`}
-        >
+        <div className={`${showMobileFilters ? 'block' : 'hidden lg:block'} sticky top-24`}>
           <FlightFilters
             filters={filters}
             onChange={setFilters}
             availableAirlines={availableAirlines}
-            minPrice={minCatalogPrice}
-            maxPrice={maxCatalogPrice}
+            minPrice={minPrice}
+            maxPrice={maxPrice}
             totalCount={rawOffers.length}
             filteredCount={filteredOffers.length}
             onReset={handleResetFilters}
           />
         </div>
 
-        {/* Results List Column */}
-        <div className="col-span-1 lg:col-span-3 space-y-4">
-          {/* Sorting Bar */}
+        {/* Right Column: Sort bar + Cards List or Empty Filter Notice */}
+        <div className="space-y-4">
+          {/* Sorting Bar + Compare Trigger */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <FlightSort currentSort={currentSort} onSortChange={setCurrentSort} />
 
@@ -367,7 +467,7 @@ export function FlightResults({
               <button
                 type="button"
                 onClick={() => setIsComparisonOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-xs font-bold shadow-2xs transition-all cursor-pointer"
+                className="flex items-center gap-1.5 px-3.5 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-xl text-xs font-bold shadow-2xs transition-all cursor-pointer shrink-0"
                 data-testid="open-comparison-btn"
               >
                 <Scale className="w-3.5 h-3.5" />
@@ -376,23 +476,30 @@ export function FlightResults({
             )}
           </div>
 
-          {/* Cards List or Empty Filter State */}
+          {/* Cards List or Empty State after filtering */}
           {sortedOffers.length === 0 ? (
             <div
-              className="py-12 px-6 rounded-2xl bg-white border border-slate-200 text-center space-y-3"
+              className="py-12 px-6 rounded-2xl bg-white border border-slate-200 text-center space-y-3 shadow-2xs"
               data-testid="no-matching-flights"
             >
               <Plane className="w-8 h-8 text-slate-300 mx-auto" />
-              <h4 className="font-bold text-slate-800 text-sm">No Flights Match Your Filters</h4>
+              <h4 className="font-bold text-slate-800 text-sm">No matching flight options</h4>
               <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                Try widening your price range, clearing departure time slots, or enabling additional stops to see more options.
+                Try widening:
+                <br />
+                • Stops
+                <br />
+                • Departure time
+                <br />
+                • Maximum price
               </p>
               <button
                 type="button"
                 onClick={handleResetFilters}
-                className="px-4 py-1.5 text-xs font-bold text-orange-600 bg-orange-50 hover:bg-orange-100 rounded-xl transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-orange-600 bg-orange-50 hover:bg-orange-100 rounded-xl transition-colors cursor-pointer"
               >
-                Reset All Filters
+                <RotateCcw className="w-3 h-3" />
+                <span>Reset All Filters</span>
               </button>
             </div>
           ) : (
@@ -401,6 +508,10 @@ export function FlightResults({
                 const isCompared = comparedOffers.some((o) => o.offer_id === offer.offer_id);
                 const canCompare = isCompared || comparedOffers.length < 3;
                 const isSelected = selectedOfferId === offer.offer_id;
+                const isBalanced = offer.offer_id === decisionMetrics.balancedOffer?.offer_id;
+                const isCheapest = offer.offer_id === decisionMetrics.cheapestOffer?.offer_id;
+                const isFastest = offer.offer_id === decisionMetrics.fastestOffer?.offer_id;
+                const factualReason = computeFactualWhyThisFits(offer, decisionMetrics);
 
                 return (
                   <FlightOfferCard
@@ -411,9 +522,10 @@ export function FlightResults({
                     onToggleCompare={handleToggleCompare}
                     onSelectOffer={onSelectOffer}
                     isSelected={isSelected}
-                    isBalanced={offer.offer_id === balancedOfferId}
-                    isCheapest={offer.offer_id === cheapestOfferId}
-                    isFastest={offer.offer_id === fastestOfferId}
+                    isBalanced={isBalanced}
+                    isCheapest={isCheapest}
+                    isFastest={isFastest}
+                    whyThisFits={factualReason}
                   />
                 );
               })}
@@ -455,7 +567,7 @@ export function FlightResults({
         </aside>
       )}
 
-      {/* Comparison Modal */}
+      {/* Comparison Modal with Responsive Mobile Scroll & Sticky Labels */}
       <FlightComparison
         selectedOffers={comparedOffers}
         isOpen={isComparisonOpen}

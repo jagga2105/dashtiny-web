@@ -53,14 +53,16 @@ function BookingsContent() {
   // Flight search states (Clean defaults — populated via selected Trip)
   const [flightOrigin, setFlightOrigin] = useState('');
   const [flightDest, setFlightDest] = useState('');
+  const [suggestedAirport, setSuggestedAirport] = useState<{ iata_code: string; name: string; city: string } | null>(null);
   const [departureDate, setDepartureDate] = useState('');
   const [returnDate, setReturnDate] = useState('');
   const [passengers, setPassengers] = useState(1);
   const [cabinClass, setCabinClass] = useState('economy');
   const [tripType, setTripType] = useState<'round' | 'oneway'>('round');
-  const [flightsList, setFlightsList] = useState<any[]>([]);
+  const [rawFlights, setRawFlights] = useState<FlightOffer[]>([]);
   const [flightResponse, setFlightResponse] = useState<FlightSearchResponse | null>(null);
   const [lastSearchedParams, setLastSearchedParams] = useState<FlightSearchParams | null>(null);
+  const [currentLiveFlightParams, setCurrentLiveFlightParams] = useState<FlightSearchParams | null>(null);
   const [isSearchingFlights, setIsSearchingFlights] = useState(false);
   const [flightError, setFlightError] = useState<string | null>(null);
   const [activeProposal, setActiveProposal] = useState<any | null>(null);
@@ -68,84 +70,7 @@ function BookingsContent() {
   const [proposalSuccess, setProposalSuccess] = useState<string | null>(null);
 
   // Stale search tracking
-  const [lastSearchedFlightKey, setLastSearchedFlightKey] = useState<string>('');
   const [lastSearchedHotelKey, setLastSearchedHotelKey] = useState<string>('');
-
-  const currentFlightKey = `${flightOrigin}-${flightDest}-${departureDate}-${returnDate}-${passengers}-${cabinClass}-${tripType}`;
-
-  const lowestFareFlight = flightsList.length > 0
-    ? flightsList.reduce((min, f) => (f.price < min.price ? f : min), flightsList[0])
-    : null;
-
-  const parseDurationMinutes = (dur?: string): number => {
-    if (!dur) return 9999;
-    const matchH = dur.match(/(\d+)\s*h/);
-    const matchM = dur.match(/(\d+)\s*m/);
-    const hours = matchH ? parseInt(matchH[1], 10) : 0;
-    const mins = matchM ? parseInt(matchM[1], 10) : 0;
-    return hours * 60 + mins;
-  };
-
-  const fastestFlight = flightsList.length > 0
-    ? flightsList.reduce((fastest, f) => {
-        const fMinutes = typeof f.duration_minutes === 'number' && f.duration_minutes > 0
-          ? f.duration_minutes
-          : parseDurationMinutes(f.duration);
-        const fastestMinutes = typeof fastest.duration_minutes === 'number' && fastest.duration_minutes > 0
-          ? fastest.duration_minutes
-          : parseDurationMinutes(fastest.duration);
-        return fMinutes < fastestMinutes ? f : fastest;
-      }, flightsList[0])
-    : null;
-
-  // Best Value Recommendation: balances direct transit, duration under 3h, and reasonable price
-  const recommendedFlight = flightsList.length > 0
-    ? (flightsList.find((f) => {
-        const dur = typeof f.duration_minutes === 'number' && f.duration_minutes > 0 ? f.duration_minutes : parseDurationMinutes(f.duration);
-        return (!f.stops || f.stops === 0) && dur <= 180 && f.id !== lowestFareFlight?.id;
-      }) || flightsList[0])
-    : null;
-
-  const getBookingProvenanceBadge = (provenance?: string) => {
-    const prov = (provenance || '').toUpperCase();
-    if (prov === 'VERIFIED' || prov === 'PROVIDER_VERIFIED') {
-      return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-semibold border border-emerald-200">
-          <ShieldCheck className="w-3 h-3 text-emerald-600" />
-          Provider verified
-        </span>
-      );
-    }
-    if (prov === 'SAVED_REFERENCE' || prov === 'USER_PROVIDED') {
-      return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[10px] font-semibold border border-slate-300">
-          <Ticket className="w-3 h-3 text-slate-500" />
-          Saved reference (Unverified)
-        </span>
-      );
-    }
-    if (prov === 'CURATED') {
-      return (
-        <span title="Curated travel catalog offer with estimated availability" className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-50 text-slate-700 text-[10px] font-medium border border-slate-200">
-          <CheckCircle2 className="w-3 h-3 text-slate-500" />
-          Curated travel catalog
-        </span>
-      );
-    }
-    if (prov === 'ESTIMATED') {
-      return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 text-[10px] font-medium border border-amber-200">
-          <Sparkles className="w-3 h-3 text-amber-500" />
-          Estimated price
-        </span>
-      );
-    }
-    return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-50 text-slate-600 text-[10px] font-medium border border-slate-200">
-        Demo inventory
-      </span>
-    );
-  };
 
   // Hotel search states (Clean defaults — populated via selected Trip)
   const [hotelDest, setHotelDest] = useState('');
@@ -165,7 +90,20 @@ function BookingsContent() {
   };
 
   const currentHotelKey = `${hotelDest}-${hotelGuests}-${hotelCheckIn}-${hotelCheckOut}`;
-  const isFlightSearchStale = lastSearchedFlightKey !== '' && lastSearchedFlightKey !== currentFlightKey && flightsList.length > 0;
+  const isFlightSearchStale = Boolean(
+    lastSearchedParams &&
+    currentLiveFlightParams &&
+    rawFlights.length > 0 &&
+    (
+      lastSearchedParams.origin !== currentLiveFlightParams.origin ||
+      lastSearchedParams.destination !== currentLiveFlightParams.destination ||
+      lastSearchedParams.departureDate !== currentLiveFlightParams.departureDate ||
+      (lastSearchedParams.returnDate || '') !== (currentLiveFlightParams.returnDate || '') ||
+      lastSearchedParams.passengers !== currentLiveFlightParams.passengers ||
+      lastSearchedParams.cabinClass !== currentLiveFlightParams.cabinClass ||
+      lastSearchedParams.tripType !== currentLiveFlightParams.tripType
+    )
+  );
   const isHotelSearchStale = lastSearchedHotelKey !== '' && lastSearchedHotelKey !== currentHotelKey && hotelsList.length > 0;
 
   // Load initial trips and user reservations
@@ -203,21 +141,30 @@ function BookingsContent() {
         const dest = (match.destination || '').trim();
         setHotelDest(dest);
 
-        // Canonical location resolution: unknown remains unresolved (''), never defaults to GOI
+        // Canonical location resolution:
+        // If explicit 3-letter IATA code, use directly.
+        // If ambiguous city (e.g. Goa, Kyoto, Mumbai), query suggest airport without silent overwrite.
         if (dest) {
           if (/^[A-Za-z]{3}$/.test(dest)) {
             setFlightDest(dest.toUpperCase());
+            setSuggestedAirport(null);
           } else {
             apiService.searchLocations(dest, 1).then((airports) => {
               if (airports && airports.length > 0) {
-                setFlightDest(airports[0].iata_code);
+                setSuggestedAirport({
+                  iata_code: airports[0].iata_code,
+                  name: airports[0].name,
+                  city: airports[0].city,
+                });
               } else {
-                setFlightDest('');
+                setSuggestedAirport(null);
               }
-            }).catch(() => setFlightDest(''));
+            }).catch(() => setSuggestedAirport(null));
+            setFlightDest('');
           }
         } else {
           setFlightDest('');
+          setSuggestedAirport(null);
         }
 
         if (match.origin) {
@@ -275,15 +222,12 @@ function BookingsContent() {
         tripType: params.tripType,
       });
       setFlightResponse(response);
-      setFlightsList(response?.offers || []);
-      setLastSearchedFlightKey(
-        `${params.origin}-${params.destination}-${params.departureDate}-${params.returnDate || ''}-${params.passengers}-${params.cabinClass}-${params.tripType === 'roundtrip' ? 'round' : 'oneway'}`
-      );
+      setRawFlights(response?.offers || []);
     } catch (err: any) {
       console.error('Failed to search flights:', err);
-      setFlightError(err?.message || 'Unable to connect to DashTiny flight search. Please verify parameters.');
+      setFlightError('We couldn’t load flight options. Please try again.');
       setFlightResponse(null);
-      setFlightsList([]);
+      setRawFlights([]);
     } finally {
       setIsSearchingFlights(false);
     }
@@ -572,15 +516,22 @@ function BookingsContent() {
           })}
         </div>
 
-        {/* FLIGHTS TAB — L2 Modular Architecture */}
+        {/* FLIGHTS TAB — L2.1 Modular Architecture */}
         {activeCategory === 'flights' && (
           <section className="space-y-6">
-            {/* Active Trip Context Bar */}
+            {/* Active Trip Context Bar with Date/Traveler application and Suggested Airport */}
             <FlightTripContext
               activeTrips={activeTrips}
               selectedTripId={selectedTripId}
               onSelectTrip={(id) => setSelectedTripId(id)}
               onClearTrip={() => setSelectedTripId('')}
+              onApplyTripDates={(start, end) => {
+                setDepartureDate(start);
+                if (end) setReturnDate(end);
+              }}
+              onApplyTripTravelers={(travelers) => setPassengers(travelers)}
+              suggestedAirport={suggestedAirport}
+              onApplySuggestedAirport={(code) => setFlightDest(code)}
             />
 
             {/* Flight Search Form with L1 Airport Autocomplete & Client Validation */}
@@ -594,6 +545,7 @@ function BookingsContent() {
               initialTripType={tripType === 'round' ? 'roundtrip' : 'oneway'}
               isLoading={isSearchingFlights}
               onSearch={handleSearchFlights}
+              onParamsChange={setCurrentLiveFlightParams}
             />
 
             {/* Proposal Generation Progress */}
@@ -693,9 +645,12 @@ function BookingsContent() {
               isLoading={isSearchingFlights}
               error={flightError}
               isStale={isFlightSearchStale}
+              previousSearchParams={lastSearchedParams}
+              currentSearchParams={currentLiveFlightParams}
               onRefreshSearch={() => lastSearchedParams && handleSearchFlights(lastSearchedParams)}
               selectedOfferId={activeProposal?.changes?.flight_offer?.offer_id}
               onSelectOffer={handleSelectFlightOffer}
+              onRetrySearch={() => lastSearchedParams && handleSearchFlights(lastSearchedParams)}
             />
           </section>
         )}

@@ -3,7 +3,6 @@
 import React from 'react';
 import {
   Plane,
-  ArrowRight,
   Luggage,
   ShieldCheck,
   ExternalLink,
@@ -14,6 +13,7 @@ import {
   Scale,
 } from 'lucide-react';
 import { FlightOffer } from '@/types/flight';
+import { formatFlightDuration } from '@/lib/flight/ranking';
 
 interface FlightOfferCardProps {
   offer: FlightOffer;
@@ -25,6 +25,7 @@ interface FlightOfferCardProps {
   isBalanced?: boolean;
   isCheapest?: boolean;
   isFastest?: boolean;
+  whyThisFits?: string | null;
   className?: string;
 }
 
@@ -38,13 +39,27 @@ export function FlightOfferCard({
   isBalanced = false,
   isCheapest = false,
   isFastest = false,
+  whyThisFits,
   className = '',
 }: FlightOfferCardProps) {
-  const formatDuration = (minutes: number) => {
-    const h = Math.floor(minutes / 60);
-    const m = minutes % 60;
-    return `${h}h ${m > 0 ? `${m}m` : ''}`.trim();
-  };
+  // Enforce single primary winner label hierarchy:
+  // Balanced option > Lowest fare > Fastest
+  const primaryBadge = isBalanced ? (
+    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-orange-100 text-orange-800 text-[10px] font-bold tracking-wide uppercase">
+      <Sparkles className="w-3 h-3 text-orange-600" />
+      Balanced option
+    </span>
+  ) : isCheapest ? (
+    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold tracking-wide uppercase">
+      Lowest fare
+    </span>
+  ) : isFastest ? (
+    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800 text-[10px] font-bold tracking-wide uppercase">
+      Fastest
+    </span>
+  ) : null;
+
+  const factualReason = whyThisFits || offer.why_recommended;
 
   return (
     <div
@@ -55,32 +70,17 @@ export function FlightOfferCard({
       } ${className}`}
       data-testid={`flight-card-${offer.offer_id}`}
     >
-      {/* Dynamic Recommendation Badges */}
+      {/* Badges Header with single winner label hierarchy */}
       <div className="flex flex-wrap items-center justify-between gap-2 mb-3.5">
         <div className="flex flex-wrap items-center gap-1.5">
-          {isBalanced && (
-            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-orange-100 text-orange-800 text-[10px] font-bold tracking-wide uppercase">
-              <Sparkles className="w-3 h-3 text-orange-600" />
-              Balanced option
-            </span>
-          )}
-          {isCheapest && (
-            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold tracking-wide uppercase">
-              Lowest fare
-            </span>
-          )}
-          {isFastest && !isBalanced && (
-            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800 text-[10px] font-bold tracking-wide uppercase">
-              Fastest flight
-            </span>
-          )}
+          {primaryBadge}
           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[10px] font-medium border border-slate-200">
             <CheckCircle2 className="w-3 h-3 text-slate-500" />
             Curated catalog
           </span>
         </div>
 
-        {/* Compare Checkbox / Toggle */}
+        {/* Compare Checkbox / Toggle Button */}
         {onToggleCompare && (
           <button
             type="button"
@@ -106,7 +106,7 @@ export function FlightOfferCard({
         <div className="space-y-3">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg bg-orange-50 border border-orange-200/60 flex items-center justify-center font-bold text-xs text-orange-700">
-              {offer.airline.substring(0, 2).toUpperCase()}
+              {offer.airline ? offer.airline.substring(0, 2).toUpperCase() : 'FL'}
             </div>
             <div>
               <div className="flex items-center gap-2">
@@ -114,7 +114,8 @@ export function FlightOfferCard({
                 <span className="text-xs text-slate-500 font-medium">({offer.flight_number})</span>
               </div>
               <p className="text-[11px] text-slate-400 font-medium capitalize">
-                {offer.cabin_class.replace('_', ' ')} · {offer.trip_type === 'roundtrip' ? 'Round-trip' : 'One-way'}
+                {offer.cabin_class ? offer.cabin_class.replace('_', ' ') : 'Economy'} ·{' '}
+                {offer.trip_type === 'roundtrip' ? 'Round-trip' : 'One-way'}
               </p>
             </div>
           </div>
@@ -138,7 +139,7 @@ export function FlightOfferCard({
             <div className="flex flex-col items-center px-2 min-w-[110px]">
               <span className="text-[11px] font-semibold text-slate-500 flex items-center gap-1">
                 <Clock className="w-3 h-3 text-slate-400" />
-                {formatDuration(offer.duration_minutes)}
+                {formatFlightDuration(offer.duration_minutes)}
               </span>
               <div className="w-full flex items-center gap-1 my-1">
                 <div className="h-0.5 flex-1 bg-slate-300" />
@@ -166,32 +167,36 @@ export function FlightOfferCard({
 
           {/* Perks & Inclusions */}
           <div className="flex flex-wrap items-center gap-3 pt-2 text-[11px] text-slate-600">
-            <span className="inline-flex items-center gap-1">
-              <Luggage className="w-3.5 h-3.5 text-slate-400" />
-              {offer.baggage}
-            </span>
-            <span className="inline-flex items-center gap-1">
-              <ShieldCheck className="w-3.5 h-3.5 text-slate-400" />
-              {offer.cancellation}
-            </span>
+            {offer.baggage ? (
+              <span className="inline-flex items-center gap-1">
+                <Luggage className="w-3.5 h-3.5 text-slate-400" />
+                {offer.baggage}
+              </span>
+            ) : null}
+            {offer.cancellation ? (
+              <span className="inline-flex items-center gap-1">
+                <ShieldCheck className="w-3.5 h-3.5 text-slate-400" />
+                {offer.cancellation}
+              </span>
+            ) : null}
           </div>
 
-          {/* Why Recommended Pill */}
-          {offer.why_recommended && (
+          {/* Factual Why This Fits Explanation */}
+          {factualReason && (
             <p className="text-[11px] text-orange-950/80 bg-orange-50/70 border border-orange-100/90 rounded-lg px-2.5 py-1.5 italic">
-              💡 {offer.why_recommended}
+              💡 {factualReason}
             </p>
           )}
         </div>
 
-        {/* Right: Pricing & CTA */}
+        {/* Right: Pricing & CTAs */}
         <div className="flex flex-col md:items-end justify-between border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-6 space-y-3">
           <div className="md:text-right">
             <span className="text-[11px] text-slate-500 font-medium">Total fare:</span>
             <div className="text-xl sm:text-2xl font-bold font-serif-editorial text-slate-900">
               ₹{offer.price.toLocaleString('en-IN')}
             </div>
-            {offer.passengers > 1 && (
+            {offer.passengers > 1 && offer.per_passenger_price && (
               <p className="text-[11px] text-slate-500">
                 ₹{offer.per_passenger_price.toLocaleString('en-IN')} / person
               </p>
@@ -211,17 +216,19 @@ export function FlightOfferCard({
             </button>
 
             {/* Transparent External Link: Continue to Provider */}
-            <a
-              href={offer.deep_link}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center justify-center gap-1 px-3 py-1.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-colors cursor-pointer"
-              title={`Visit official ${offer.airline} portal`}
-              data-testid={`deep-link-${offer.offer_id}`}
-            >
-              <span>Continue to provider</span>
-              <ExternalLink className="w-3 h-3 text-slate-400" />
-            </a>
+            {offer.deep_link ? (
+              <a
+                href={offer.deep_link}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center justify-center gap-1 px-3 py-1.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-colors cursor-pointer"
+                title={`Visit official ${offer.airline} portal`}
+                data-testid={`deep-link-${offer.offer_id}`}
+              >
+                <span>Continue to provider</span>
+                <ExternalLink className="w-3 h-3 text-slate-400" />
+              </a>
+            ) : null}
           </div>
         </div>
       </div>

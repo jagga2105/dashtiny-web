@@ -3,6 +3,7 @@
 import React from 'react';
 import { Filter, RotateCcw, Clock, Plane, DollarSign } from 'lucide-react';
 import { FlightFilterState, TimeSlotId } from '@/types/flight';
+import { DEPARTURE_SLOTS, ARRIVAL_SLOTS } from '@/lib/flight/filtering';
 
 interface AirlineCount {
   name: string;
@@ -20,14 +21,6 @@ interface FlightFiltersProps {
   onReset: () => void;
   className?: string;
 }
-
-const DEPARTURE_SLOTS: { id: TimeSlotId; label: string; desc: string }[] = [
-  { id: 'early_morning', label: 'Early Morning', desc: 'Before 6 AM' },
-  { id: 'morning', label: 'Morning', desc: '6 AM – 12 PM' },
-  { id: 'afternoon', label: 'Afternoon', desc: '12 PM – 6 PM' },
-  { id: 'evening', label: 'Evening', desc: '6 PM – 10 PM' },
-  { id: 'night', label: 'Night', desc: 'After 10 PM' },
-];
 
 export function FlightFilters({
   filters,
@@ -70,10 +63,21 @@ export function FlightFilters({
     onChange({ ...filters, departureSlots: Array.from(current) });
   };
 
+  const toggleArrivalSlot = (slotId: TimeSlotId) => {
+    const current = new Set(filters.arrivalSlots || []);
+    if (current.has(slotId)) {
+      current.delete(slotId);
+    } else {
+      current.add(slotId);
+    }
+    onChange({ ...filters, arrivalSlots: Array.from(current) });
+  };
+
   const isFiltered =
     filters.stops.length > 0 ||
     filters.airlines.length > 0 ||
     filters.departureSlots.length > 0 ||
+    (filters.arrivalSlots && filters.arrivalSlots.length > 0) ||
     filters.maxPrice < maxPrice;
 
   return (
@@ -178,7 +182,7 @@ export function FlightFilters({
         </div>
       )}
 
-      {/* Price Range Slider */}
+      {/* Max Price Slider (Explicitly labeled Max Price, not Price range) */}
       {maxPrice > minPrice && (
         <div className="space-y-2 border-t border-slate-100 pt-3">
           <div className="flex items-center justify-between font-semibold text-slate-700">
@@ -198,7 +202,7 @@ export function FlightFilters({
             value={filters.maxPrice}
             onChange={(e) => onChange({ ...filters, maxPrice: Number(e.target.value) })}
             className="w-full accent-orange-500 cursor-pointer"
-            data-testid="filter-price-range"
+            data-testid="filter-max-price"
           />
           <div className="flex justify-between text-[10px] text-slate-400 font-medium">
             <span>₹{minPrice.toLocaleString('en-IN')}</span>
@@ -233,6 +237,43 @@ export function FlightFilters({
                     type="checkbox"
                     checked={isChecked}
                     onChange={() => toggleDepartureSlot(slot.id)}
+                    className="rounded border-slate-300 text-orange-600 focus:ring-orange-500 cursor-pointer"
+                  />
+                  <span className="font-medium text-slate-700 text-xs">{slot.label}</span>
+                </div>
+                <span className="text-[10px] text-slate-400">{slot.desc}</span>
+              </label>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Arrival Time Slots */}
+      <div className="space-y-2 border-t border-slate-100 pt-3">
+        <div className="font-semibold text-slate-700 flex items-center justify-between">
+          <span className="flex items-center gap-1">
+            <Clock className="w-3.5 h-3.5 text-slate-400" />
+            Arrival Time
+          </span>
+          {filters.arrivalSlots && filters.arrivalSlots.length > 0 && (
+            <span className="text-[10px] text-orange-600 font-medium">
+              {filters.arrivalSlots.length} active
+            </span>
+          )}
+        </div>
+        <div className="space-y-1.5">
+          {ARRIVAL_SLOTS.map((slot) => {
+            const isChecked = (filters.arrivalSlots || []).includes(slot.id);
+            return (
+              <label
+                key={slot.id}
+                className="flex items-center justify-between gap-2 p-1.5 rounded-lg hover:bg-slate-50 cursor-pointer"
+              >
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={isChecked}
+                    onChange={() => toggleArrivalSlot(slot.id)}
                     className="rounded border-slate-300 text-orange-600 focus:ring-orange-500 cursor-pointer"
                   />
                   <span className="font-medium text-slate-700 text-xs">{slot.label}</span>
