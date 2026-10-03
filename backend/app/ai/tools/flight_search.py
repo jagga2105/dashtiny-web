@@ -5,8 +5,8 @@ Normalizes offers across Skyscanner, IndiGo, Air India, Akasa into FlightOffer s
 from typing import List, Dict, Any
 
 def search_flights(
-    origin: str = "BLR",
-    destination: str = "GOI",
+    origin: str,
+    destination: str,
     date: str = None,
     return_date: str = None,
     passengers: int = 1,
@@ -14,12 +14,14 @@ def search_flights(
     trip_type: str = "roundtrip"
 ) -> List[Dict[str, Any]]:
     """
-    Search and normalize flight inventory.
+    Search and normalize flight inventory for explicit origin and destination.
     Returns list of FlightOffer objects with CURATED/DEMO provenance.
     Scales pricing and terms based on passengers, cabin class, and trip type.
     """
-    origin_clean = origin.upper().strip() if origin else "BLR"
-    dest_clean = destination.upper().strip() if destination else "GOI"
+    origin_clean = origin.upper().strip() if origin else ""
+    dest_clean = destination.upper().strip() if destination else ""
+    if not origin_clean or not dest_clean:
+        return []
     num_pax = max(1, passengers or 1)
     cabin = (cabin_class or "economy").lower()
     is_roundtrip = (trip_type or "roundtrip").lower() == "roundtrip"

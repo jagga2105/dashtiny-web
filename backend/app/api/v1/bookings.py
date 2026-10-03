@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.db.database import get_db
-from app.models.models import Booking, User, UserProfile, Itinerary, SquadRoom, SquadMember
+from app.models.models import Booking, User, UserProfile, Itinerary, SquadRoom, SquadMember, RewardTransaction
 from app.api.deps import get_current_user
 
 from app.ai.tools.flight_search import search_flights
@@ -29,8 +29,8 @@ class CreateBookingRequest(BaseModel):
 
 @router.get("/search/flights")
 def search_flights_endpoint(
-    origin: str = "BLR",
-    destination: str = "GOI",
+    origin: str,
+    destination: str,
     departure_date: Optional[str] = None,
     return_date: Optional[str] = None,
     passengers: int = 1,
@@ -39,7 +39,7 @@ def search_flights_endpoint(
 ):
     """
     Search and normalize live flight inventory into FlightOffer schema.
-    Consumes departure_date, return_date, passengers, cabin_class, and trip_type.
+    Requires explicit search intent: origin and destination.
     """
     return search_flights(
         origin=origin,
@@ -53,7 +53,7 @@ def search_flights_endpoint(
 
 @router.get("/search/hotels")
 def search_hotels_endpoint(
-    destination: str = "Goa",
+    destination: str,
     guests: int = 2,
     check_in: Optional[str] = None,
     check_out: Optional[str] = None,
@@ -61,7 +61,7 @@ def search_hotels_endpoint(
 ):
     """
     Search and normalize live stays inventory into HotelOffer schema.
-    Consumes destination, guests, check_in, check_out, and room_type.
+    Requires explicit search intent: destination.
     """
     return search_hotels(
         destination=destination,
@@ -82,6 +82,8 @@ def create_booking(
     Truth boundary: User-provided booking reference carries status=saved_reference,
     provenance=SAVED_REFERENCE, source=USER_PROVIDED, verification=UNVERIFIED.
     Only partner-confirmed API webhooks carry PROVIDER_VERIFIED.
+    Enforces UNIQUE(provider, pnr_ref), avoids fake auto-generated PNRs, and awards
+    reward coins through an idempotent ledger transaction.
     """
     # Verify Trip ownership / membership if trip_id is provided
     if request.trip_id:
@@ -102,9 +104,19 @@ def create_booking(
                 detail="You do not have access to attach bookings to this trip."
             )
 
-    category_prefix = request.category[:2].upper()
-    random_num = random.randint(10000, 99999)
-    pnr_code = request.pnr_ref or f"DASH-REF-{category_prefix}-{random_num}"
+    pnr_clean = request.pnr_ref.strip() if request.pnr_ref and request.pnr_ref.strip() else None
+
+    # Enforce UNIQUE(provider, pnr_ref)
+    if pnr_clean:
+        existing_booking = db.query(Booking).filter(
+            Booking.provider == request.provider,
+            Booking.pnr_ref == pnr_clean
+        ).first()
+        if existing_booking:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"A booking reference for provider '{request.provider}' with PNR/Ref '{pnr_clean}' already exists."
+            )
 
     merged_details = dict(request.details or {})
     merged_details.setdefault("source", "USER_PROVIDED")
@@ -119,16 +131,42 @@ def create_booking(
         amount=request.amount,
         currency=request.currency or "INR",
         status="saved_reference",
-        pnr_ref=pnr_code,
+        pnr_ref=pnr_clean,
         provenance="SAVED_REFERENCE",
         details=merged_details
     )
     db.add(new_booking)
+    db.flush()  # assign new_booking.id
 
-    # Award reward coins (+50 coins for saving booking reference)
-    profile = db.query(UserProfile).filter(UserProfile.user_id == user.id).first()
-    if profile:
-        profile.reward_coins = (profile.reward_coins or 0) + 50
+    # Reward Ledger with Idempotency
+    # Only genuine provided PNR references earn coins; drafts without PNR do not earn rewards.
+    coins_earned = 0
+    profile = db.query(UserProfile).filter(UserProfile.user_id == user.id).with_for_update().first()
+    if not profile:
+        profile = UserProfile(user_id=user.id, reward_coins=0)
+        db.add(profile)
+        db.flush()
+
+    if pnr_clean and len(pnr_clean) >= 3:
+        idempotency_key = f"booking_reward_{request.provider}_{pnr_clean}"
+        existing_tx = db.query(RewardTransaction).filter(
+            RewardTransaction.idempotency_key == idempotency_key
+        ).first()
+        if not existing_tx:
+            profile.reward_coins = (profile.reward_coins or 0) + 50
+            coins_earned = 50
+            tx = RewardTransaction(
+                user_id=user.id,
+                delta=50,
+                balance_after=profile.reward_coins,
+                type="BOOKING_SAVED",
+                reason=f"Saved verified booking reference for {request.provider} ({pnr_clean})",
+                reference_type="booking",
+                reference_id=new_booking.id,
+                idempotency_key=idempotency_key,
+                metadata_json={"provider": request.provider, "pnr_ref": pnr_clean, "booking_id": new_booking.id}
+            )
+            db.add(tx)
 
     db.commit()
     db.refresh(new_booking)
@@ -146,8 +184,8 @@ def create_booking(
         "provenance": "SAVED_REFERENCE",
         "source": "USER_PROVIDED",
         "verification": "UNVERIFIED",
-        "coins_earned": 50,
-        "total_coins": profile.reward_coins if profile else 50,
+        "coins_earned": coins_earned,
+        "total_coins": profile.reward_coins,
         "message": f"Booking reference successfully saved to your trip workspace for {new_booking.provider}!"
     }
 

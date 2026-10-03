@@ -1,7 +1,7 @@
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.config import settings
 from app.db.database import get_db
@@ -14,17 +14,29 @@ router = APIRouter(prefix="/trips", tags=["My Trips & Active Passages"])
 def get_my_trips(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """
     Get all active and past itineraries strictly owned by the authenticated user.
+    Uses selectinload to eagerly fetch days, activities, bookings, and squad rooms in batch,
+    completely eliminating N+1 query overhead.
     """
-    itineraries = db.query(Itinerary).filter(Itinerary.owner_id == user.id).order_by(Itinerary.created_at.desc()).all()
+    itineraries = (
+        db.query(Itinerary)
+        .filter(Itinerary.owner_id == user.id)
+        .options(
+            selectinload(Itinerary.days).selectinload(ItineraryDay.activities),
+            selectinload(Itinerary.bookings),
+            selectinload(Itinerary.squad_room)
+        )
+        .order_by(Itinerary.created_at.desc())
+        .all()
+    )
 
     results = []
     for it in itineraries:
-        days = db.query(ItineraryDay).filter(ItineraryDay.itinerary_id == it.id).order_by(ItineraryDay.day_number.asc()).all()
-        squad = db.query(SquadRoom).filter(SquadRoom.itinerary_id == it.id).first()
+        squad = it.squad_room
+        sorted_days = sorted(it.days, key=lambda d: d.day_number)
 
         formatted_days = []
-        for d in days:
-            acts = db.query(ItineraryActivity).filter(ItineraryActivity.day_id == d.id).order_by(ItineraryActivity.sort_order.asc()).all()
+        for d in sorted_days:
+            sorted_acts = sorted(d.activities, key=lambda a: a.sort_order)
             formatted_days.append({
                 "id": d.id,
                 "dayNumber": d.day_number,
@@ -47,12 +59,10 @@ def get_my_trips(user: User = Depends(get_current_user), db: Session = Depends(g
                         "whyRecommended": a.why_recommended,
                         "source_citation": a.source_citation
                     }
-                    for a in acts
+                    for a in sorted_acts
                 ]
             })
 
-        # Fetch bookings linked to this specific trip
-        trip_bookings = db.query(Booking).filter(Booking.trip_id == it.id).all()
         formatted_bookings = [
             {
                 "id": b.id,
@@ -70,7 +80,7 @@ def get_my_trips(user: User = Depends(get_current_user), db: Session = Depends(g
                 "created_at": str(b.created_at),
                 "details": b.details
             }
-            for b in trip_bookings
+            for b in it.bookings
         ]
 
         results.append({
@@ -462,6 +472,46 @@ def add_trip_activity(
     }
 
 
+@router.get("/{trip_id}/snapshots")
+def get_trip_snapshots(
+    trip_id: str,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    List versioned trip rollback snapshots available for history and undo.
+    """
+    it = db.query(Itinerary).filter(Itinerary.id == trip_id).first()
+    if not it:
+        raise HTTPException(status_code=404, detail="Trip not found")
+
+    is_owner = (it.owner_id == user.id)
+    squad = db.query(SquadRoom).filter(SquadRoom.itinerary_id == it.id).first()
+    is_member = False
+    if squad:
+        is_member = db.query(SquadMember).filter(
+            SquadMember.squad_id == squad.id,
+            SquadMember.user_id == user.id
+        ).first() is not None
+
+    if not is_owner and not is_member:
+        raise HTTPException(status_code=403, detail="Not authorized to view snapshots for this trip")
+
+    snapshots = db.query(TripSnapshot).filter(
+        TripSnapshot.trip_id == it.id
+    ).order_by(TripSnapshot.version.desc()).all()
+
+    return [
+        {
+            "id": s.id,
+            "version": s.version,
+            "action": s.action,
+            "summary": s.summary,
+            "created_at": str(s.created_at)
+        }
+        for s in snapshots
+    ]
+
 @router.post("/{trip_id}/undo")
 def undo_trip_change(
     trip_id: str,
@@ -470,7 +520,7 @@ def undo_trip_change(
 ):
     """
     Rolls back the most recent AI modification for the specified trip by restoring
-    the latest TripSnapshot and reapplying activities into the database.
+    the highest version TripSnapshot and applying diff updates to preserve stable activity references.
     """
     it = db.query(Itinerary).filter(Itinerary.id == trip_id).first()
     if not it:
@@ -490,44 +540,78 @@ def undo_trip_change(
 
     snapshot = db.query(TripSnapshot).filter(
         TripSnapshot.trip_id == it.id
-    ).order_by(TripSnapshot.created_at.desc()).first()
+    ).order_by(TripSnapshot.version.desc(), TripSnapshot.created_at.desc()).first()
 
     if not snapshot:
         raise HTTPException(status_code=400, detail="No previous trip snapshot available to undo")
 
-    # Restore days_data
+    # Restore days_data using diff-based update to maintain stable activity IDs
     for day_data in snapshot.days_data:
         db_day = db.query(ItineraryDay).filter(ItineraryDay.id == day_data.get("id")).first()
         if db_day:
-            db.query(ItineraryActivity).filter(ItineraryActivity.day_id == db_day.id).delete()
+            existing_acts = {a.id: a for a in db_day.activities}
+            retained_act_ids = set()
+
             for idx, act in enumerate(day_data.get("activities", [])):
-                new_act = ItineraryActivity(
-                    id=act.get("id"),
-                    day_id=db_day.id,
-                    time_slot=act.get("time") or act.get("time_slot") or "10:00 AM",
-                    description=act.get("description", ""),
-                    location=act.get("location", it.destination),
-                    place_type=act.get("place_type") or act.get("placeType") or "TA",
-                    cost_estimate=act.get("cost_estimate") or act.get("costEstimate") or 0.0,
-                    provenance=act.get("provenance") or "DETERMINISTIC",
-                    lat=act.get("lat"),
-                    lng=act.get("lng"),
-                    source_citation=act.get("source_citation") or "Restored Snapshot",
-                    why_recommended=act.get("why_recommended") or act.get("whyRecommended"),
-                    generation_source=act.get("generation_source"),
-                    location_source=act.get("location_source"),
-                    content_source=act.get("content_source"),
-                    sort_order=act.get("sort_order", idx)
-                )
-                db.add(new_act)
+                act_id = act.get("id")
+                time_val = act.get("time") or act.get("time_slot") or "10:00 AM"
+                desc_val = act.get("description", "")
+                loc_val = act.get("location", it.destination)
+                pt_val = act.get("place_type") or act.get("placeType") or "TA"
+                cost_val = float(act.get("cost_estimate") or act.get("costEstimate") or 0.0)
+                prov_val = act.get("provenance") or "DETERMINISTIC"
+                lat_val = act.get("lat")
+                lng_val = act.get("lng")
+                src_val = act.get("source_citation") or "Restored Snapshot"
+                why_val = act.get("why_recommended") or act.get("whyRecommended")
+
+                if act_id and act_id in existing_acts:
+                    db_act = existing_acts[act_id]
+                    db_act.time_slot = time_val
+                    db_act.description = desc_val
+                    db_act.location = loc_val
+                    db_act.place_type = pt_val
+                    db_act.cost_estimate = cost_val
+                    db_act.provenance = prov_val
+                    db_act.lat = lat_val
+                    db_act.lng = lng_val
+                    db_act.source_citation = src_val
+                    db_act.why_recommended = why_val
+                    db_act.sort_order = act.get("sort_order", idx)
+                    retained_act_ids.add(act_id)
+                else:
+                    new_act = ItineraryActivity(
+                        id=act_id if act_id and len(act_id) > 10 else None,
+                        day_id=db_day.id,
+                        time_slot=time_val,
+                        description=desc_val,
+                        location=loc_val,
+                        place_type=pt_val,
+                        cost_estimate=cost_val,
+                        provenance=prov_val,
+                        lat=lat_val,
+                        lng=lat_val,
+                        source_citation=src_val,
+                        why_recommended=why_val,
+                        sort_order=act.get("sort_order", idx)
+                    )
+                    db.add(new_act)
+                    db.flush()
+                    retained_act_ids.add(new_act.id)
+
+            for act_id, act_obj in existing_acts.items():
+                if act_id not in retained_act_ids:
+                    db.delete(act_obj)
 
     # Pop the restored snapshot
+    restored_version = snapshot.version
     db.delete(snapshot)
     db.commit()
 
     return {
         "status": "success",
-        "message": "Trip reverted to previous snapshot",
-        "trip_id": it.id
+        "message": f"Trip successfully reverted to snapshot v{restored_version}",
+        "trip_id": it.id,
+        "restored_version": restored_version
     }
 

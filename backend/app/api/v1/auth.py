@@ -67,7 +67,7 @@ class AuthResponse(BaseModel):
 
 def serialize_user(user: User, db: Session) -> dict:
     profile = db.query(UserProfile).filter(UserProfile.user_id == user.id).first()
-    coins = profile.reward_coins if profile else 250
+    coins = profile.reward_coins if profile else 0
     return {
         "id": user.id,
         "email": user.email,
@@ -75,7 +75,7 @@ def serialize_user(user: User, db: Session) -> dict:
         "avatar_url": user.avatar_url,
         "account_type": user.account_type or "personal_traveler",
         "is_verified": user.is_verified,
-        "trust_score": user.trust_score or "98% Verified Explorer",
+        "trust_score": user.trust_score_display if hasattr(user, 'trust_score_display') else "95% Verified Explorer",
         "coins": coins,
     }
 
@@ -83,6 +83,7 @@ def serialize_user(user: User, db: Session) -> dict:
 def register(request: RegisterRequest, db: Session = Depends(get_db)):
     """
     Register new user in PostgreSQL with bcrypt hashed password.
+    Atomically creates User and UserProfile within a single database transaction.
     """
     existing_user = db.query(User).filter(User.email == request.email).first()
     if existing_user:
@@ -91,21 +92,19 @@ def register(request: RegisterRequest, db: Session = Depends(get_db)):
             detail="An account with this email address already exists. Please log in."
         )
 
-    # Create new user
+    # Atomic user + profile creation in a single transaction
     new_user = User(
         email=request.email,
         password_hash=hash_password(request.password),
         full_name=request.full_name,
         account_type=request.account_type or "personal_traveler",
-        is_verified=True,
-        trust_score="95% Verified Explorer",
+        is_verified=False,
+        trust_score=95.0,
         avatar_url="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80"
     )
     db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
+    db.flush()  # Allocates new_user.id without committing
 
-    # Create user profile with 300 welcome coins
     user_profile = UserProfile(
         user_id=new_user.id,
         home_city="Bengaluru",
@@ -113,7 +112,8 @@ def register(request: RegisterRequest, db: Session = Depends(get_db)):
         travel_vibes=["Beach", "Mountains"]
     )
     db.add(user_profile)
-    db.commit()
+    db.commit()  # Single atomic commit
+    db.refresh(new_user)
 
     token = create_access_token({"sub": new_user.id, "email": new_user.email})
     return {

@@ -11,7 +11,7 @@ from sqlalchemy.pool import StaticPool
 from fastapi.testclient import TestClient
 
 from app.db.database import Base, get_db
-from app.models.models import User
+from app.models.models import User, UserProfile, RewardVoucher
 from app.api.deps import get_current_user
 from app.main import app
 
@@ -28,6 +28,39 @@ TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engin
 @pytest.fixture(scope="session", autouse=True)
 def setup_test_db():
     Base.metadata.create_all(bind=engine)
+    # Seed default vouchers for testing
+    session = TestingSessionLocal()
+    defaults = [
+        RewardVoucher(
+            id="vch_01",
+            brand="Taj Hotels & Palaces",
+            discount="₹3,000 Off Luxury Stays",
+            coin_cost=150,
+            category="Stays",
+            code="TAJ-DASHTINY-3K"
+        ),
+        RewardVoucher(
+            id="vch_02",
+            brand="IndiGo Getaway Pass",
+            discount="15% Cashback on Flights",
+            coin_cost=200,
+            category="Flights",
+            code="6E-ESCAPE-15"
+        ),
+        RewardVoucher(
+            id="vch_03",
+            brand="Airbnb Sanctuaries",
+            discount="₹2,500 Squad Discount",
+            coin_cost=100,
+            category="Villas",
+            code="AIRBNB-SQUAD-25"
+        )
+    ]
+    for d in defaults:
+        session.add(d)
+    session.commit()
+    session.close()
+
     yield
     Base.metadata.drop_all(bind=engine)
 
@@ -61,6 +94,12 @@ def test_user(db_session):
         password_hash="testhash"
     )
     db_session.add(user)
+    db_session.flush()
+    profile = UserProfile(
+        user_id=user.id,
+        reward_coins=500
+    )
+    db_session.add(profile)
     db_session.commit()
     db_session.refresh(user)
     return user
