@@ -96,6 +96,61 @@ class TravelerBrief(BaseModel):
         return lower if lower in VALID_STYLES else "daily"
 
     @classmethod
+    def from_inputs(
+        cls,
+        destination: str,
+        days_count: int = 4,
+        origin: Optional[str] = None,
+        start_date_str: Optional[str] = None,
+        end_date_str: Optional[str] = None,
+        travelers: int = 2,
+        budget: float = 0.0,
+        currency: str = "INR",
+        pace: str = "balanced",
+        persona: str = "solo",
+        vibe: Optional[str] = None,
+        interests: Optional[List[str]] = None,
+        wake_up_preference: str = "balanced",
+        accommodation_preference: str = "comfort",
+        transport_preference: str = "mix",
+        food_preferences: Optional[List[str]] = None,
+        trip_type: str = "leisure",
+        travel_mode: str = "flight",
+        daily_schedule: str = "balanced",
+        itinerary_style: str = "daily",
+        stopovers: Optional[List[Any]] = None,
+        **kwargs
+    ) -> "TravelerBrief":
+        """
+        Convenience factory constructing TravelerBrief from individual arguments.
+        """
+        data = {
+            "destination": destination,
+            "days_count": days_count,
+            "origin": origin,
+            "start_date": start_date_str or kwargs.get("start_date"),
+            "end_date": end_date_str or kwargs.get("end_date"),
+            "travellers": travelers if travelers is not None else kwargs.get("travellers", 2),
+            "budget": budget,
+            "currency": currency,
+            "pace": pace,
+            "persona": persona,
+            "vibe": vibe,
+            "interests": interests or ["sightseeing", "food"],
+            "wake_up_preference": wake_up_preference,
+            "accommodation_preference": accommodation_preference,
+            "transport_preference": transport_preference,
+            "food_preferences": food_preferences or ["any"],
+            "trip_type": trip_type,
+            "travel_mode": travel_mode,
+            "daily_schedule": daily_schedule,
+            "itinerary_style": itinerary_style,
+            "stopovers": stopovers or [],
+            **kwargs
+        }
+        return cls.from_request(data)
+
+    @classmethod
     def from_request(cls, req: Any) -> "TravelerBrief":
         """
         Constructs a canonical TravelerBrief from FastAPI request schemas or dicts.

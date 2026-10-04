@@ -23,31 +23,33 @@ export const TripBookings: React.FC<TripBookingsProps> = ({
           <h3 className="text-xl font-serif-editorial font-bold text-slate-900">Tickets & Accommodations</h3>
           <p className="text-xs text-slate-500">Reservations attached to this Trip Workspace</p>
         </div>
-        <Button
-          variant="primary"
-          size="sm"
-          onClick={onAddBooking}
-          className="bg-orange-600 hover:bg-orange-700 text-white font-semibold text-xs shadow-sm cursor-pointer"
-        >
-          + Add Flight or Stay
-        </Button>
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-full">
+            Bookings coming soon
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onAddBooking}
+            className="text-stone-600 hover:text-stone-900 border-stone-300 font-semibold text-xs shadow-2xs cursor-pointer"
+          >
+            View Details
+          </Button>
+        </div>
       </div>
 
       {bookings.length === 0 ? (
-        <Card className="p-8 text-center space-y-3 rounded-3xl bg-white border border-slate-200 shadow-sm">
+        <Card className="p-8 text-center space-y-3 rounded-3xl bg-white border border-slate-200 shadow-2xs">
           <Ticket className="w-10 h-10 text-orange-400 mx-auto" />
-          <h4 className="text-base font-semibold text-slate-800">No Reservations Linked Yet</h4>
-          <p className="text-xs text-slate-500 max-w-sm mx-auto">
-            Search and compare flights or hotels to attach your confirmed reservation reference to this trip.
+          <h4 className="text-base font-semibold text-slate-800">Bookings are coming soon — stay tuned</h4>
+          <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
+            We&apos;re building trusted booking integrations. In the meantime, all activities, routes, and schedule items in your Trip Workspace are completely active and editable.
           </p>
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={onAddBooking}
-            className="bg-orange-600 hover:bg-orange-700 text-white font-semibold text-xs mt-2"
-          >
-            Compare Flights & Stays
-          </Button>
+          <div className="pt-2">
+            <span className="inline-block text-[11px] font-medium text-stone-500 bg-stone-100 px-3 py-1 rounded-full border border-stone-200">
+              Direct Flight & Stay Booking · In Progress
+            </span>
+          </div>
         </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

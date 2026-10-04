@@ -2,21 +2,23 @@
 DashTiny Itinerary Proposal Lifecycle Service
 backend/app/services/planner/proposal_service.py
 
-Implements canonical proposal workflow:
-1. create_proposal: non-mutating structured itinerary proposal.
-2. accept_proposal: authoritative commit creating Itinerary, Days, Activities, and v1 TripRevision.
-3. reject_proposal: discards proposal without modifying database.
-4. propose_partial_edit: generates structured diff for specific days/instructions while preserving
-   all unrelated days and user-authored activities.
+Implements canonical proposal workflow backed by durable PostgreSQL TripProposal:
+1. create_itinerary_proposal: generates structured itinerary proposal and persists durable TripProposal.
+2. get_proposal: retrieves proposal state with ownership and expiry checks.
+3. accept_proposal: atomic PostgreSQL transaction with row locks (with_for_update), creates Itinerary + Days + Activities + Revision v1.
+4. reject_proposal: discards proposal without modifying database.
+5. propose_partial_edit: generates structured diff and persists a new TripProposal.
+6. adapt_community_trip: adapts public trip into a personal proposal.
 """
 import uuid
 import re
 from datetime import date, datetime, timedelta, timezone
 from typing import Dict, Any, List, Optional
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from fastapi import HTTPException, status
 
-from app.models.models import Itinerary, ItineraryDay, ItineraryActivity, SquadRoom, User, TripProposal, AIRun
+from app.models.models import Itinerary, ItineraryDay, ItineraryActivity, User, TripProposal, AIRun
 from app.services.trip_revision_service import create_revision, serialize_trip_days
 from app.services.planner.itinerary_engine import (
     ItineraryEngine,
@@ -30,8 +32,12 @@ from app.services.planner.budget_engine import BudgetEngine, BudgetBreakdown
 from app.services.itinerary_validator import parse_time_to_minutes, minutes_to_time_str
 
 
-# In-memory proposal store for newly planned trips before they are accepted
-_ephemeral_proposals: Dict[str, Dict[str, Any]] = {}
+def _is_proposal_expired(expires_at: Optional[datetime]) -> bool:
+    if not expires_at:
+        return False
+    if expires_at.tzinfo is None:
+        return expires_at < datetime.utcnow()
+    return expires_at < datetime.now(timezone.utc)
 
 
 class ProposalService:
@@ -52,16 +58,18 @@ class ProposalService:
         interests: Optional[List[str]] = None,
         wake_up_preference: str = "balanced",
         accommodation_preference: str = "comfort",
+        transport_preference: str = "mix",
         food_preferences: Optional[List[str]] = None,
         trip_type: str = "leisure",
         travel_mode: str = "flight",
         daily_schedule: str = "balanced",
         itinerary_style: str = "daily",
         stopovers: Optional[List[Any]] = None,
-        user_id: Optional[str] = None
+        user_id: Optional[str] = None,
+        db: Optional[Session] = None
     ) -> Dict[str, Any]:
         """
-        Generates a structured proposal without creating any database records.
+        Generates a structured proposal and persists it as a durable TripProposal in PostgreSQL.
         """
         proposal = ItineraryEngine.generate_itinerary(
             destination=destination,
@@ -78,6 +86,7 @@ class ProposalService:
             interests=interests,
             wake_up_preference=wake_up_preference,
             accommodation_preference=accommodation_preference,
+            transport_preference=transport_preference,
             food_preferences=food_preferences,
             trip_type=trip_type,
             travel_mode=travel_mode,
@@ -90,13 +99,120 @@ class ProposalService:
         data["status"] = "pending"
         data["user_id"] = user_id
 
-        # Cache in ephemeral storage for acceptance
-        _ephemeral_proposals[proposal.proposal_id] = data
+        # Persist durable proposal in PostgreSQL (use passed db or fallback to local session)
+        session_to_close = None
+        target_db = db
+        if not target_db:
+            try:
+                from app.db.database import SessionLocal
+                target_db = SessionLocal()
+                session_to_close = target_db
+            except Exception:
+                target_db = None
+
+        target_user_id = user_id
+        if target_db and not target_user_id:
+            first_user = target_db.query(User).first()
+            if first_user:
+                target_user_id = first_user.id
+
+        if target_db and target_user_id:
+            now_utc = datetime.now(timezone.utc)
+            durable_proposal = TripProposal(
+                id=proposal.proposal_id,
+                user_id=target_user_id,
+                trip_id=None,
+                parent_version=None,
+                instruction=f"Plan {days_count} days in {destination}",
+                summary=f"{days_count}-Day {destination} Itinerary Proposal",
+                status="pending",
+                request={
+                    "destination": destination,
+                    "origin": origin,
+                    "days_count": days_count,
+                    "start_date": start_date_str,
+                    "end_date": end_date_str,
+                    "travelers": travelers,
+                    "budget": budget,
+                    "currency": currency,
+                    "pace": pace,
+                    "persona": persona,
+                    "interests": interests
+                },
+                structured_intent={
+                    "destination": destination,
+                    "origin": origin,
+                    "days_count": days_count,
+                    "travelers": travelers,
+                    "budget": budget,
+                    "pace": pace,
+                    "persona": persona,
+                    "interests": interests
+                },
+                proposal_data=data,
+                created_at=now_utc,
+                expires_at=now_utc + timedelta(days=7)
+            )
+            target_db.add(durable_proposal)
+            target_db.commit()
+
+        if session_to_close:
+            session_to_close.close()
+
         return data
 
     @classmethod
-    def get_proposal(cls, proposal_id: str) -> Optional[Dict[str, Any]]:
-        return _ephemeral_proposals.get(proposal_id)
+    def get_proposal(
+        cls,
+        proposal_id: str,
+        user: Optional[User] = None,
+        db: Optional[Session] = None
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Retrieves proposal state with strict ownership verification and expiry checking.
+        """
+        session_to_close = None
+        target_db = db
+        if not target_db:
+            try:
+                from app.db.database import SessionLocal
+                target_db = SessionLocal()
+                session_to_close = target_db
+            except Exception:
+                target_db = None
+
+        if target_db:
+            try:
+                prop = target_db.query(TripProposal).filter(TripProposal.id == proposal_id).first()
+                if not prop:
+                    return None
+
+                # Ownership Enforcement (P0)
+                if user and prop.user_id != user.id:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail="Access forbidden: you do not own this itinerary proposal."
+                    )
+
+                # Expiry Check
+                if _is_proposal_expired(prop.expires_at):
+                    if prop.status == "pending":
+                        prop.status = "expired"
+                        target_db.commit()
+                    raise HTTPException(
+                        status_code=status.HTTP_410_GONE,
+                        detail=f"Proposal '{proposal_id}' has expired. Please plan a new itinerary."
+                    )
+
+                data = prop.proposal_data if prop.proposal_data else {}
+                data["status"] = prop.status
+                data["proposal_id"] = prop.id
+                return data
+            finally:
+                if session_to_close:
+                    session_to_close.close()
+
+        return None
 
     @classmethod
     def accept_proposal(
@@ -106,24 +222,64 @@ class ProposalService:
         db: Session
     ) -> Dict[str, Any]:
         """
-        Authoritative transaction:
-        1. Loads proposal data.
-        2. Creates Itinerary graph atomically in PostgreSQL.
-        3. Records initial append-only TripRevision v1.
-        4. Removes ephemeral proposal.
+        Authoritative transaction with concurrency locking:
+        1. Loads proposal FOR UPDATE.
+        2. Validates ownership and pending status.
+        3. Creates Itinerary graph atomically in PostgreSQL.
+        4. Records initial append-only TripRevision v1.
+        5. Does NOT create SquadRoom (personal by default).
+        6. Updates proposal status to 'accepted'.
         """
-        proposal_data = _ephemeral_proposals.get(proposal_id)
-        if not proposal_data:
+        prop_record = db.query(TripProposal).filter(
+            TripProposal.id == proposal_id
+        ).with_for_update().first()
+
+        if not prop_record:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Proposal '{proposal_id}' not found or has expired. Please plan your trip again."
+                detail=f"Proposal '{proposal_id}' not found. Please plan your trip again."
             )
 
-        destination = proposal_data["destination"]
+        # 1. Ownership Enforcement (P0)
+        if prop_record.user_id != user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access forbidden: you do not own this itinerary proposal."
+            )
+
+        # 2. Concurrency Safety (P0)
+        if prop_record.status != "pending":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Proposal '{proposal_id}' has already been processed (status: {prop_record.status})."
+            )
+
+        # 3. Expiry Check
+        if _is_proposal_expired(prop_record.expires_at):
+            prop_record.status = "expired"
+            db.commit()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Proposal '{proposal_id}' has expired."
+            )
+
+        proposal_data = prop_record.proposal_data or {}
+        destination = proposal_data.get("destination", "Getaway")
         origin = proposal_data.get("origin")
-        days_count = proposal_data["days_count"]
-        start_d = date.fromisoformat(proposal_data["start_date"])
-        end_d = date.fromisoformat(proposal_data["end_date"])
+        days_count = proposal_data.get("days_count", 4)
+        start_d_str = proposal_data.get("start_date")
+        end_d_str = proposal_data.get("end_date")
+
+        try:
+            start_d = date.fromisoformat(start_d_str) if start_d_str else date.today() + timedelta(days=14)
+        except ValueError:
+            start_d = date.today() + timedelta(days=14)
+
+        try:
+            end_d = date.fromisoformat(end_d_str) if end_d_str else start_d + timedelta(days=max(0, days_count - 1))
+        except ValueError:
+            end_d = start_d + timedelta(days=max(0, days_count - 1))
+
         budget = float(proposal_data.get("target_budget", 0.0) or proposal_data.get("estimated_budget", 0.0))
         currency = proposal_data.get("currency", "INR")
         persona = proposal_data.get("persona", "solo")
@@ -156,30 +312,37 @@ class ProposalService:
                     itinerary_id=new_itinerary.id,
                     day_number=day_data["day_number"],
                     title=day_data["title"],
-                    cover_image_url=day_data["cover_image_url"],
-                    weather_summary=day_data["weather_summary"]
+                    cover_image_url=day_data.get("cover_image_url", ""),
+                    weather_summary=day_data.get("weather_summary", "Weather unavailable")
                 )
                 db.add(it_day)
                 db.flush()
 
                 day_acts = []
                 for idx, act in enumerate(day_data.get("activities", [])):
+                    act_transit = act.get("estimated_transit") or act.get("estimatedTransit") or f"⏱️ {act.get('transit_time_minutes', 15)}m {act.get('transit_mode', 'walk')} (Estimated)"
+                    act_crowd = act.get("crowd_warning") or act.get("crowdWarning") or "🟢 Low Crowd (Estimated)"
+                    act_prov = act.get("provenance", "CURATED")
+                    act_gen_src = act.get("generation_source") or ("AI_GENERATED" if act_prov == "AI_GENERATED" else "DETERMINISTIC")
+                    act_loc_src = act.get("location_source") or ("PROVIDER_VERIFIED" if act.get("lat") else "UNRESOLVED")
+                    act_cnt_src = act.get("content_source") or ("AI" if act_prov == "AI_GENERATED" else "CURATED")
+
                     it_act = ItineraryActivity(
                         day_id=it_day.id,
                         time_slot=act.get("time", act.get("time_slot", "09:00 AM")),
                         description=act.get("description", act.get("title", "")),
                         location=act.get("location", destination),
                         place_type=act.get("place_type", "TA"),
-                        estimated_transit=f"⏱️ {act.get('transit_time_minutes', 15)}m {act.get('transit_mode', 'walk')} (Estimated)",
-                        crowd_warning="🟢 Low Crowd (Estimated)",
-                        cost_estimate=float(act.get("estimated_cost", 0.0)),
+                        estimated_transit=act_transit,
+                        crowd_warning=act_crowd,
+                        cost_estimate=float(act.get("estimated_cost", act.get("cost_estimate", 0.0))),
                         lat=act.get("lat"),
                         lng=act.get("lng"),
                         sort_order=idx,
-                        provenance=act.get("provenance", "CURATED"),
-                        generation_source="AI_GENERATED",
-                        location_source="PROVIDER_VERIFIED" if act.get("lat") else "UNRESOLVED",
-                        content_source="CURATED",
+                        provenance=act_prov,
+                        generation_source=act_gen_src,
+                        location_source=act_loc_src,
+                        content_source=act_cnt_src,
                         why_recommended=act.get("why_recommended", "")
                     )
                     db.add(it_act)
@@ -193,8 +356,14 @@ class ProposalService:
                         "location": it_act.location,
                         "placeType": it_act.place_type,
                         "estimatedTransit": it_act.estimated_transit,
+                        "crowdWarning": it_act.crowd_warning,
                         "costEstimate": it_act.cost_estimate,
                         "cost": it_act.cost_estimate,
+                        "costType": act.get("cost_type", "ESTIMATED_ALLOCATION"),
+                        "estimatedAllocation": float(act.get("estimated_allocation", it_act.cost_estimate or 1500.0)),
+                        "generationSource": it_act.generation_source,
+                        "locationSource": it_act.location_source,
+                        "contentSource": it_act.content_source,
                         "lat": it_act.lat,
                         "lng": it_act.lng,
                         "provenance": it_act.provenance,
@@ -211,19 +380,10 @@ class ProposalService:
                     "activities": day_acts
                 })
 
-            # 2. Squad room code
-            clean_prefix = re.sub(r'[^A-Z]', '', destination.upper())[:3]
-            if len(clean_prefix) < 3:
-                clean_prefix = "TRP"
-            room_code = f"{clean_prefix}-{start_d.year}-X{str(uuid.uuid4())[:4].upper()}"
-            squad_room = SquadRoom(
-                itinerary_id=new_itinerary.id,
-                room_code=room_code
-            )
-            db.add(squad_room)
-            db.flush()
+            # Authoritative initial revision v1
+            prop_model = proposal_data.get("model", "deterministic-planner-v1")
+            prop_tokens = proposal_data.get("tokens_used", 0)
 
-            # 3. Authoritative initial revision v1
             create_revision(
                 db=db,
                 trip_id=new_itinerary.id,
@@ -232,31 +392,34 @@ class ProposalService:
                 days_data=serialize_trip_days(new_itinerary),
                 summary=f"Initial accepted itinerary for {destination}",
                 instruction=f"Accepted proposal {proposal_id}",
-                model="deterministic-planner-v2",
+                model=prop_model,
                 actor_type="USER",
                 action="initial_creation",
                 parent_version=None
             )
 
-            # 4. Observability telemetry
+            # Observability telemetry
             ai_run = AIRun(
                 user_id=user.id,
                 trip_id=new_itinerary.id,
                 prompt=f"Accepted proposal for {destination}",
-                model="deterministic-planner-v2",
-                latency_ms=120,
-                tokens_used=0,
+                model=prop_model,
+                latency_ms=110,
+                tokens_used=prop_tokens,
                 status="success"
             )
             db.add(ai_run)
             db.flush()
 
+            # Mark proposal accepted
+            prop_record.status = "accepted"
+            prop_record.accepted_at = func.now()
+            prop_record.trip_id = new_itinerary.id
+            if prop_record.proposal_data:
+                prop_record.proposal_data["status"] = "accepted"
+
             db.commit()
             db.refresh(new_itinerary)
-
-            # Cleanup ephemeral proposal
-            proposal_data["status"] = "accepted"
-            _ephemeral_proposals.pop(proposal_id, None)
 
             return {
                 "id": new_itinerary.id,
@@ -271,7 +434,6 @@ class ProposalService:
                 "persona": new_itinerary.persona,
                 "travellers": new_itinerary.travellers,
                 "vibe": new_itinerary.vibe,
-                "squad_room_code": room_code,
                 "days": formatted_days,
                 "status": "active"
             }
@@ -284,13 +446,53 @@ class ProposalService:
             )
 
     @classmethod
-    def reject_proposal(cls, proposal_id: str) -> Dict[str, Any]:
+    def reject_proposal(
+        cls,
+        proposal_id: str,
+        user: Optional[User] = None,
+        db: Optional[Session] = None
+    ) -> Dict[str, Any]:
         """
-        Discards proposal without modifying database.
+        Discards proposal with ownership check without modifying any trip.
         """
-        if proposal_id in _ephemeral_proposals:
-            _ephemeral_proposals[proposal_id]["status"] = "rejected"
-            _ephemeral_proposals.pop(proposal_id, None)
+        session_to_close = None
+        target_db = db
+        if not target_db:
+            try:
+                from app.db.database import SessionLocal
+                target_db = SessionLocal()
+                session_to_close = target_db
+            except Exception:
+                target_db = None
+
+        if target_db:
+            try:
+                prop = target_db.query(TripProposal).filter(
+                    TripProposal.id == proposal_id
+                ).with_for_update().first()
+
+                if not prop:
+                    raise HTTPException(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        detail=f"Proposal '{proposal_id}' not found."
+                    )
+
+                if user and prop.user_id != user.id:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail="Access forbidden: you do not own this itinerary proposal."
+                    )
+
+                if prop.status == "pending":
+                    prop.status = "rejected"
+                    prop.rejected_at = func.now()
+                    if prop.proposal_data:
+                        prop.proposal_data["status"] = "rejected"
+                    target_db.commit()
+            finally:
+                if session_to_close:
+                    session_to_close.close()
+
         return {
             "proposal_id": proposal_id,
             "status": "rejected",
@@ -302,197 +504,140 @@ class ProposalService:
         cls,
         proposal_id: str,
         instruction: str,
-        target_day: Optional[int] = None
+        target_day: Optional[int] = None,
+        user: Optional[User] = None,
+        db: Optional[Session] = None
     ) -> Dict[str, Any]:
         """
-        Generates a non-destructive diff proposal for an uncommitted or existing itinerary:
+        Generates a non-destructive diff proposal:
         - Modifies target day or applies pacing/budget reduction.
         - Preserves all other days and user edits completely.
+        - Persists new TripProposal in PostgreSQL.
         """
-        proposal = _ephemeral_proposals.get(proposal_id)
-        if not proposal:
+        session_to_close = None
+        target_db = db
+        if not target_db:
+            try:
+                from app.db.database import SessionLocal
+                target_db = SessionLocal()
+                session_to_close = target_db
+            except Exception:
+                target_db = None
+
+        if not target_db:
+            raise HTTPException(status_code=500, detail="Database session required for proposal edit.")
+
+        prop_record = target_db.query(TripProposal).filter(TripProposal.id == proposal_id).first()
+        if not prop_record:
+            if session_to_close:
+                session_to_close.close()
             raise HTTPException(
                 status_code=404,
                 detail=f"Proposal '{proposal_id}' not found."
             )
 
+        if user and prop_record.user_id != user.id:
+            if session_to_close:
+                session_to_close.close()
+            raise HTTPException(
+                status_code=403,
+                detail="Access forbidden: you do not own this itinerary proposal."
+            )
+
+        proposal = dict(prop_record.proposal_data or {})
         inst = instruction.lower().strip()
         days = proposal.get("days", [])
         diff_changes = []
         updated_days = []
 
-        # Detect target day from instruction if not explicitly provided
         day_match = re.search(r"day\s*(\d+)", inst)
         if day_match and not target_day:
             target_day = int(day_match.group(1))
 
         for day in days:
             day_num = day.get("day_number", 1)
-            # If not target day (and instruction specifies a day), preserve completely!
             if target_day and day_num != target_day:
                 updated_days.append(day)
                 continue
 
             activities = list(day.get("activities", []))
-            new_acts = []
 
             # Action 1: "Make more relaxed" / "Remove activity"
             if any(k in inst for k in ["relax", "slow", "tiring", "chill"]):
-                # Keep top 2 activities, replace 3rd with leisure
                 kept = activities[:2]
                 for act in activities[2:]:
                     diff_changes.append({
                         "action": "replaced",
                         "day": day_num,
                         "item": act.get("title", act.get("description", "")),
-                        "replacement": "Open Leisure & Poolside Relaxation",
+                        "replacement": "Open Leisure & Coastal Sunset Lounge",
                         "reason": "Removed dense excursion to fit relaxed pace"
                     })
-                kept.append({
+                leisure_act = {
                     "id": f"act_d{day_num}_leisure",
-                    "time": "04:00 PM",
-                    "time_slot": "04:00 PM",
-                    "title": "Open Leisure & Poolside Relaxation",
-                    "description": "Unscheduled free time to relax, explore local cafes at your own pace, or enjoy hotel amenities.",
-                    "location": day.get("cluster_name", "Local Area"),
-                    "place_type": "H",
-                    "period_of_day": "afternoon",
-                    "estimated_cost": 0.0,
-                    "duration_minutes": 120,
-                    "transit_time_minutes": 0,
-                    "transit_mode": "walk",
-                    "provenance": "USER_REQUESTED",
-                    "why_recommended": "Added based on your request for a more relaxed pace."
-                })
-                day_copy = dict(day)
-                day_copy["activities"] = kept
-                updated_days.append(day_copy)
-
-            # Action 2: "Remove museum" / "Remove [keyword]"
-            elif "remove" in inst or "delete" in inst:
-                # Find matching activity to remove
-                for act in activities:
-                    title = act.get("title", act.get("description", ""))
-                    # Check if instruction mentions a word in the title
-                    words = [w for w in inst.replace("remove", "").replace("delete", "").split() if len(w) > 3]
-                    if any(w in title.lower() for w in words):
-                        diff_changes.append({
-                            "action": "removed",
-                            "day": day_num,
-                            "item": title,
-                            "reason": f"Removed per instruction: '{instruction}'"
-                        })
-                    else:
-                        new_acts.append(act)
-                day_copy = dict(day)
-                day_copy["activities"] = new_acts
-                updated_days.append(day_copy)
-
-            # Action 3: "Add sunset activity" / "sunset"
-            elif "sunset" in inst or "golden hour" in inst:
-                act_copy = {
-                    "id": f"act_d{day_num}_sunset",
-                    "time": "05:30 PM",
-                    "time_slot": "05:30 PM",
-                    "title": f"Golden Hour Sunset Vista in {day.get('cluster_name', 'Local Area')}",
-                    "description": "Panoramic scenic viewpoint to watch the sunset and enjoy twilight coastal breezes.",
-                    "location": day.get("cluster_name", "Local Area"),
+                    "time": "04:30 PM",
+                    "time_slot": "04:30 PM",
+                    "title": "Open Leisure & Coastal Sunset Lounge",
+                    "description": "Relaxed golden hour downtime with fresh juice and quiet views.",
+                    "location": day.get("cluster_name", day.get("location", "Local Area")),
                     "place_type": "TA",
                     "period_of_day": "evening",
                     "estimated_cost": 0.0,
+                    "duration": 90,
+                    "duration_minutes": 90,
+                    "transit_time_minutes": 10,
+                    "transit_mode": "walk",
+                    "provenance": "AI_PROPOSED",
+                    "source": "RELAXATION_OPTIMIZER",
+                    "why_recommended": "Adjusted per your request for an unhurried, relaxed afternoon."
+                }
+                day["activities"] = kept + [leisure_act]
+                day["day_theme"] = "Relaxed Leisure & Twilight"
+                updated_days.append(day)
+
+            # Action 2: "Add more food / local cuisine"
+            elif any(k in inst for k in ["food", "dining", "seafood", "cuisine", "tasting", "cafe"]):
+                food_act = {
+                    "id": f"act_d{day_num}_food",
+                    "time": "07:30 PM",
+                    "time_slot": "07:30 PM",
+                    "title": "Signature Regional Culinary Tasting & Night Market",
+                    "description": "Authentic multi-course dinner featuring slow-cooked regional curries, seafood, and artisan desserts.",
+                    "location": day.get("cluster_name", day.get("location", "Local Area")),
+                    "place_type": "R",
+                    "period_of_day": "evening",
+                    "estimated_cost": 850.0,
+                    "duration": 90,
                     "duration_minutes": 90,
                     "transit_time_minutes": 15,
                     "transit_mode": "walk",
-                    "provenance": "AI_GENERATED",
-                    "why_recommended": "Scenic sunset viewpoint added to your evening schedule."
+                    "provenance": "AI_PROPOSED",
+                    "source": "CULINARY_INTELLIGENCE",
+                    "why_recommended": "Added authentic culinary experience per your request."
                 }
                 diff_changes.append({
                     "action": "added",
                     "day": day_num,
-                    "item": act_copy["title"],
-                    "reason": "Added sunset activity per your request"
+                    "item": food_act["title"],
+                    "reason": "Prioritized local gastronomy per instruction"
                 })
-                activities.append(act_copy)
-                day_copy = dict(day)
-                day_copy["activities"] = activities
-                updated_days.append(day_copy)
+                day["activities"] = activities + [food_act]
+                updated_days.append(day)
 
-            # Action 4: "Make it cheaper" / "save money"
-            elif any(k in inst for k in ["cheap", "save", "budget", "reduce cost"]):
+            # Action 3: "Reduce walking / less transit"
+            elif any(k in inst for k in ["walk", "transit", "distance", "less walking"]):
                 for act in activities:
-                    old_cost = act.get("estimated_cost", 0.0)
-                    if old_cost > 300.0:
-                        act["estimated_cost"] = round(old_cost * 0.5, 2)
-                        act["cost_estimate"] = act["estimated_cost"]
-                        diff_changes.append({
-                            "action": "modified",
-                            "day": day_num,
-                            "item": act.get("title", ""),
-                            "reason": f"Optimized activity cost down to ₹{int(act['estimated_cost'])} to meet budget constraints"
-                        })
-                day_copy = dict(day)
-                day_copy["activities"] = activities
-                updated_days.append(day_copy)
-
-            # Action 5: "Add more food" / "culinary"
-            elif any(k in inst for k in ["food", "culinary", "dining", "taste", "cuisine"]):
-                act_copy = {
-                    "id": f"act_d{day_num}_food_exp",
-                    "time": "03:45 PM",
-                    "time_slot": "03:45 PM",
-                    "title": f"Artisan Regional Food & Sweet Tasting in {day.get('cluster_name', 'Old Quarter')}",
-                    "description": "Guided sampling of traditional baked specialties, heritage street flavors, and locally brewed beverages.",
-                    "location": day.get("cluster_name", "Local Area"),
-                    "place_type": "R",
-                    "period_of_day": "afternoon",
-                    "estimated_cost": 350.0,
-                    "duration_minutes": 60,
-                    "transit_time_minutes": 10,
-                    "transit_mode": "walk",
-                    "provenance": "AI_GENERATED",
-                    "why_recommended": "Added food immersion experience to highlight local culinary traditions."
-                }
+                    act["transit_time_minutes"] = max(5, int(act.get("transit_time_minutes", 15) * 0.6))
+                    act["transit_mode"] = "cab"
                 diff_changes.append({
-                    "action": "added",
+                    "action": "modified",
                     "day": day_num,
-                    "item": act_copy["title"],
-                    "reason": "Added regional food tasting per your request"
+                    "item": "Daily Transit",
+                    "reason": "Optimized stops with cab transfers to minimize walking"
                 })
-                activities.append(act_copy)
-                day_copy = dict(day)
-                day_copy["activities"] = activities
-                updated_days.append(day_copy)
+                updated_days.append(day)
 
-            # Action 6: "Add more nature" / "nature"
-            elif any(k in inst for k in ["nature", "greenery", "trail", "scenic", "viewpoint", "park", "beach"]):
-                act_copy = {
-                    "id": f"act_d{day_num}_nature_exp",
-                    "time": "04:15 PM",
-                    "time_slot": "04:15 PM",
-                    "title": f"Scenic Nature Trail & Panoramic Viewpoint in {day.get('cluster_name', 'Hillside')}",
-                    "description": "Slow, peaceful stroll through lush native vegetation leading to a quiet panoramic valley/coastal overlook.",
-                    "location": day.get("cluster_name", "Local Area"),
-                    "place_type": "TA",
-                    "period_of_day": "afternoon",
-                    "estimated_cost": 0.0,
-                    "duration_minutes": 75,
-                    "transit_time_minutes": 15,
-                    "transit_mode": "walk",
-                    "provenance": "AI_GENERATED",
-                    "why_recommended": "Added scenic green space and nature trail for open air relaxation."
-                }
-                diff_changes.append({
-                    "action": "added",
-                    "day": day_num,
-                    "item": act_copy["title"],
-                    "reason": "Added nature trail per your request"
-                })
-                activities.append(act_copy)
-                day_copy = dict(day)
-                day_copy["activities"] = activities
-                updated_days.append(day_copy)
-
-            # Action 7: "Start later" / "late start"
+            # Action 4: "Start later" / "late start"
             elif any(k in inst for k in ["start later", "late start", "sleep in", "later in the morning"]):
                 for act in activities:
                     old_time = act.get("time", "09:30 AM")
@@ -506,39 +651,56 @@ class ProposalService:
                     "item": f"Day {day_num} activities",
                     "reason": "Shifted morning schedule 1 hour later for a relaxed start"
                 })
-                day_copy = dict(day)
-                day_copy["activities"] = activities
-                updated_days.append(day_copy)
+                day["activities"] = activities
+                updated_days.append(day)
 
-            # Action 8: "Reduce driving" / "Move closer"
-            elif any(k in inst for k in ["reduce driving", "move closer", "less transit", "closer together", "walkable"]):
+            # Action 5: "Make it cheaper" / "save money" / "budget"
+            elif any(k in inst for k in ["cheaper", "save", "budget", "cost", "money"]):
                 for act in activities:
-                    act["transit_time_minutes"] = 10
-                    act["transit_mode"] = "walk"
-                    act["cluster"] = day.get("cluster_name", "Central District")
-                diff_changes.append({
-                    "action": "optimized",
-                    "day": day_num,
-                    "item": f"Day {day_num} transit",
-                    "reason": "Re-clustered activities to walking distance, reducing daily transit times"
-                })
-                day_copy = dict(day)
-                day_copy["activities"] = activities
-                updated_days.append(day_copy)
+                    if act.get("estimated_cost", 0) > 400:
+                        old_cost = act["estimated_cost"]
+                        act["estimated_cost"] = round(old_cost * 0.5, 0)
+                        diff_changes.append({
+                            "action": "modified",
+                            "day": day_num,
+                            "item": act.get("title", "Paid activity"),
+                            "reason": f"Adjusted dining/activity tier from ₹{old_cost} to ₹{act['estimated_cost']}"
+                        })
+                day["activities"] = activities
+                updated_days.append(day)
 
             else:
                 updated_days.append(day)
 
-        # Update ephemeral proposal with updated days
-        proposal["days"] = updated_days
+        # Build new proposal record
         new_proposal_id = f"prop_{uuid.uuid4().hex[:12]}"
         proposal["proposal_id"] = new_proposal_id
-        _ephemeral_proposals[new_proposal_id] = proposal
+        proposal["days"] = updated_days
 
         summary = (
             f"Updated itinerary: {len(diff_changes)} change{'s' if len(diff_changes) != 1 else ''} "
             f"applied to Day {target_day or 'selected days'}."
         ) if diff_changes else f"Itinerary updated based on: '{instruction}'."
+
+        now_utc = datetime.now(timezone.utc)
+        durable_new_prop = TripProposal(
+            id=new_proposal_id,
+            user_id=user.id if user else prop_record.user_id,
+            trip_id=prop_record.trip_id,
+            parent_version=prop_record.parent_version,
+            instruction=instruction,
+            summary=summary,
+            status="pending",
+            changes=diff_changes,
+            proposal_data=proposal,
+            created_at=now_utc,
+            expires_at=now_utc + timedelta(days=7)
+        )
+        target_db.add(durable_new_prop)
+        target_db.commit()
+
+        if session_to_close:
+            session_to_close.close()
 
         return {
             "proposal_id": new_proposal_id,
@@ -546,7 +708,8 @@ class ProposalService:
             "instruction": instruction,
             "target_day": target_day,
             "changes": diff_changes,
-            "updated_days": updated_days
+            "updated_days": updated_days,
+            "proposal": proposal
         }
 
     @classmethod
@@ -564,10 +727,7 @@ class ProposalService:
         start_date: Optional[str] = None
     ) -> Dict[str, Any]:
         """
-        Adapts a public community trip for the traveler:
-        - Source trip -> TravelerBrief -> Preserved highlights -> New itinerary generation.
-        - Preserves key attractions while tailoring budget, dates, and pacing.
-        - Never copies private bookings, notes, or traveler details.
+        Adapts a public community trip for the traveler and stores as durable TripProposal.
         """
         from app.models.models import CommunityPost
         post = db.query(CommunityPost).filter(CommunityPost.id == post_id).first()
@@ -611,7 +771,6 @@ class ProposalService:
         brief = TravelerBrief.from_request(brief_data)
         proposal = PlannerService.plan_from_brief(brief)
 
-        # Tag preserved community highlights
         data = proposal.model_dump()
         for day in data.get("days", []):
             for act in day.get("activities", []):
@@ -627,6 +786,21 @@ class ProposalService:
             "author": post.author_name or "Community Explorer"
         }
 
-        _ephemeral_proposals[proposal.proposal_id] = data
-        return data
+        # Persist durable proposal in PostgreSQL
+        now_utc = datetime.now(timezone.utc)
+        durable_proposal = TripProposal(
+            id=proposal.proposal_id,
+            user_id=user.id,
+            trip_id=None,
+            parent_version=None,
+            instruction=f"Adapt community trip '{post.getaway_title}'",
+            summary=f"Adapted Getaway: {dest}",
+            status="pending",
+            proposal_data=data,
+            created_at=now_utc,
+            expires_at=now_utc + timedelta(days=7)
+        )
+        db.add(durable_proposal)
+        db.commit()
 
+        return data

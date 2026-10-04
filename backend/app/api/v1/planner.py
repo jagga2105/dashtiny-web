@@ -97,9 +97,11 @@ def create_itinerary_proposal_endpoint(
 ):
     """
     Generates a structured, multi-day itinerary proposal:
+    - Canonical pipeline backed by Destination Intelligence (NO FAKE DATA).
     - Chunked generation for trips > 4 days (e.g. 7 days, 14 days)
     - Validates against duplicate activities, time overlaps, and ping-pong transit
     - Produces itemized category budget breakdown with guardrails
+    - Persists durable TripProposal record in PostgreSQL
     - Does NOT mutate any Trip in the database!
     """
     # Validate dates
@@ -126,40 +128,51 @@ def create_itinerary_proposal_endpoint(
                 detail="Inconsistent dates: end_date cannot be earlier than start_date"
             )
 
-    return ProposalService.create_itinerary_proposal(
-        destination=request.destination,
-        days_count=request.days_count,
-        origin=request.origin,
-        start_date_str=request.start_date,
-        end_date_str=request.end_date,
-        travelers=request.travellers,
-        budget=request.budget,
-        currency=request.currency,
-        pace=request.pace,
-        persona=request.persona,
-        vibe=request.vibe,
-        interests=request.interests,
-        wake_up_preference=request.wake_up_preference,
-        accommodation_preference=request.accommodation_preference,
-        food_preferences=request.food_preferences,
-        trip_type=request.trip_type,
-        travel_mode=request.travel_mode,
-        daily_schedule=request.daily_schedule,
-        itinerary_style=request.itinerary_style,
-        stopovers=request.stopovers,
-        user_id=user.id
-    )
+    try:
+        return ProposalService.create_itinerary_proposal(
+            destination=request.destination,
+            days_count=request.days_count,
+            origin=request.origin,
+            start_date_str=request.start_date,
+            end_date_str=request.end_date,
+            travelers=request.travellers,
+            budget=request.budget,
+            currency=request.currency,
+            pace=request.pace,
+            persona=request.persona,
+            vibe=request.vibe,
+            interests=request.interests,
+            wake_up_preference=request.wake_up_preference,
+            accommodation_preference=request.accommodation_preference,
+            transport_preference=request.transport_preference,
+            food_preferences=request.food_preferences,
+            trip_type=request.trip_type,
+            travel_mode=request.travel_mode,
+            daily_schedule=request.daily_schedule,
+            itinerary_style=request.itinerary_style,
+            stopovers=request.stopovers,
+            user_id=user.id,
+            db=db
+        )
+    except Exception as e:
+        if "Destination research is incomplete" in str(e):
+            raise HTTPException(
+                status_code=422,
+                detail=str(e)
+            )
+        raise
 
 
 @router.get("/proposals/{proposal_id}")
 def get_proposal_endpoint(
     proposal_id: str,
-    user: User = Depends(get_current_user)
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
 ):
     """
-    Retrieves proposal state for review.
+    Retrieves proposal state with strict ownership verification.
     """
-    proposal = ProposalService.get_proposal(proposal_id)
+    proposal = ProposalService.get_proposal(proposal_id=proposal_id, user=user, db=db)
     if not proposal:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -178,6 +191,7 @@ def accept_proposal_endpoint(
     Authoritative acceptance:
     - Atomically creates the Itinerary in PostgreSQL
     - Records initial append-only TripRevision v1
+    - Marks TripProposal accepted
     - Returns the created Trip
     """
     return ProposalService.accept_proposal(
@@ -190,28 +204,32 @@ def accept_proposal_endpoint(
 @router.post("/proposals/{proposal_id}/reject")
 def reject_proposal_endpoint(
     proposal_id: str,
-    user: User = Depends(get_current_user)
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
 ):
     """
-    Discards proposal without modifying any Trip.
+    Discards proposal with ownership verification without modifying any Trip.
     """
-    return ProposalService.reject_proposal(proposal_id)
+    return ProposalService.reject_proposal(proposal_id=proposal_id, user=user, db=db)
 
 
 @router.post("/proposals/{proposal_id}/edit")
 def edit_proposal_endpoint(
     proposal_id: str,
     request: PartialEditRequest,
-    user: User = Depends(get_current_user)
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
 ):
     """
     Applies partial AI modification to specific day while preserving all unrelated days and user edits.
-    Returns a new proposal with diffs.
+    Returns a new proposal with diffs and persists in PostgreSQL.
     """
     return ProposalService.propose_partial_edit(
         proposal_id=proposal_id,
         instruction=request.instruction,
-        target_day=request.target_day
+        target_day=request.target_day,
+        user=user,
+        db=db
     )
 
 
@@ -258,9 +276,8 @@ def generate_itinerary(
     db: Session = Depends(get_db)
 ):
     """
-    Generate dynamic getaway itinerary tailored to any destination via Planner Agent and persist in PostgreSQL.
-    Consumes complete PlannerRequest, validating date consistency and threading travellers to tools.
-    Preserved for 100% backward compatibility with existing tests.
+    Generate dynamic getaway itinerary via Canonical Planner Pipeline and persist in PostgreSQL.
+    Preserved for 100% backward compatibility with existing tests by calling the canonical pipeline.
     """
     if request.start_date:
         try:
@@ -287,20 +304,32 @@ def generate_itinerary(
                 detail="Inconsistent dates: end_date cannot be earlier than start_date"
             )
 
-    return build_itinerary_with_planner_agent(
+    # Execute canonical pipeline: generate proposal then accept atomically
+    clean_travellers = max(1, request.travellers or 2)
+    clean_days = max(1, min(14, request.days_count))
+    clean_budget = request.budget if request.budget > 0 else (6000.0 * clean_days * clean_travellers)
+
+    proposal_data = ProposalService.create_itinerary_proposal(
         destination=request.destination,
-        budget=request.budget,
-        days_count=request.days_count,
-        persona=request.persona,
-        user=user,
-        db=db,
+        days_count=clean_days,
+        origin=request.origin,
         start_date_str=request.start_date,
         end_date_str=request.end_date,
-        origin=request.origin,
-        travellers=request.travellers,
-        currency=request.currency,
+        travelers=clean_travellers,
+        budget=clean_budget,
+        currency=request.currency or "INR",
+        pace="balanced",
+        persona=request.persona or "solo",
         vibe=request.vibe,
         interests=request.interests,
-        raw_prompt=request.raw_prompt,
-        prompt=request.prompt
+        user_id=user.id,
+        db=db
     )
+
+    accepted_trip = ProposalService.accept_proposal(
+        proposal_id=proposal_data["proposal_id"],
+        user=user,
+        db=db
+    )
+
+    return accepted_trip

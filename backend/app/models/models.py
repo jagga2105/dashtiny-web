@@ -534,26 +534,33 @@ class TripProposal(Base):
     __tablename__ = "trip_proposals"
 
     id = Column(String(36), primary_key=True, default=generate_uuid)
-    trip_id = Column(String(36), ForeignKey("itineraries.id", ondelete="CASCADE"), nullable=False)
+    trip_id = Column(String(36), ForeignKey("itineraries.id", ondelete="CASCADE"), nullable=True)
     user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    parent_version = Column(Integer, nullable=False, default=1)
-    instruction = Column(Text, nullable=False)
+    parent_version = Column(Integer, nullable=True)
+    instruction = Column(Text, nullable=True)
     summary = Column(String(255), nullable=True)
-    changes = Column(JSON, nullable=False, default=list)
-    before_state = Column(JSON, nullable=False, default=dict)
-    after_state = Column(JSON, nullable=False, default=dict)
+    changes = Column(JSON, nullable=True, default=list)
+    before_state = Column(JSON, nullable=True, default=dict)
+    after_state = Column(JSON, nullable=True, default=dict)
     verification = Column(JSON, nullable=True, default=dict)
     provenance = Column(JSON, nullable=True, default=dict)
+    request = Column(JSON, nullable=True, default=dict)
+    structured_intent = Column(JSON, nullable=True, default=dict)
+    proposal_data = Column(JSON, nullable=True, default=dict)
     status = Column(String(50), default="pending", nullable=False)  # pending, accepted, rejected, expired
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    expires_at = Column(DateTime(timezone=True), nullable=True)
+    accepted_at = Column(DateTime(timezone=True), nullable=True)
+    rejected_at = Column(DateTime(timezone=True), nullable=True)
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     __table_args__ = (
         CheckConstraint("status IN ('pending', 'accepted', 'rejected', 'expired')", name="ck_trip_proposal_status"),
-        CheckConstraint("parent_version >= 1", name="ck_proposal_parent_version"),
+        CheckConstraint("parent_version IS NULL OR parent_version >= 1", name="ck_proposal_parent_version"),
         Index("ix_trip_proposals_trip_status", "trip_id", "status"),
         Index("ix_trip_proposals_trip_created", "trip_id", "created_at"),
         Index("ix_trip_proposals_user_created", "user_id", "created_at"),
+        Index("ix_trip_proposals_status", "status"),
     )
 
     trip = relationship("Itinerary", backref="proposals")

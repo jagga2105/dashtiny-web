@@ -56,56 +56,93 @@ class BudgetEngine:
         accommodation_preference: str = "comfort",
         origin: Optional[str] = None,
         destination: str = "Goa",
-        activities_cost_sum: float = 0.0
+        activities_cost_sum: float = 0.0,
+        food_preferences: Optional[List[str]] = None,
+        dining_style: Optional[str] = None,
+        transport_preference: Optional[str] = None,
+        travel_mode: Optional[str] = None
     ) -> BudgetBreakdown:
         """
         Calculates itemized category budget based on travelers, nights, and travel style.
+        Ensures food estimates are derived from destination and food preferences, NOT accommodation preference!
         """
         nights = max(1, days_count - 1)
+        travelers = max(1, travelers)
 
         # 1. Stay (per room per night, assuming 1 room per 2 travelers)
         rooms = max(1, (travelers + 1) // 2)
         room_rates = {
+            "hostel": 900.0,
             "budget": 1800.0,
             "comfort": 3500.0,
             "boutique": 6500.0,
-            "luxury": 14000.0
+            "luxury": 14000.0,
+            "resort": 16000.0
         }
         nightly_rate = room_rates.get(accommodation_preference.lower(), 3500.0)
         stay_total = round(nights * rooms * nightly_rate, 2)
 
-        # 2. Food & Dining (per traveler per day)
-        daily_food_rates = {
-            "budget": 600.0,
-            "comfort": 1200.0,
-            "boutique": 2000.0,
-            "luxury": 3800.0
-        }
-        per_person_food = daily_food_rates.get(accommodation_preference.lower(), 1200.0)
-        food_total = round(days_count * travelers * per_person_food, 2)
+        # 2. Food & Dining: Derived from destination tier, dining style, and food preferences
+        # Independent from accommodation preference!
+        dest_lower = destination.lower()
+        is_intl_tier1 = any(k in dest_lower for k in ["tokyo", "paris", "rome", "dubai", "singapore", "london", "new york", "zurich"])
+        
+        # Base daily rate per person
+        clean_food_prefs = [f.lower().strip() for f in (food_preferences or [])]
+        clean_style = (dining_style or "").lower().strip()
+
+        if is_intl_tier1:
+            base_daily_food = 2800.0
+            if "fine_dining" in clean_style or "gourmet" in clean_food_prefs or "luxury" in clean_style:
+                base_daily_food = 4500.0
+            elif "street_food" in clean_food_prefs or "casual" in clean_style or "budget" in clean_style:
+                base_daily_food = 1800.0
+        else:
+            base_daily_food = 1100.0
+            if "fine_dining" in clean_style or "gourmet" in clean_food_prefs or "luxury" in clean_style:
+                base_daily_food = 2600.0
+            elif "street_food" in clean_food_prefs or "casual" in clean_style or "budget" in clean_style:
+                base_daily_food = 650.0
+            elif "seafood" in clean_food_prefs:
+                base_daily_food = 1400.0
+
+        food_total = round(days_count * travelers * base_daily_food, 2)
 
         # 3. Activities & Sightseeing
-        # If activities sum provided, use it; otherwise provide a standard estimate
         if activities_cost_sum > 0:
             act_total = round(activities_cost_sum * travelers, 2)
         else:
-            daily_act_rate = 500.0
+            daily_act_rate = 600.0 if not is_intl_tier1 else 1500.0
             act_total = round(days_count * travelers * daily_act_rate, 2)
 
         # 4. Local Transport (cabs, rickshaws, rentals per day per group)
-        daily_local_transit = 1000.0 if travelers <= 2 else 1800.0
+        trans_pref = (transport_preference or "mix").lower()
+        if "walk" in trans_pref:
+            daily_local_transit = 250.0
+        elif "public" in trans_pref or "metro" in trans_pref:
+            daily_local_transit = 450.0 * max(1, travelers // 2)
+        elif "rental" in trans_pref:
+            daily_local_transit = 2200.0
+        else:
+            daily_local_transit = 1000.0 if travelers <= 2 else 1800.0
+
         local_transit_total = round(days_count * daily_local_transit, 2)
 
         # 5. Intercity Transport estimate if origin specified (e.g. flights/trains)
         intercity_total = 0.0
         intercity_notes = "Not included (local destination only)"
         if origin and origin.lower() != destination.lower():
-            # Standard estimated return fare per passenger
-            fare_est = 5500.0 if currency == "INR" else 150.0
+            clean_mode = (travel_mode or "flight").lower()
+            if "train" in clean_mode or "rail" in clean_mode:
+                fare_est = 1600.0 if currency == "INR" else 45.0
+            elif "bus" in clean_mode or "car" in clean_mode:
+                fare_est = 1200.0 if currency == "INR" else 35.0
+            else:
+                fare_est = 5500.0 if currency == "INR" else 150.0
             intercity_total = round(fare_est * travelers, 2)
             intercity_notes = f"Estimated return transit for {travelers} traveler{'s' if travelers > 1 else ''}"
 
-        # 6. Miscellaneous / Contingency
+        # 6. Miscellaneous / Contingency Buffer
         misc_total = round((stay_total + food_total + act_total + local_transit_total) * 0.08, 2)
 
         total_est = round(stay_total + food_total + act_total + local_transit_total + intercity_total + misc_total, 2)
@@ -118,26 +155,27 @@ class BudgetEngine:
         actions = []
 
         if target_budget > 0:
-            if total_est > target_budget * 1.15:
+            if total_est > target_budget * 1.10:
                 is_over = True
                 overage = round(total_est - target_budget, 2)
                 guardrail_status = "OVER_TARGET"
                 guardrail_message = (
-                    f"This itinerary is estimated at ₹{int(total_est):,}, which is about "
-                    f"₹{int(overage):,} above your target budget of ₹{int(target_budget):,}."
+                    f"You're about ₹{int(overage):,} above target."
                 )
-                actions = ["reduce_cost", "keep_itinerary", "adjust_budget"]
+                actions = [
+                    "reduce_cost", "keep_highlights", "change_stay", "reduce_activities",
+                    "Reduce cost", "Keep highlights", "Change stay", "Reduce activities"
+                ]
             elif total_est < target_budget * 0.70:
                 guardrail_status = "UNDER_TARGET"
                 guardrail_message = (
-                    f"This itinerary is estimated at ₹{int(total_est):,}, leaving comfortable "
-                    f"room under your ₹{int(target_budget):,} target."
+                    f"This itinerary is estimated at ₹{int(total_est):,}, leaving comfortable room under your ₹{int(target_budget):,} target."
                 )
-                actions = ["upgrade_experience", "keep_itinerary"]
+                actions = ["Upgrade stay", "Keep highlights"]
             else:
                 guardrail_status = "ON_TARGET"
                 guardrail_message = f"Estimated total (₹{int(total_est):,}) aligns comfortably with your ₹{int(target_budget):,} target."
-                actions = ["keep_itinerary"]
+                actions = ["Keep highlights"]
 
         categories = [
             BudgetCategory(

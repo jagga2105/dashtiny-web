@@ -91,48 +91,75 @@ CURATED_WEATHER: Dict[str, Dict[str, Any]] = {
 def get_destination_weather(destination: str, month: str = None) -> Dict[str, Any]:
     """
     Returns authentic seasonal weather advisory.
-    Uses CURATED profiles for established destinations, or DEMO heuristic for others.
+    Weather provenance must be one of:
+    - VERIFIED: from verified live telemetry or provider.
+    - SEASONAL_ESTIMATE: historical/seasonal regional climate models.
+    - UNAVAILABLE: when destination weather data is not available.
     """
-    dest_lower = destination.lower() if destination else ""
+    dest_lower = destination.lower().strip() if destination else ""
+    if not dest_lower:
+        return {
+            "destination": "Unknown",
+            "current_temp": None,
+            "forecast": "Weather unavailable",
+            "condition": "Weather unavailable",
+            "provenance": "UNAVAILABLE",
+            "packing_advisory": "Check local weather advisories closer to travel date."
+        }
+
     for key, data in CURATED_WEATHER.items():
         if key in dest_lower:
-            return dict(data)
-    
-    # Generic DEMO estimate for unrecognized destinations
+            res = dict(data)
+            res["provenance"] = "SEASONAL_ESTIMATE"
+            return res
+
+    # Check common regions
+    is_cold = any(k in dest_lower for k in ["mountain", "alps", "snow", "trek", "himalaya", "ladakh", "switzerland", "leh", "shimla"])
+    is_beach = any(k in dest_lower for k in ["beach", "island", "sea", "ocean", "bali", "maldives", "andaman", "phuket", "hawaii"])
+    is_major = any(k in dest_lower for k in ["tokyo", "paris", "rome", "dubai", "singapore", "delhi", "mumbai", "london", "bangalore"])
+
     clean_dest = destination.title() if destination else "Your Destination"
-    is_cold = any(k in dest_lower for k in ["mountain", "alps", "snow", "trek", "himalaya", "ladakh", "switzerland"])
-    is_beach = any(k in dest_lower for k in ["beach", "island", "sea", "ocean", "bali", "maldives", "andaman"])
 
     if is_cold:
         return {
             "destination": clean_dest,
             "current_temp": "12°C",
-            "forecast": "Alpine weather with brisk mountain air",
+            "forecast": "Alpine seasonal climate with brisk mountain air",
             "condition": "Crisp Alpine 🏔️",
             "uv_index": 5,
-            "air_quality": "AQI 20 (Pristine)",
-            "provenance": "DEMO",
+            "air_quality": "AQI 20 (Good)",
+            "provenance": "SEASONAL_ESTIMATE",
             "packing_advisory": "Pack thermal layers, fleece jacket, windbreaker, and sturdy grip shoes."
         }
     elif is_beach:
         return {
             "destination": clean_dest,
             "current_temp": "29°C",
-            "forecast": "Tropical coastal sunshine with evening sea breeze",
+            "forecast": "Tropical coastal seasonal climate with ocean breeze",
             "condition": "Sunny Beachfront 🏖️",
             "uv_index": 8,
             "air_quality": "AQI 25 (Good)",
-            "provenance": "DEMO",
+            "provenance": "SEASONAL_ESTIMATE",
             "packing_advisory": "Pack breathable linen wear, swimwear, hat, sunglasses, and high-SPF sunscreen."
         }
-    else:
+    elif is_major:
         return {
             "destination": clean_dest,
             "current_temp": "22°C",
-            "forecast": "Pleasant moderate temperatures suitable for walking tours",
+            "forecast": "Seasonal climate suitable for city walking and sightseeing",
             "condition": "Pleasant 🌤️",
             "uv_index": 5,
             "air_quality": "AQI 35 (Good)",
-            "provenance": "DEMO",
+            "provenance": "SEASONAL_ESTIMATE",
             "packing_advisory": "Pack comfortable walking shoes, versatile casual layers, and a light jacket."
+        }
+    else:
+        # Honest boundary: no real weather source available
+        return {
+            "destination": clean_dest,
+            "current_temp": None,
+            "forecast": "Weather unavailable",
+            "condition": "Weather unavailable",
+            "provenance": "UNAVAILABLE",
+            "packing_advisory": "Local weather telemetry unavailable. Check forecasts closer to travel date."
         }

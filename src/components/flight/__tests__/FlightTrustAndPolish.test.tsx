@@ -402,64 +402,50 @@ describe('DashTiny L2.3 — Trust, Precision & UX Polish Vitest Suite', () => {
     });
   });
 
-  describe('7. Selection & Proposal flow: attaches flight to trip with ZERO fake PNR / fake confirmation', () => {
-    it('attaches curated flight to trip revision, showing honest trust banner and NO fake PNR', async () => {
+  describe('7. Selection & Proposal flow and L4 Booking Freeze', () => {
+    it('honors L4 booking freeze: communicates that bookings are coming soon and displays frozen cards', async () => {
       render(<BookingsPage />);
 
-      // Wait for trips context
-      await waitFor(() => {
-        expect(screen.getByTestId('flight-trip-context')).toBeTruthy();
+      expect(screen.getByTestId('bookings-coming-soon-banner')).toBeTruthy();
+      expect(screen.getAllByText(/Bookings are coming soon — stay tuned/i).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(/We're building trusted booking integrations/i).length).toBeGreaterThan(0);
+      expect(screen.getByTestId('flights-frozen-card')).toBeTruthy();
+
+      // Switch to hotels tab and verify frozen status
+      const hotelsTab = screen.getByTestId('category-tab-hotels');
+      fireEvent.click(hotelsTab);
+      expect(screen.getByTestId('hotels-frozen-card')).toBeTruthy();
+    });
+
+    it('attaches curated flight via modal with ZERO fake PNR / fake confirmation', async () => {
+      const mockOffer = createMockFlightOffer({
+        offer_id: 'fl_offer_6e_501',
+        airline: 'IndiGo',
+        flight_number: '6E-501',
+        provenance: 'CURATED',
+        availability_state: 'ESTIMATED',
       });
+      const onSubmit = vi.fn();
+      render(
+        <AttachFlightModal
+          isOpen={true}
+          onClose={vi.fn()}
+          offer={mockOffer}
+          activeTrips={[{ id: 'trip-test-1', title: 'Mumbai Trip', destination: 'BOM' }]}
+          selectedTripId="trip-test-1"
+          onSelectTripId={vi.fn()}
+          departureDate="2026-10-20"
+          onSubmit={onSubmit}
+          isSubmitting={false}
+        />
+      );
 
-      // Wait for airport context to sync
-      await waitFor(() => {
-        expect(screen.getByDisplayValue(/DEL/i)).toBeTruthy();
-      });
+      expect(screen.getByText(/Attach this flight to:/i)).toBeTruthy();
+      expect(screen.getByText(/Curated · Estimated availability/i)).toBeTruthy();
 
-      // Submit search form
-      const searchBtn = screen.getByTestId('search-flights-submit');
-      fireEvent.click(searchBtn);
-
-      // Wait for flight results
-      await waitFor(() => {
-        expect(screen.getByTestId('flight-card-fl_offer_6e_501')).toBeTruthy();
-      });
-
-      // Click "Select Flight"
-      const selectBtn = screen.getByTestId('select-flight-fl_offer_6e_501');
-      fireEvent.click(selectBtn);
-
-      // Verify the 2-step selection modal opens with honest text
-      await waitFor(() => {
-        expect(screen.getByText(/Attach this flight to:/i)).toBeTruthy();
-        expect(screen.getByText(/Curated · Estimated availability/i)).toBeTruthy();
-      });
-
-      const tripSelector = screen.getByTestId('attach-trip-selector') as HTMLSelectElement;
-      expect(tripSelector.value).toBe('trip-test-1');
-
-      // Click "Create Trip Proposal"
-      const createPropBtn = screen.getByTestId('create-trip-proposal-btn') as HTMLButtonElement;
-      fireEvent.click(createPropBtn);
-
-      await waitFor(() => {
-        expect(apiService.createFlightOfferProposal).toHaveBeenCalled();
-        expect(screen.getByText(/This change will attach the selected transport option to your Trip/i)).toBeTruthy();
-        expect(screen.getByText(/No provider booking will occur/i)).toBeTruthy();
-      });
-
-      // Click "Accept Proposal & Update Trip"
-      const acceptBtn = screen.getByTestId('accept-proposal-btn');
-      fireEvent.click(acceptBtn);
-
-      // Verify post-acceptance state
-      await waitFor(() => {
-        expect(screen.getByTestId('flight-attached-banner')).toBeTruthy();
-        expect(screen.getByText(/Flight attached to Trip/i)).toBeTruthy();
-        expect(screen.getByText(/Revision v2/i)).toBeTruthy();
-        expect(screen.getByText(/No booking has been made by DashTiny/i)).toBeTruthy();
-        expect(screen.getByText(/Continue to the provider to book/i)).toBeTruthy();
-      });
+      const createBtn = screen.getByTestId('create-trip-proposal-btn');
+      fireEvent.click(createBtn);
+      expect(onSubmit).toHaveBeenCalled();
 
       // Crucial trust invariants: NO fake PNR, NO confirmed booking code
       expect(screen.queryByText(/PROP-/i)).toBeNull();

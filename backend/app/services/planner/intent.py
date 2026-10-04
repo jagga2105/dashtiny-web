@@ -171,12 +171,22 @@ def parse_budget(text: str) -> float:
 def parse_destination_and_origin(text: str) -> tuple[Optional[str], Optional[str]]:
     """
     Extracts origin and destination from common travel patterns:
+    - '5 days Goa from Delhi for 2 under 50k'
     - 'trip to Goa from Delhi'
     - 'from Delhi to Goa'
     - 'Goa from Delhi'
-    - '5-day Goa trip'
+    - 'Weekend in Jaipur'
+    - '10 days in Japan'
     """
     clean_text = text.strip()
+
+    # Pattern 0: '<duration> [in] <destination> from <origin>'
+    m0 = re.search(r"(?:\d+\s*(?:day|days|-day|week|nights?))\s+(?:in\s+)?([A-Za-z\s]+?)\s+from\s+([A-Za-z\s]+?)(?=\s+(?:under|for|with|budget|in|on|dates?|$))", clean_text, re.IGNORECASE)
+    if m0:
+        cand_dest = clean_city(m0.group(1))
+        cand_orig = clean_city(m0.group(2))
+        if cand_dest and cand_orig:
+            return cand_dest, cand_orig
 
     # Pattern: 'to <destination> from <origin>'
     m1 = re.search(r"(?:trip|getaway|vacation|holiday|escape|travel)?\s*to\s+([A-Za-z\s]+?)\s+from\s+([A-Za-z\s]+?)(?=\s+(?:under|with|for|budget|in|on|dates?|$))", clean_text, re.IGNORECASE)
@@ -196,7 +206,6 @@ def parse_destination_and_origin(text: str) -> tuple[Optional[str], Optional[str
     if m3:
         cand_dest = clean_city(m3.group(1))
         cand_orig = clean_city(m3.group(2))
-        # Ensure destination isn't just duration
         if cand_dest and cand_orig and not re.search(r"\b(day|days|night|nights|week)\b", cand_dest, re.I):
             return cand_dest, cand_orig
 
@@ -207,6 +216,13 @@ def parse_destination_and_origin(text: str) -> tuple[Optional[str], Optional[str
         cand_orig = clean_city(m4_from.group(2))
         if cand_dest and cand_orig:
             return cand_dest, cand_orig
+
+    # Pattern: '<duration> in <destination>' or 'weekend in <destination>'
+    m_in = re.search(r"(?:\d+\s*(?:day|days|-day|week|nights?)|weekend)\s+in\s+([A-Za-z\s]+?)(?=\s+(?:under|from|for|with|focused|focused on|budget|in|on|dates?|$))", clean_text, re.IGNORECASE)
+    if m_in:
+        cand_dest = clean_city(m_in.group(1))
+        if cand_dest:
+            return cand_dest, None
 
     # Pattern: '<duration> <destination> trip'
     m4 = re.search(r"(?:\d+\s*(?:day|days|-day|week|nights?))\s+([A-Za-z\s]+?)\s+(?:trip|getaway|itinerary|holiday|vacation|tour|escape)", clean_text, re.IGNORECASE)
@@ -219,7 +235,7 @@ def parse_destination_and_origin(text: str) -> tuple[Optional[str], Optional[str
         return clean_city(m5.group(1)), None
 
     # Fallback first meaningful word if recognizable destination
-    known_destinations = ["goa", "delhi", "mumbai", "bengaluru", "bangalore", "jaipur", "udaipur", "manali", "shimla", "kashmir", "srinagar", "gulmarg", "ladakh", "leh", "kerala", "munnar", "coorg", "ooty", "agra", "varanasi", "andaman", "bali", "phuket", "kyoto", "tokyo", "paris", "dubai", "singapore", "kathmandu", "nepal"]
+    known_destinations = ["goa", "delhi", "mumbai", "bengaluru", "bangalore", "jaipur", "udaipur", "manali", "shimla", "kashmir", "srinagar", "gulmarg", "ladakh", "leh", "kerala", "munnar", "coorg", "ooty", "agra", "varanasi", "andaman", "bali", "phuket", "kyoto", "tokyo", "paris", "rome", "dubai", "singapore", "japan", "kathmandu", "nepal"]
     for kd in known_destinations:
         if re.search(rf"\b{kd}\b", clean_text, re.IGNORECASE):
             return kd.title(), None
@@ -231,7 +247,7 @@ def clean_city(raw: str) -> Optional[str]:
     if not raw:
         return None
     # Strip common prepositions and adjectives
-    cleaned = re.sub(r"\b(a|an|the|under|with|for|my|our|partner|friends|squad|couple|family|budget|trip|luxury|cheap|best|escape|getaway|vacation|holiday|weekend)\b", "", raw, flags=re.IGNORECASE).strip()
+    cleaned = re.sub(r"\b(a|an|the|under|with|for|my|our|partner|friends|squad|couple|family|budget|trip|luxury|cheap|best|escape|getaway|vacation|holiday|weekend|days?|nights?)\b", "", raw, flags=re.IGNORECASE).strip()
     words = [w.capitalize() for w in cleaned.split() if len(w) > 1]
     if words:
         return " ".join(words[:3])
@@ -242,11 +258,19 @@ def extract_travelers_and_persona(text: str) -> tuple[int, str]:
     lower = text.lower()
     num_match = re.search(r"(?:for\s+)?(\d+)\s*(?:people|persons|travellers|travelers|guests|adults|friends|of us)\b", lower)
     if num_match:
-        return min(50, max(1, int(num_match.group(1)))), "squad" if int(num_match.group(1)) > 2 else ("couple" if int(num_match.group(1)) == 2 else "solo")
+        val = min(50, max(1, int(num_match.group(1))))
+        return val, "squad" if val > 2 else ("couple" if val == 2 else "solo")
+
+    # Short pattern 'for 2' or 'for 3'
+    for_short = re.search(r"\bfor\s+(\d+)\b", lower)
+    if for_short:
+        val = int(for_short.group(1))
+        if 1 <= val <= 50:
+            return val, "squad" if val > 2 else ("couple" if val == 2 else "solo")
 
     words_map = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6}
-    word_match = re.search(r"\b(?:for\s+)?(one|two|three|four|five|six)\s+(?:people|persons|travellers|travelers|guests|adults|friends|of us)\b", lower)
-    if word_match:
+    word_match = re.search(r"\b(?:for\s+)?(one|two|three|four|five|six)\s*(?:people|persons|travellers|travelers|guests|adults|friends|of us)?\b", lower)
+    if word_match and word_match.group(1):
         count = words_map[word_match.group(1).lower()]
         return count, "couple" if count == 2 else ("solo" if count == 1 else "squad")
 
@@ -268,14 +292,14 @@ def extract_interests(text: str) -> List[str]:
     lower = text.lower()
     interests = []
     interest_map = {
-        "beaches": ["beach", "beaches", "coastal", "ocean", "sea"],
-        "food": ["food", "dining", "cuisine", "seafood", "tasting", "curry", "cafe"],
-        "nightlife": ["nightlife", "party", "club", "pub", "bar", "cocktail"],
-        "culture": ["culture", "heritage", "temple", "fort", "history", "museum"],
-        "nature": ["nature", "greenery", "wildlife", "forest", "hills", "mountain"],
-        "wellness": ["wellness", "spa", "yoga", "ayurveda", "relax"],
-        "adventure": ["adventure", "trek", "scuba", "kayak", "watersports", "hike"],
-        "photography": ["photo", "photography", "sunset", "sunrise", "scenic", "viewpoint"]
+        "beaches": ["beach", "beaches", "coastal", "ocean", "sea", "sand"],
+        "food": ["food", "dining", "cuisine", "seafood", "tasting", "curry", "cafe", "restaurants", "culinary"],
+        "nightlife": ["nightlife", "party", "club", "pub", "bar", "cocktail", "lounges"],
+        "culture": ["culture", "heritage", "temple", "temples", "shrine", "shrines", "fort", "history", "museum", "historical", "palace"],
+        "nature": ["nature", "greenery", "wildlife", "forest", "hills", "mountain", "lakes", "valleys"],
+        "wellness": ["wellness", "spa", "yoga", "ayurveda", "relax", "retreat"],
+        "adventure": ["adventure", "trek", "scuba", "kayak", "watersports", "hike", "hiking", "surfing"],
+        "photography": ["photo", "photography", "sunset", "sunrise", "scenic", "viewpoint", "vistas"]
     }
     for tag, keywords in interest_map.items():
         if any(k in lower for k in keywords):
