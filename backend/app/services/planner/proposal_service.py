@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from fastapi import HTTPException, status
 
-from app.models.models import Itinerary, ItineraryDay, ItineraryActivity, User, TripProposal, AIRun
+from app.models.models import Itinerary, ItineraryDay, ItineraryActivity, User, UserProfile, TripProposal, AIRun
 from app.services.trip_revision_service import create_revision, serialize_trip_days
 from app.services.planner.itinerary_engine import (
     ItineraryEngine,
@@ -65,12 +65,35 @@ class ProposalService:
         daily_schedule: str = "balanced",
         itinerary_style: str = "daily",
         stopovers: Optional[List[Any]] = None,
+        likes: Optional[List[str]] = None,
+        dislikes: Optional[List[str]] = None,
         user_id: Optional[str] = None,
         db: Optional[Session] = None
     ) -> Dict[str, Any]:
         """
         Generates a structured proposal and persists it as a durable TripProposal in PostgreSQL.
+        Automatically merges stored traveler profile preferences if fields are omitted.
         """
+        # Auto-merge explicit profile preferences if available
+        if db and user_id:
+            try:
+                user_profile = db.query(UserProfile).filter(UserProfile.user_id == user_id).first()
+                if user_profile:
+                    likes = likes or user_profile.likes or []
+                    dislikes = dislikes or user_profile.dislikes or []
+                    interests = interests or user_profile.interests or None
+                    food_preferences = food_preferences or user_profile.food_preferences or None
+                    if pace == "balanced" and user_profile.pace:
+                        pace = user_profile.pace
+                    if persona == "solo" and user_profile.travel_style:
+                        persona = user_profile.travel_style
+                    if accommodation_preference == "comfort" and user_profile.accommodation_preference:
+                        accommodation_preference = user_profile.accommodation_preference
+                    if transport_preference == "mix" and user_profile.transport_preference:
+                        transport_preference = user_profile.transport_preference
+            except Exception:
+                pass
+
         proposal = ItineraryEngine.generate_itinerary(
             destination=destination,
             days_count=days_count,
@@ -92,7 +115,9 @@ class ProposalService:
             travel_mode=travel_mode,
             daily_schedule=daily_schedule or wake_up_preference,
             itinerary_style=itinerary_style,
-            stopovers=stopovers
+            stopovers=stopovers,
+            likes=likes,
+            dislikes=dislikes
         )
 
         data = proposal.model_dump()
@@ -137,7 +162,9 @@ class ProposalService:
                     "currency": currency,
                     "pace": pace,
                     "persona": persona,
-                    "interests": interests
+                    "interests": interests,
+                    "likes": likes or [],
+                    "dislikes": dislikes or []
                 },
                 structured_intent={
                     "destination": destination,
@@ -147,7 +174,9 @@ class ProposalService:
                     "budget": budget,
                     "pace": pace,
                     "persona": persona,
-                    "interests": interests
+                    "interests": interests,
+                    "likes": likes or [],
+                    "dislikes": dislikes or []
                 },
                 proposal_data=data,
                 created_at=now_utc,

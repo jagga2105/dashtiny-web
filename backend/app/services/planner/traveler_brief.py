@@ -17,7 +17,7 @@ from app.utils.text_normalizer import normalize_travel_text
 
 VALID_TRIP_TYPES = {"leisure", "adventure", "romantic", "business", "backpacking", "luxury", "family"}
 VALID_TRAVEL_MODES = {"flight", "train", "bus", "car", "mixed"}
-VALID_PACES = {"fast", "balanced", "relaxed"}
+VALID_PACES = {"fast", "packed", "balanced", "relaxed", "slow"}
 VALID_SCHEDULES = {"early_riser", "balanced", "night_owl"}
 VALID_STYLES = {"daily", "detailed"}
 
@@ -49,6 +49,8 @@ class TravelerBrief(BaseModel):
     accommodation_preference: str = Field(default="comfort")
     transport_preference: str = Field(default="mix")
     food_preferences: List[str] = Field(default_factory=list)
+    likes: List[str] = Field(default_factory=list)
+    dislikes: List[str] = Field(default_factory=list)
     vibe: Optional[str] = None
     raw_prompt: Optional[str] = None
     planning_notes: List[str] = Field(default_factory=list)
@@ -77,7 +79,11 @@ class TravelerBrief(BaseModel):
     @classmethod
     def validate_pace(cls, v: str) -> str:
         lower = (v or "balanced").strip().lower()
-        return lower if lower in VALID_PACES else "balanced"
+        if lower in {"fast", "packed"}:
+            return "packed"
+        if lower in {"relaxed", "slow"}:
+            return "relaxed"
+        return "balanced"
 
     @field_validator("daily_schedule")
     @classmethod
@@ -141,6 +147,8 @@ class TravelerBrief(BaseModel):
             "accommodation_preference": accommodation_preference,
             "transport_preference": transport_preference,
             "food_preferences": food_preferences or ["any"],
+            "likes": kwargs.get("likes") or [],
+            "dislikes": kwargs.get("dislikes") or [],
             "trip_type": trip_type,
             "travel_mode": travel_mode,
             "daily_schedule": daily_schedule,
@@ -227,6 +235,8 @@ class TravelerBrief(BaseModel):
             accommodation_preference=data.get("accommodation_preference", "comfort"),
             transport_preference=data.get("transport_preference", "mix"),
             food_preferences=food_list,
+            likes=data.get("likes") or [],
+            dislikes=data.get("dislikes") or [],
             vibe=data.get("vibe"),
             raw_prompt=data.get("raw_prompt") or data.get("prompt"),
             planning_notes=data.get("planning_notes") or []

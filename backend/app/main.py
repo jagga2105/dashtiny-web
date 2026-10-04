@@ -5,7 +5,7 @@ import redis
 
 from app.config import settings
 from app.db.database import SessionLocal
-from app.api.v1 import auth, planner, squad, explore, community, rewards, trips, bookings, chat, ai, locations
+from app.api.v1 import auth, planner, squad, explore, community, rewards, trips, bookings, chat, ai, locations, profile, friends, notifications
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -30,6 +30,8 @@ app.add_middleware(
 
 # Include Routers
 app.include_router(auth.router, prefix=settings.API_V1_STR)
+app.include_router(profile.router, prefix=settings.API_V1_STR)
+app.include_router(friends.router, prefix=settings.API_V1_STR)
 app.include_router(planner.router, prefix=settings.API_V1_STR)
 app.include_router(trips.router, prefix=settings.API_V1_STR)
 app.include_router(bookings.router, prefix=settings.API_V1_STR)
@@ -40,6 +42,7 @@ app.include_router(rewards.router, prefix=settings.API_V1_STR)
 app.include_router(chat.router, prefix=settings.API_V1_STR)
 app.include_router(ai.router, prefix=settings.API_V1_STR)
 app.include_router(locations.router, prefix=settings.API_V1_STR)
+app.include_router(notifications.router, prefix=settings.API_V1_STR)
 
 @app.get("/")
 def root():

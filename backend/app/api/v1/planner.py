@@ -52,6 +52,8 @@ class ItineraryProposalRequest(BaseModel):
     accommodation_preference: str = Field("comfort", max_length=50)
     transport_preference: str = Field("mix", max_length=50)
     food_preferences: Optional[List[str]] = None
+    likes: Optional[List[str]] = None
+    dislikes: Optional[List[str]] = None
     raw_prompt: Optional[str] = None
 
 
@@ -146,6 +148,8 @@ def create_itinerary_proposal_endpoint(
             accommodation_preference=request.accommodation_preference,
             transport_preference=request.transport_preference,
             food_preferences=request.food_preferences,
+            likes=request.likes,
+            dislikes=request.dislikes,
             trip_type=request.trip_type,
             travel_mode=request.travel_mode,
             daily_schedule=request.daily_schedule,

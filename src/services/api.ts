@@ -140,6 +140,33 @@ export interface AuthResponse {
   };
 }
 
+export interface TravelerProfile {
+  user_id: string;
+  email: string;
+  full_name?: string;
+  avatar_url?: string;
+  home_city?: string;
+  preferred_currency: string;
+  bio?: string;
+  travel_style: string;
+  pace: string;
+  interests: string[];
+  likes: string[];
+  dislikes: string[];
+  food_preferences: string[];
+  activity_preferences: string[];
+  accommodation_preference: string;
+  transport_preference: string;
+  budget_tier: string;
+  budget_range: Record<string, any>;
+  social_preferences: Record<string, any>;
+  trust_score: number;
+  verified: boolean;
+  trips_count: number;
+}
+
+export type UpdateProfilePayload = Partial<Omit<TravelerProfile, 'user_id' | 'email' | 'trust_score' | 'verified' | 'trips_count'>>;
+
 // ==============================================================================
 // Unified API Client
 // ==============================================================================
@@ -341,6 +368,62 @@ export const apiService = {
     return request<any[]>(`/trips/${tripId}/revisions`);
   },
 
+  async updateTripVisibility(tripId: string, visibility: 'PUBLIC' | 'FRIENDS_ONLY' | 'PRIVATE') {
+    return request<{ status: string; trip_id: string; visibility: string; is_public: boolean }>(`/trips/${tripId}/visibility`, {
+      method: 'PATCH',
+      body: JSON.stringify({ visibility }),
+    });
+  },
+
+  // Trip Interest & Companion Requests
+  async expressTripInterest(tripId: string, message?: string) {
+    return request<any>(`/trips/${tripId}/interest`, {
+      method: 'POST',
+      body: JSON.stringify({ message }),
+    });
+  },
+
+  async getTripInterests(tripId: string) {
+    return request<any[]>(`/trips/${tripId}/interest`);
+  },
+
+  async respondTripInterest(tripId: string, requestId: string, action: 'approve' | 'reject') {
+    return request<any>(`/trips/${tripId}/interest/${requestId}/respond`, {
+      method: 'POST',
+      body: JSON.stringify({ action }),
+    });
+  },
+
+  // Friends & Social Graph
+  async getFriends() {
+    return request<{
+      friends: any[];
+      incoming_requests: any[];
+      outgoing_requests: any[];
+      total_friends: number;
+    }>('/friends');
+  },
+
+  async sendFriendRequest(params: { friend_id?: string; email?: string }) {
+    return request<any>('/friends/request', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+  },
+
+  async respondFriendRequest(requestId: string, action: 'accept' | 'reject') {
+    return request<any>(`/friends/requests/${requestId}/respond`, {
+      method: 'POST',
+      body: JSON.stringify({ action }),
+    });
+  },
+
+  async removeFriend(friendId: string) {
+    return request<any>(`/friends/${friendId}`, {
+      method: 'DELETE',
+    });
+  },
+
   // Bookings API
   async searchFlights(
     paramsOrOrigin: string | {
@@ -448,15 +531,98 @@ export const apiService = {
     });
   },
 
-  // Squad Co-Exploration API
+  // Squad Co-Exploration & Governance API
   async getSquadSummary(squadId: string) {
     return request<any>(`/squads/${squadId}/summary`);
+  },
+
+  async getSquadProfile(squadId: string) {
+    return request<any>(`/squads/${squadId}/profile`);
+  },
+
+  async getSquadByTrip(tripId: string) {
+    return request<any>(`/squads/by-trip/${tripId}`);
+  },
+
+  async getSquadExpenses(squadId: string) {
+    return request<any[]>(`/squads/${squadId}/expenses`);
   },
 
   async addSquadExpense(squadId: string, expense: { description: string; amount: number; category: string }) {
     return request<any>(`/squads/${squadId}/expenses`, {
       method: 'POST',
       body: JSON.stringify(expense),
+    });
+  },
+
+  async updateSquadMemberRole(squadId: string, userId: string, role: 'co_planner' | 'member') {
+    return request<any>(`/squads/${squadId}/members/${userId}/role`, {
+      method: 'PUT',
+      body: JSON.stringify({ role }),
+    });
+  },
+
+  async removeSquadMember(squadId: string, userId: string) {
+    return request<any>(`/squads/${squadId}/members/${userId}`, {
+      method: 'DELETE',
+    });
+  },
+
+  // Squad Suggestions & Collaborative DAIna Editing
+  async getSquadSuggestions(squadId: string) {
+    return request<any[]>(`/squads/${squadId}/suggestions`);
+  },
+
+  async createSquadSuggestion(squadId: string, instruction: string) {
+    return request<any>(`/squads/${squadId}/suggestions`, {
+      method: 'POST',
+      body: JSON.stringify({ instruction }),
+    });
+  },
+
+  async voteSquadSuggestion(squadId: string, suggestionId: string, vote: 'up' | 'down') {
+    return request<any>(`/squads/${squadId}/suggestions/${suggestionId}/vote`, {
+      method: 'POST',
+      body: JSON.stringify({ vote }),
+    });
+  },
+
+  async acceptSquadSuggestion(squadId: string, suggestionId: string) {
+    return request<any>(`/squads/${squadId}/suggestions/${suggestionId}/accept`, {
+      method: 'POST',
+    });
+  },
+
+  async rejectSquadSuggestion(squadId: string, suggestionId: string) {
+    return request<any>(`/squads/${squadId}/suggestions/${suggestionId}/reject`, {
+      method: 'POST',
+    });
+  },
+
+  // Notifications & Alerts API
+  async getNotifications(unreadOnly = false) {
+    return request<{
+      notifications: any[];
+      unread_count: number;
+      total_count: number;
+    }>(`/notifications?unread_only=${unreadOnly}`);
+  },
+
+  async markNotificationRead(notificationId: string) {
+    return request<any>(`/notifications/${notificationId}/read`, {
+      method: 'POST',
+    });
+  },
+
+  async markAllNotificationsRead() {
+    return request<any>('/notifications/read-all', {
+      method: 'POST',
+    });
+  },
+
+  async deleteNotification(notificationId: string) {
+    return request<any>(`/notifications/${notificationId}`, {
+      method: 'DELETE',
     });
   },
 
@@ -527,8 +693,27 @@ export const apiService = {
       body: JSON.stringify({ trip_id: tripId, instruction }),
     });
   },
+
+  // Traveler Profile & Personalization (Phase 1)
+  async getProfile(): Promise<TravelerProfile> {
+    return request<TravelerProfile>('/profile');
+  },
+
+  async updateProfile(payload: UpdateProfilePayload): Promise<TravelerProfile> {
+    return request<TravelerProfile>('/profile', {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async getPublicProfile(userId: string): Promise<TravelerProfile> {
+    return request<TravelerProfile>(`/profile/${userId}`);
+  },
 };
 
 // Aliases for explicit imports
 export const requestOTP = apiService.requestOTP;
 export const verifyOTP = apiService.verifyOTP;
+export const getProfile = apiService.getProfile;
+export const updateProfile = apiService.updateProfile;
+export const getPublicProfile = apiService.getPublicProfile;

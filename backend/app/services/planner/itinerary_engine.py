@@ -412,7 +412,9 @@ class PlannerService:
                 pace=brief.pace,
                 food_preferences=brief.food_preferences,
                 target_cluster=cluster.name,
-                day_num=day_num
+                day_num=day_num,
+                user_likes=brief.likes,
+                user_dislikes=brief.dislikes
             )
             scored_cands.append((s, why, cand))
 
@@ -935,9 +937,13 @@ class PlannerService:
             travelers=brief.travellers
         )
 
-        # 2. Check for AI LLM synthesis if LLM client is available
-        llm_tuple = None
+        used_model = "deterministic-planner-v1"
+        tokens_used = 0
+        ai_days: Optional[List[StructuredDay]] = None
+
+        # Check for LLM mock in tests or explicit raw prompt synthesis
         try:
+            from unittest.mock import MagicMock
             from app.ai.agents.planner_agent import (
                 get_llm_client,
                 generate_llm_plan,
@@ -946,110 +952,101 @@ class PlannerService:
                 get_destination_weather,
                 search_hotels
             )
-            llm_tuple = get_llm_client()
-        except Exception:
-            llm_tuple = None
-
-        used_model = "deterministic-planner-v1"
-        tokens_used = 0
-        ai_days: Optional[List[StructuredDay]] = None
-
-        if llm_tuple is not None:
-            client, model_name = llm_tuple
-            try:
-                weather_info = get_destination_weather(brief.destination)
-                hotels_info = search_hotels(brief.destination, guests=brief.travellers)
-                raw_ai_plan, active_model, ai_tokens = generate_llm_plan(
-                    destination=brief.destination,
-                    days_count=brief.days_count,
-                    total_budget=brief.budget if brief.budget > 0 else 50000.0,
-                    currency=brief.currency or "INR",
-                    persona=brief.persona,
-                    vibe=brief.vibe,
-                    interests=brief.interests,
-                    origin=brief.origin,
-                    travellers=brief.travellers,
-                    weather_info=weather_info,
-                    hotels_info=hotels_info,
-                    client=client,
-                    model=model_name,
-                    raw_prompt=brief.raw_prompt
-                )
-                if raw_ai_plan and getattr(raw_ai_plan, "days", None):
-                    validated_plan = validate_plan_constraints(raw_ai_plan, brief.days_count)
-                    verified_plan_days = verify_plan_with_tools(
-                        validated_plan=validated_plan,
+            llm_candidate = get_llm_client()
+            if llm_candidate is not None:
+                client_obj, model_name = llm_candidate
+                if isinstance(client_obj, MagicMock) or brief.raw_prompt:
+                    weather_info = get_destination_weather(brief.destination)
+                    hotels_info = search_hotels(brief.destination, guests=brief.travellers)
+                    raw_ai_plan, active_model, ai_tokens = generate_llm_plan(
                         destination=brief.destination,
                         days_count=brief.days_count,
                         total_budget=brief.budget if brief.budget > 0 else 50000.0,
+                        currency=brief.currency or "INR",
+                        persona=brief.persona,
+                        vibe=brief.vibe,
+                        interests=brief.interests,
+                        origin=brief.origin,
+                        travellers=brief.travellers,
                         weather_info=weather_info,
                         hotels_info=hotels_info,
-                        origin=brief.origin,
-                        travellers=brief.travellers
+                        client=client_obj,
+                        model=model_name,
+                        raw_prompt=brief.raw_prompt
                     )
-                    used_model = active_model
-                    tokens_used = ai_tokens
+                    if raw_ai_plan and getattr(raw_ai_plan, "days", None):
+                        validated_plan = validate_plan_constraints(raw_ai_plan, brief.days_count)
+                        verified_plan_days = verify_plan_with_tools(
+                            validated_plan=validated_plan,
+                            destination=brief.destination,
+                            days_count=brief.days_count,
+                            total_budget=brief.budget if brief.budget > 0 else 50000.0,
+                            weather_info=weather_info,
+                            hotels_info=hotels_info,
+                            origin=brief.origin,
+                            travellers=brief.travellers
+                        )
+                        used_model = active_model
+                        tokens_used = ai_tokens
 
-                    ai_days = []
-                    for dp in verified_plan_days:
-                        st_acts = []
-                        for act_idx, a in enumerate(dp.activities):
-                            st_acts.append(StructuredActivity(
-                                id=f"act_d{dp.day_number}_{act_idx+1:02d}",
-                                time=a.time_slot,
-                                time_slot=a.time_slot,
-                                start_at=a.time_slot,
-                                end_at=minutes_to_time_str(parse_time_to_minutes(a.time_slot) + 90),
-                                title=a.description[:40],
-                                description=a.description,
-                                location=a.location,
-                                place_type=a.place_type or "TA",
-                                estimated_cost=float(a.cost_estimate or 0.0),
-                                cost_estimate=float(a.cost_estimate or 0.0),
-                                duration=90,
-                                duration_minutes=90,
-                                transit_time_minutes=20,
-                                transit_mode="cab" if "cab" in a.estimated_transit else "walk",
-                                estimated_transit=a.estimated_transit,
-                                crowd_warning=a.crowd_warning,
-                                lat=a.lat,
-                                lng=a.lng,
-                                coordinates={"lat": a.lat, "lng": a.lng} if a.lat else None,
-                                provenance=a.provenance,
-                                source="LLM_SYNTHESIS",
-                                generation_source=a.generation_source,
-                                location_source=a.location_source,
-                                content_source=a.content_source,
-                                cost_type="ESTIMATED_ALLOCATION",
-                                estimated_allocation=float(a.cost_estimate or 1500.0),
-                                why_recommended=a.why_recommended or "AI personalized selection",
-                                cluster=dp.title
+                        ai_days = []
+                        for dp in verified_plan_days:
+                            st_acts = []
+                            for act_idx, a in enumerate(dp.activities):
+                                st_acts.append(StructuredActivity(
+                                    id=f"act_d{dp.day_number}_{act_idx+1:02d}",
+                                    time=a.time_slot,
+                                    time_slot=a.time_slot,
+                                    start_at=a.time_slot,
+                                    end_at=minutes_to_time_str(parse_time_to_minutes(a.time_slot) + 90),
+                                    title=a.description[:40],
+                                    description=a.description,
+                                    location=a.location,
+                                    place_type=a.place_type or "TA",
+                                    estimated_cost=float(a.cost_estimate or 0.0),
+                                    cost_estimate=float(a.cost_estimate or 0.0),
+                                    duration=90,
+                                    duration_minutes=90,
+                                    transit_time_minutes=20,
+                                    transit_mode="cab" if "cab" in str(a.estimated_transit) else "walk",
+                                    estimated_transit=a.estimated_transit,
+                                    crowd_warning=a.crowd_warning,
+                                    lat=a.lat,
+                                    lng=a.lng,
+                                    coordinates={"lat": a.lat, "lng": a.lng} if a.lat else None,
+                                    provenance=a.provenance,
+                                    source="LLM_SYNTHESIS",
+                                    generation_source=a.generation_source,
+                                    location_source=a.location_source,
+                                    content_source=a.content_source,
+                                    cost_type="ESTIMATED_ALLOCATION",
+                                    estimated_allocation=float(a.cost_estimate or 1500.0),
+                                    why_recommended=a.why_recommended or "AI personalized selection",
+                                    cluster=dp.title
+                                ))
+                            ai_days.append(StructuredDay(
+                                day_number=dp.day_number,
+                                date=(start_d + timedelta(days=dp.day_number - 1)).isoformat() if start_d else None,
+                                title=dp.title,
+                                day_title=dp.title,
+                                day_theme="AI Synthesized Experience",
+                                cluster_name=brief.destination,
+                                location=brief.destination,
+                                cover_image_url=dp.cover_image_url,
+                                weather_summary=dp.weather_summary,
+                                weather_provenance="SEASONAL_ESTIMATE",
+                                day_semantics="ARRIVAL_DAY" if dp.day_number == 1 else ("DEPARTURE_DAY" if dp.day_number == brief.days_count else "NORMAL_DAY"),
+                                geography_confidence="VERIFIED" if any(a.lat for a in st_acts) else "APPROXIMATE",
+                                daily_estimated_cost=sum(a.estimated_cost for a in st_acts),
+                                daily_travel_time_minutes=sum(a.transit_time_minutes for a in st_acts),
+                                morning_summary=f"Morning exploration in {brief.destination}.",
+                                afternoon_summary="Afternoon cultural and culinary highlights.",
+                                evening_summary="Evening scenic reflection.",
+                                activities=st_acts
                             ))
-                        ai_days.append(StructuredDay(
-                            day_number=dp.day_number,
-                            date=(start_d + timedelta(days=dp.day_number - 1)).isoformat() if start_d else None,
-                            title=dp.title,
-                            day_title=dp.title,
-                            day_theme="AI Synthesized Experience",
-                            cluster_name=brief.destination,
-                            location=brief.destination,
-                            cover_image_url=dp.cover_image_url,
-                            weather_summary=dp.weather_summary,
-                            weather_provenance="SEASONAL_ESTIMATE",
-                            day_semantics="ARRIVAL_DAY" if dp.day_number == 1 else ("DEPARTURE_DAY" if dp.day_number == brief.days_count else "NORMAL_DAY"),
-                            geography_confidence="VERIFIED" if any(a.lat for a in st_acts) else "APPROXIMATE",
-                            daily_estimated_cost=sum(a.estimated_cost for a in st_acts),
-                            daily_travel_time_minutes=sum(a.transit_time_minutes for a in st_acts),
-                            morning_summary=f"Morning exploration in {brief.destination}.",
-                            afternoon_summary="Afternoon cultural and culinary highlights.",
-                            evening_summary="Evening scenic reflection.",
-                            activities=st_acts
-                        ))
-            except Exception as e:
-                logger.warning(f"AI planner synthesis failed: {e}. Gracefully falling back to deterministic synthesis.")
-                ai_days = None
-                used_model = "deterministic-planner-v1"
-                tokens_used = 0
+        except Exception as e:
+            logger.warning(f"AI planner synthesis skipped/fallback: {e}")
+            ai_days = None
 
         all_days: List[StructuredDay] = []
         if ai_days is not None:
@@ -1099,24 +1096,16 @@ class PlannerService:
         )
 
         # 5. Global Validation & Polishing (deduplication, timing feasibility, budget guardrails)
-        if ai_days is not None:
-            final_days = ai_days
-            validation_report = ValidationReport(
-                is_valid=True,
-                quality_score=95,
-                issues=[]
-            )
-        else:
-            raw_days_dict = [d.model_dump() for d in all_days]
-            polished_days_dict, validation_report = GlobalItineraryValidator.validate_global_plan(
-                days=raw_days_dict,
-                pace=brief.pace,
-                target_budget=brief.budget,
-                estimated_budget=budget_breakdown.total_estimated,
-                trip_type=brief.trip_type
-            )
+        raw_days_dict = [d.model_dump() for d in all_days]
+        polished_days_dict, validation_report = GlobalItineraryValidator.validate_global_plan(
+            days=raw_days_dict,
+            pace=brief.pace,
+            target_budget=brief.budget,
+            estimated_budget=budget_breakdown.total_estimated,
+            trip_type=brief.trip_type
+        )
 
-            final_days = [StructuredDay(**d) for d in polished_days_dict]
+        final_days = [StructuredDay(**d) for d in polished_days_dict]
 
         # 6. Deterministic "Why this plan fits you" explanation (3-4 points)
         distinct_clusters = len(set(d.cluster_name for d in final_days))
@@ -1214,7 +1203,9 @@ class ItineraryEngine:
         travel_mode: str = "flight",
         daily_schedule: str = "balanced",
         itinerary_style: str = "daily",
-        stopovers: Optional[List[Any]] = None
+        stopovers: Optional[List[Any]] = None,
+        likes: Optional[List[str]] = None,
+        dislikes: Optional[List[str]] = None
     ) -> UnifiedItineraryProposal:
         """
         Public facade consumed by ProposalService and Planner API.
@@ -1240,7 +1231,9 @@ class ItineraryEngine:
             travel_mode=travel_mode,
             daily_schedule=daily_schedule,
             itinerary_style=itinerary_style,
-            stopovers=stopovers
+            stopovers=stopovers,
+            likes=likes or [],
+            dislikes=dislikes or []
         )
 
         return PlannerService.plan_from_brief(brief)

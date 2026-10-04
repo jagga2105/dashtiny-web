@@ -61,6 +61,21 @@ class UserProfile(Base):
     seat_pref = Column(String(50), default="Window")
     reward_coins = Column(Integer, default=0)
 
+    # Phase 1: Explicit Traveler Preferences & Personalization
+    bio = Column(Text, nullable=True)
+    travel_style = Column(String(50), default="solo")  # solo, couple, family, squad, nomad, luxury, backpacker
+    pace = Column(String(50), default="balanced")  # relaxed, balanced, packed
+    interests = Column(JSON, default=list)  # ["photography", "beaches", "nightlife", "history"]
+    likes = Column(JSON, default=list)  # ["seafood", "sunset", "walking_tours", "cliffside_views"]
+    dislikes = Column(JSON, default=list)  # ["religious", "pilgrimage", "crowds", "long_walks"]
+    food_preferences = Column(JSON, default=list)  # ["local_eats", "seafood", "vegetarian", "street_food"]
+    activity_preferences = Column(JSON, default=list)  # ["sightseeing", "wellness", "adventure", "museums"]
+    accommodation_preference = Column(String(50), default="comfort")  # hostel, budget, comfort, boutique, luxury, resort
+    transport_preference = Column(String(50), default="mix")  # walking, public_transit, cab, rental_car, mix
+    budget_tier = Column(String(50), default="moderate")  # budget, moderate, premium, luxury
+    budget_range = Column(JSON, default=dict)  # {"min": 20000, "max": 60000, "currency": "INR"}
+    social_preferences = Column(JSON, default=dict)  # {"open_to_meetups": true, "squad_size_pref": "small"}
+
     __table_args__ = (
         CheckConstraint("reward_coins >= 0", name="ck_user_profile_reward_coins"),
     )
@@ -87,6 +102,7 @@ class Itinerary(Base):
     raw_prompt = Column(Text, nullable=True)
     status = Column(String(50), default="draft")  # draft, upcoming, active, completed, cancelled
     is_public = Column(Boolean, default=False)
+    visibility = Column(String(20), default="PRIVATE", nullable=False)  # PUBLIC, FRIENDS_ONLY, PRIVATE
     source_trip_id = Column(String(36), ForeignKey("itineraries.id", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
@@ -95,8 +111,10 @@ class Itinerary(Base):
         CheckConstraint("total_budget IS NULL OR total_budget >= 0", name="ck_itinerary_budget"),
         CheckConstraint("start_date IS NULL OR end_date IS NULL OR end_date >= start_date", name="ck_itinerary_dates"),
         CheckConstraint("status IN ('draft', 'upcoming', 'active', 'completed', 'cancelled')", name="ck_itinerary_status"),
+        CheckConstraint("visibility IN ('PUBLIC', 'FRIENDS_ONLY', 'PRIVATE')", name="ck_itinerary_visibility"),
         Index("ix_itineraries_owner_created", "owner_id", "created_at"),
         Index("ix_itineraries_owner_status_date", "owner_id", "status", "start_date"),
+        Index("ix_itineraries_visibility", "visibility"),
     )
 
     owner = relationship("User", back_populates="itineraries")
@@ -197,6 +215,51 @@ class SquadMember(Base):
 
     squad = relationship("SquadRoom", back_populates="members")
     user = relationship("User", back_populates="squad_memberships")
+
+
+class Friendship(Base):
+    __tablename__ = "friendships"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    friend_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    status = Column(String(20), default="accepted", nullable=False)  # pending, accepted, rejected, blocked
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "friend_id", name="uq_friendship_pair"),
+        CheckConstraint("status IN ('pending', 'accepted', 'rejected', 'blocked')", name="ck_friendship_status"),
+        Index("ix_friendships_user_status", "user_id", "status"),
+        Index("ix_friendships_friend_status", "friend_id", "status"),
+    )
+
+    user = relationship("User", foreign_keys=[user_id], backref="friendships_initiated")
+    friend = relationship("User", foreign_keys=[friend_id], backref="friendships_received")
+
+
+class TripInterestRequest(Base):
+    __tablename__ = "trip_interest_requests"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    trip_id = Column(String(36), ForeignKey("itineraries.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    message = Column(Text, nullable=True)
+    status = Column(String(20), default="pending", nullable=False)  # pending, approved, rejected, withdrawn
+    compatibility_score = Column(Integer, nullable=True)
+    compatibility_breakdown = Column(JSON, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("trip_id", "user_id", name="uq_trip_interest_request"),
+        CheckConstraint("status IN ('pending', 'approved', 'rejected', 'withdrawn')", name="ck_trip_interest_status"),
+        Index("ix_trip_interest_trip_status", "trip_id", "status"),
+        Index("ix_trip_interest_user_status", "user_id", "status"),
+    )
+
+    trip = relationship("Itinerary", backref="interest_requests")
+    user = relationship("User", backref="trip_interest_requests")
 
 
 class SquadExpense(Base):
@@ -593,5 +656,73 @@ class Airport(Base):
         Index("ix_airports_country", "country"),
         Index("ix_airports_active", "is_active"),
     )
+
+
+class SquadSuggestion(Base):
+    __tablename__ = "squad_suggestions"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    squad_id = Column(String(36), ForeignKey("squad_rooms.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    instruction = Column(Text, nullable=False)
+    status = Column(String(50), default="open", nullable=False)  # open, proposal_generated, accepted, rejected, withdrawn
+    proposal_id = Column(String(36), ForeignKey("trip_proposals.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        CheckConstraint("status IN ('open', 'proposal_generated', 'accepted', 'rejected', 'withdrawn')", name="ck_squad_suggestion_status"),
+        Index("ix_squad_suggestions_squad_status", "squad_id", "status"),
+        Index("ix_squad_suggestions_user_created", "user_id", "created_at"),
+    )
+
+    squad = relationship("SquadRoom", backref="suggestions")
+    user = relationship("User")
+    proposal = relationship("TripProposal")
+    votes = relationship("SquadVote", back_populates="suggestion", cascade="all, delete-orphan")
+
+
+class SquadVote(Base):
+    __tablename__ = "squad_votes"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    squad_id = Column(String(36), ForeignKey("squad_rooms.id", ondelete="CASCADE"), nullable=False)
+    suggestion_id = Column(String(36), ForeignKey("squad_suggestions.id", ondelete="CASCADE"), nullable=True)
+    proposal_id = Column(String(36), ForeignKey("trip_proposals.id", ondelete="CASCADE"), nullable=True)
+    user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    vote = Column(String(10), nullable=False)  # up, down
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        CheckConstraint("vote IN ('up', 'down')", name="ck_squad_vote_type"),
+        Index("ix_squad_votes_suggestion", "suggestion_id", "user_id"),
+        Index("ix_squad_votes_proposal", "proposal_id", "user_id"),
+    )
+
+    suggestion = relationship("SquadSuggestion", back_populates="votes")
+    proposal = relationship("TripProposal")
+    user = relationship("User")
+
+
+class Notification(Base):
+    __tablename__ = "notifications"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    type = Column(String(50), nullable=False)  # INTEREST_RECEIVED, INTEREST_APPROVED, INTEREST_REJECTED, FRIEND_REQUEST, FRIEND_ACCEPTED, SQUAD_INVITATION, SQUAD_SUGGESTION_CREATED, SQUAD_VOTE_STARTED, ITINERARY_REVISED
+    title = Column(String(255), nullable=False)
+    body = Column(Text, nullable=False)
+    payload = Column(JSON, nullable=True, default=dict)
+    is_read = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        Index("ix_notifications_user_read", "user_id", "is_read"),
+        Index("ix_notifications_user_created", "user_id", "created_at"),
+    )
+
+    user = relationship("User", backref="notifications")
+
+
 
 

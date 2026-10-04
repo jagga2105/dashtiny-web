@@ -650,6 +650,18 @@ class DestinationIntelligence:
                     ("Arashiyama Soaring Bamboo Forest Walk", "Ethereal natural corridor of soaring green bamboo stalks swaying with the wind.", "Sagatenryuji, Ukyo Ward, Kyoto", "TA", 35.0169, 135.6713, ["nature", "photography", "relaxed"], 0.0, 75),
                     ("Traditional Yudofu Tofu Tasting at Saga Tofu Ine", "Silken simmering tofu served with yuzu dipping sauce and seasonal mountain vegetables.", "Sagatenryuji, Ukyo Ward, Kyoto", "R", 35.0155, 135.6775, ["food", "culture"], 1200.0, 60),
                     ("Kinkaku-ji The Golden Pavilion", "Zen Buddhist temple whose top two floors are completely covered in pure gold leaf.", "1 Kinkakujicho, Kita Ward, Kyoto", "TA", 35.0394, 135.7292, ["heritage", "culture", "photography"], 400.0, 60)
+                ]),
+                ("Philosopher's Path & Northern Higashiyama", "Stone canal path flanked by hundreds of cherry trees and Zen temples", [
+                    ("Philosopher's Path Canal Promenade", "Tranquil stone path following a canal lined with cherry trees and Zen stone gardens.", "Sakyo Ward, Kyoto", "TA", 35.0272, 135.7953, ["nature", "culture", "relaxed", "photography"], 0.0, 75),
+                    ("Ginkaku-ji The Silver Pavilion & Dry Sand Garden", "Zen temple featuring the iconic Sea of Silver Sand and meticulously raked gravel cones.", "2 Ginkakujicho, Sakyo Ward, Kyoto", "TA", 35.0270, 135.7982, ["heritage", "culture", "photography"], 500.0, 60),
+                    ("Matcha Parfait & Uji Green Tea Tasting at Saryo Tsujiri", "Multi-layered artisanal matcha parfait with shiratama dango and rich roasted hojicha.", "Gionmachi Minamigawa, Higashiyama Ward, Kyoto", "R", 35.0035, 135.7750, ["food"], 850.0, 45),
+                    ("Nanzen-ji Temple Aqueduct & Sanmon Gate", "Massive wooden gate and dramatic Meiji-era red brick Roman aqueduct nestled in cedar woods.", "Nanzenji Fukuchicho, Sakyo Ward, Kyoto", "TA", 35.0113, 135.7939, ["heritage", "culture", "photography"], 0.0, 60)
+                ]),
+                ("Central Kyoto Imperial & Nijo Castle", "Feudal samurai citadels, nightingale floors, and imperial park grounds", [
+                    ("Nijo Castle & Ninomaru Palace Nightingale Floors", "1603 Tokugawa shogunate fortress with singing nightingale alarm floorboards and pine murals.", "541 Nijojocho, Nakagyo Ward, Kyoto", "TA", 35.0142, 135.7482, ["heritage", "history", "culture"], 800.0, 90),
+                    ("Kyoto Imperial Palace Pine Promenades", "Former ruling residence of Japan's Emperor surrounded by gravel paths and weeping cherry trees.", "3 Kyotogyoen, Kamigyo Ward, Kyoto", "TA", 35.0254, 135.7621, ["nature", "heritage", "relaxed"], 0.0, 60),
+                    ("Kyoto Tonkatsu Feast at Katsukura Sanjo", "Panko-crusted tender pork cutlet with freshly crushed sesame seeds, miso soup, and yuzu sauce.", "16 Ishibashicho, Nakagyo Ward, Kyoto", "R", 35.0088, 135.7686, ["food"], 1100.0, 60),
+                    ("Kamogawa Riverbank Sunset Bicycle Stroll", "Picturesque riverbank where locals gather on stone stepping stones at twilight.", "Kamogawa River, Kyoto", "TA", 35.0062, 135.7720, ["sunset", "relaxed", "photography"], 0.0, 60)
                 ])
             ],
             "mumbai": [
@@ -737,10 +749,14 @@ class DestinationIntelligence:
         pace: str = "balanced",
         food_preferences: Optional[List[str]] = None,
         target_cluster: Optional[str] = None,
-        day_num: int = 1
+        day_num: int = 1,
+        user_likes: Optional[List[str]] = None,
+        user_dislikes: Optional[List[str]] = None
     ) -> Tuple[float, str]:
         """
         Explicit candidate scoring based on:
+        - Dislike suppression (-60.0 severe penalty for dealbreakers, e.g. religious vs nightlife)
+        - Like amplification (+20.0 per explicit user like)
         - Interest matching (+15 per tag)
         - Persona compatibility (+10)
         - Pace compatibility (+10)
@@ -751,9 +767,47 @@ class DestinationIntelligence:
         """
         score = 50.0  # Base score
         matched_interests: List[str] = []
-        clean_interests = [i.lower().strip() for i in user_interests]
+        matched_likes: List[str] = []
+        avoided_dislikes: List[str] = []
+        clean_interests = [i.lower().strip() for i in user_interests if i]
+        cand_cats_lower = [c.lower() for c in candidate.categories]
+        cand_text = f"{candidate.name} {candidate.description}".lower()
 
-        # 1. Interest Matching
+        # 0. Dislike Suppression (Dealbreaker avoidance)
+        if user_dislikes:
+            clean_dislikes = [d.lower().strip() for d in user_dislikes if d.strip()]
+            for dis in clean_dislikes:
+                # Direct category or text match
+                is_hit = any(dis in c or c in dis for c in cand_cats_lower)
+                # Synonyms & semantic tags
+                if not is_hit and dis in ["religious", "pilgrimage", "spiritual", "temples", "temple"]:
+                    is_hit = any(k in cand_cats_lower for k in ["heritage_religious", "pilgrimage", "spiritual", "temple", "shrine", "monastery"]) or any(w in cand_text for w in ["shrine", "temple", "cathedral", "church", "pilgrim", "sacred"])
+                elif not is_hit and dis in ["nightlife", "parties", "party", "clubs", "club"]:
+                    is_hit = any(k in cand_cats_lower for k in ["nightlife", "party", "club", "bar"]) or any(w in cand_text for w in ["nightclub", "rave", "cocktail bar"])
+                elif not is_hit and dis in ["hiking", "strenuous", "long_walks", "trekking"]:
+                    is_hit = any(k in cand_cats_lower for k in ["hiking", "adventure_active", "trek"]) or (candidate.duration >= 120 and "walk" in cand_text)
+
+                if is_hit:
+                    score -= 60.0  # Severe suppression
+                    avoided_dislikes.append(dis)
+
+        # 1. Like Amplification (Explicit User Passions)
+        if user_likes:
+            clean_likes = [l.lower().strip() for l in user_likes if l.strip()]
+            for lk in clean_likes:
+                is_like_hit = any(lk in c or c in lk for c in cand_cats_lower)
+                if not is_like_hit and lk in ["beaches", "beach", "coast", "coastal"]:
+                    is_like_hit = any(k in cand_cats_lower for k in ["beaches", "coastal", "sunset"]) or "beach" in cand_text
+                elif not is_like_hit and lk in ["nightlife", "parties", "party", "bars"]:
+                    is_like_hit = any(k in cand_cats_lower for k in ["nightlife", "sunset"]) or "lounge" in cand_text
+                elif not is_like_hit and lk in ["seafood", "food", "dining", "cuisine"]:
+                    is_like_hit = candidate.place_type == "R" or any(k in cand_cats_lower for k in ["food", "culinary"])
+
+                if is_like_hit:
+                    score += 20.0
+                    matched_likes.append(lk)
+
+        # 2. Interest Matching
         for cat in candidate.categories:
             for interest in clean_interests:
                 if interest in cat or cat in interest:
@@ -761,7 +815,7 @@ class DestinationIntelligence:
                     if interest not in matched_interests:
                         matched_interests.append(interest)
 
-        # 2. Persona Matching
+        # 3. Persona Matching
         lower_persona = persona.lower()
         if lower_persona in ["couple", "romantic"] and any(c in candidate.categories for c in ["romantic", "sunset", "relaxed", "heritage"]):
             score += 10.0
@@ -772,7 +826,7 @@ class DestinationIntelligence:
         elif lower_persona in ["squad", "friends"] and any(c in candidate.categories for c in ["nightlife", "beaches", "adventure", "food"]):
             score += 10.0
 
-        # 3. Pace Matching
+        # 4. Pace Matching
         lower_pace = pace.lower()
         if lower_pace == "relaxed":
             if any(c in candidate.categories for c in ["relaxed", "wellness", "nature"]) or candidate.duration >= 90:
@@ -783,13 +837,13 @@ class DestinationIntelligence:
             if candidate.duration <= 75:
                 score += 10.0
 
-        # 4. Cluster Continuity (Crucial Anti-Ping-Pong Routing)
+        # 5. Cluster Continuity (Crucial Anti-Ping-Pong Routing)
         if target_cluster and candidate.cluster_name == target_cluster:
             score += 25.0
         elif target_cluster and candidate.cluster_name != target_cluster:
             score -= 15.0
 
-        # 5. Food Preference Matching for Dining
+        # 6. Food Preference Matching for Dining
         if candidate.place_type == "R" and food_preferences:
             clean_food = [f.lower().strip() for f in food_preferences]
             for fp in clean_food:
@@ -798,7 +852,13 @@ class DestinationIntelligence:
                     matched_interests.append(fp)
 
         # Build Deterministic Explanation (Never Generic Marketing Copy)
-        if matched_interests:
+        if matched_likes and matched_interests:
+            unique_likes = list(dict.fromkeys(matched_likes))[:2]
+            why_recommended = f"Matches your explicit likes ({' + '.join(unique_likes)}) and keeps Day {day_num} geographically compact in {candidate.cluster_name}."
+        elif matched_likes:
+            unique_likes = list(dict.fromkeys(matched_likes))[:2]
+            why_recommended = f"Matches your explicit {unique_likes[0]} passion in {candidate.cluster_name}."
+        elif matched_interests:
             unique_interests = list(dict.fromkeys(matched_interests))[:2]
             photo_prefix = "Matches your photography preference with unobstructed dusk light and golden hour vantage points. " if any("photograph" in mi for mi in matched_interests) else ""
             why_recommended = f"{photo_prefix}Great fit for your {' + '.join(unique_interests)} interests and keeps Day {day_num} geographically compact in {candidate.cluster_name}."

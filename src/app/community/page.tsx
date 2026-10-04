@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import { Heart, MessageSquare, MapPin, PlusCircle, Users, CheckCircle2, ShieldCheck, GitFork, Filter, CalendarDays, Sparkles } from 'lucide-react';
+import { Heart, MessageSquare, MapPin, PlusCircle, Users, CheckCircle2, ShieldCheck, ShieldAlert, GitFork, Filter, CalendarDays, Sparkles } from 'lucide-react';
 import { TopNavbar } from '@/components/layout/TopNavbar';
 import { BottomNav } from '@/components/layout/BottomNav';
 import { DAInaChatWidget } from '@/components/layout/DAInaChatWidget';
@@ -31,6 +31,11 @@ interface CommunityTripPost {
   content: string;
   likes_count: number;
   comments_count: number;
+  compatibility_score?: number | null;
+  compatibility_level?: string | null;
+  has_dealbreaker?: boolean;
+  compatibility_explanation?: string | null;
+  shared_interests?: string[];
 }
 
 export default function CommunityPage() {
@@ -50,6 +55,13 @@ export default function CommunityPage() {
   const [newLocation, setNewLocation] = useState('');
   const [newContent, setNewContent] = useState('');
   const [newImage, setNewImage] = useState('https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=800&auto=format&fit=crop&q=80');
+
+  // Request to Join / Companion Interest State
+  const [interestTrip, setInterestTrip] = useState<any | null>(null);
+  const [interestMessage, setInterestMessage] = useState('');
+  const [isInterestSubmitting, setIsInterestSubmitting] = useState(false);
+  const [interestSuccess, setInterestSuccess] = useState<string | null>(null);
+  const [interestError, setInterestError] = useState<string | null>(null);
 
   const loadFeed = async () => {
     try {
@@ -76,13 +88,49 @@ export default function CommunityPage() {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isPublishModalOpen) {
-        setIsPublishModalOpen(false);
+      if (e.key === 'Escape') {
+        if (isPublishModalOpen) setIsPublishModalOpen(false);
+        if (interestTrip) setInterestTrip(null);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isPublishModalOpen]);
+  }, [isPublishModalOpen, interestTrip]);
+
+  const handleOpenInterestModal = (trip: any) => {
+    setInterestTrip(trip);
+    setInterestMessage('');
+    setInterestSuccess(null);
+    setInterestError(null);
+  };
+
+  const handleInterestSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!interestTrip) return;
+    const targetTripId = interestTrip.source_trip_id || interestTrip.id;
+    if (!targetTripId) {
+      setInterestError('Invalid trip reference.');
+      return;
+    }
+
+    setIsInterestSubmitting(true);
+    setInterestError(null);
+    setInterestSuccess(null);
+
+    try {
+      await apiService.expressTripInterest(targetTripId, interestMessage);
+      setInterestSuccess(
+        `Your application has been submitted to ${interestTrip.author_name || 'the trip host'}! They will review your compatibility profile and notify you once approved into the Squad.`
+      );
+    } catch (err: any) {
+      console.error('Failed to express interest:', err);
+      setInterestError(
+        err?.detail || err?.message || 'Could not submit interest application. Please ensure you are logged in.'
+      );
+    } finally {
+      setIsInterestSubmitting(false);
+    }
+  };
 
   const [likes, setLikes] = useState<{ [key: string]: number }>({
     trip_1: 42,
@@ -259,6 +307,11 @@ export default function CommunityPage() {
         image_url: p.image_url,
         likes_count: p.likes_count || 0,
         comments_count: p.comments_count || 0,
+        compatibility_score: p.compatibility_score,
+        compatibility_level: p.compatibility_level,
+        has_dealbreaker: Boolean(p.has_dealbreaker),
+        compatibility_explanation: p.compatibility_explanation,
+        shared_interests: p.shared_interests || [],
       }))
     : defaultTrips;
 
@@ -401,13 +454,41 @@ export default function CommunityPage() {
                     </div>
                   </div>
 
-                  {/* Trip Style Tags */}
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    {trip.trip_style.map((st: string, idx: number) => (
-                      <span key={idx} className="px-2 py-0.5 rounded-md bg-slate-50 text-slate-600 border border-slate-200 text-[10px] font-medium">
-                        {st}
-                      </span>
-                    ))}
+                  {/* Trip Style Tags & AI Compatibility Badge */}
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {trip.trip_style.map((st: string, idx: number) => (
+                        <span key={idx} className="px-2 py-0.5 rounded-md bg-slate-50 text-slate-600 border border-slate-200 text-[10px] font-medium">
+                          {st}
+                        </span>
+                      ))}
+                    </div>
+
+                    {/* Deterministic Compatibility Badge */}
+                    {trip.compatibility_score !== undefined && trip.compatibility_score !== null && (
+                      <div className="shrink-0">
+                        {trip.has_dealbreaker ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200 text-[11px] font-semibold">
+                            <ShieldAlert className="w-3 h-3 text-rose-500" />
+                            <span>{trip.compatibility_score}% Dealbreaker Conflict</span>
+                          </span>
+                        ) : trip.compatibility_score >= 80 ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-[11px] font-bold shadow-2xs">
+                            <Sparkles className="w-3 h-3 text-emerald-600" />
+                            <span>{trip.compatibility_score}% Match • High Resonance</span>
+                          </span>
+                        ) : trip.compatibility_score >= 60 ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-800 border border-blue-200 text-[11px] font-semibold">
+                            <Sparkles className="w-3 h-3 text-blue-600" />
+                            <span>{trip.compatibility_score}% Match</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200 text-[11px] font-medium">
+                            <span>{trip.compatibility_score}% Match</span>
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -424,6 +505,47 @@ export default function CommunityPage() {
                     {trip.budget_est}
                   </span>
                 </div>
+
+                {/* Explainable Compatibility Reason */}
+                {trip.compatibility_explanation && (
+                  <div
+                    className={`p-2.5 rounded-2xl border text-xs flex items-start gap-2 ${
+                      trip.has_dealbreaker
+                        ? 'bg-rose-50/70 border-rose-200 text-rose-900'
+                        : trip.compatibility_score && trip.compatibility_score >= 80
+                        ? 'bg-emerald-50/70 border-emerald-200/80 text-emerald-900'
+                        : 'bg-slate-50 border-slate-200/80 text-slate-800'
+                    }`}
+                  >
+                    <Sparkles
+                      className={`w-3.5 h-3.5 mt-0.5 shrink-0 ${
+                        trip.has_dealbreaker
+                          ? 'text-rose-500'
+                          : trip.compatibility_score && trip.compatibility_score >= 80
+                          ? 'text-emerald-600'
+                          : 'text-slate-500'
+                      }`}
+                    />
+                    <div className="space-y-1">
+                      <p className="text-[11px] leading-relaxed font-medium">
+                        {trip.compatibility_explanation}
+                      </p>
+                      {trip.shared_interests && trip.shared_interests.length > 0 && (
+                        <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                          <span className="text-[10px] text-slate-500 font-medium">Shared Passions:</span>
+                          {trip.shared_interests.map((interest: string, i: number) => (
+                            <span
+                              key={i}
+                              className="px-1.5 py-0.2 rounded bg-white/80 border border-slate-200/60 text-[10px] text-slate-700 font-medium"
+                            >
+                              {interest}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 <p className="text-xs sm:text-sm text-slate-700 leading-relaxed font-normal">
                   {trip.content}
@@ -457,6 +579,16 @@ export default function CommunityPage() {
                     >
                       <Sparkles className="w-3.5 h-3.5 mr-1" />
                       <span>Adapt this itinerary →</span>
+                    </Button>
+
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleOpenInterestModal(trip)}
+                      className="bg-white hover:bg-orange-50 border-orange-200 text-orange-700 hover:text-orange-900 font-semibold text-xs shadow-2xs cursor-pointer"
+                    >
+                      <Users className="w-3.5 h-3.5 mr-1 text-orange-600" />
+                      <span>Request to Join</span>
                     </Button>
                   </div>
 
@@ -672,6 +804,141 @@ export default function CommunityPage() {
                 </Button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Show Interest / Request to Join Squad Modal */}
+      {interestTrip && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="interest-modal-title"
+          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4"
+        >
+          <div className="bg-white rounded-3xl p-6 sm:p-7 max-w-lg w-full border border-slate-200 shadow-2xl space-y-4 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <h3 id="interest-modal-title" className="font-serif-editorial font-bold text-slate-900 text-lg">
+                  Request to Join Squad
+                </h3>
+                <p className="text-xs text-slate-500 font-medium">
+                  Heading to {interestTrip.destination} • Hosted by {interestTrip.author_name}
+                </p>
+              </div>
+              <button
+                onClick={() => setInterestTrip(null)}
+                aria-label="Close dialog"
+                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* AI Compatibility Preview Banner */}
+            <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/90 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-700">AI Compatibility Radar</span>
+                {interestTrip.has_dealbreaker ? (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200 text-[11px] font-bold">
+                    <ShieldAlert className="w-3 h-3 text-rose-500" />
+                    Dealbreaker Conflict
+                  </span>
+                ) : interestTrip.compatibility_score !== undefined && interestTrip.compatibility_score !== null ? (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-[11px] font-bold">
+                    <Sparkles className="w-3 h-3 text-emerald-600" />
+                    {interestTrip.compatibility_score}% Match
+                  </span>
+                ) : (
+                  <span className="text-[11px] text-slate-500">Curated Match</span>
+                )}
+              </div>
+
+              {interestTrip.compatibility_explanation && (
+                <p className="text-xs text-slate-600 leading-relaxed font-medium">
+                  {interestTrip.compatibility_explanation}
+                </p>
+              )}
+
+              {interestTrip.shared_interests && interestTrip.shared_interests.length > 0 && (
+                <div className="flex items-center gap-1 flex-wrap pt-0.5">
+                  <span className="text-[10px] text-slate-500 font-medium">Shared Passions:</span>
+                  {interestTrip.shared_interests.map((st: string, idx: number) => (
+                    <span key={idx} className="px-1.5 py-0.2 rounded bg-white border border-slate-200 text-[10px] text-slate-700 font-medium">
+                      {st}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {interestSuccess ? (
+              <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs space-y-3">
+                <div className="flex items-start gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                  <p className="leading-relaxed font-medium">{interestSuccess}</p>
+                </div>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => setInterestTrip(null)}
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs cursor-pointer"
+                >
+                  Done
+                </Button>
+              </div>
+            ) : (
+              <form onSubmit={handleInterestSubmit} className="space-y-3.5 text-xs font-semibold text-slate-700">
+                {interestError && (
+                  <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs font-medium flex items-center justify-between">
+                    <span>⚠️ {interestError}</span>
+                    <button
+                      type="button"
+                      onClick={() => setInterestError(null)}
+                      className="text-amber-700 font-bold hover:text-amber-950 px-1 cursor-pointer"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                )}
+
+                <div className="space-y-1">
+                  <label className="text-slate-900 font-bold block">
+                    Message to {interestTrip.author_name}
+                  </label>
+                  <p className="text-[11px] text-slate-500 font-normal">
+                    Mention your travel style, what you are excited to do in {interestTrip.destination}, and why you want to explore together.
+                  </p>
+                  <textarea
+                    rows={4}
+                    required
+                    placeholder="Hi! I saw your itinerary for Kyoto. I love photography and matcha cafes too, and I prefer a relaxed, steady pace. Would love to join the squad!"
+                    value={interestMessage}
+                    onChange={(e) => setInterestMessage(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:border-orange-500 font-medium text-slate-900 text-xs"
+                  />
+                </div>
+
+                <div className="pt-2 flex gap-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="flex-1 py-2 text-xs font-semibold cursor-pointer"
+                    onClick={() => setInterestTrip(null)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="submit"
+                    variant="primary"
+                    disabled={isInterestSubmitting}
+                    className="flex-1 py-2 bg-orange-600 hover:bg-orange-700 text-white font-semibold text-xs shadow-sm cursor-pointer"
+                  >
+                    {isInterestSubmitting ? 'Sending Request...' : 'Send Request to Join'}
+                  </Button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}

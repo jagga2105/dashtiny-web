@@ -13,9 +13,10 @@ from app.models.models import (
     CommunityPost, User, UserProfile, PostLike, Itinerary,
     ItineraryDay, ItineraryActivity
 )
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, get_optional_user
 from app.api.v1.trips import COMMUNITY_PUBLIC_SNAPSHOTS
 from app.services.trip_revision_service import create_revision, serialize_trip_days
+from app.services.matching_engine import calculate_traveler_trip_compatibility
 
 router = APIRouter(prefix="/community", tags=["Community Feed & Squad Match"])
 
@@ -30,16 +31,25 @@ class CreatePostRequest(BaseModel):
 
 
 @router.get("/feed")
-def get_community_feed(db: Session = Depends(get_db)):
+def get_community_feed(
+    current_user: Optional[User] = Depends(get_optional_user),
+    db: Session = Depends(get_db)
+):
     """
     Get live verified getaway posts and companion request feed.
     Enriches posts with canonical Trip details if linked to a source trip.
+    Computes deterministic compatibility score when user is authenticated with a profile.
     Uses eager loading (joinedload) to eliminate N+1 queries.
     """
+    user_profile = None
+    if current_user:
+        user_profile = db.query(UserProfile).filter(UserProfile.user_id == current_user.id).first()
+
     posts = (
         db.query(CommunityPost)
         .options(
-            joinedload(CommunityPost.source_trip).joinedload(Itinerary.days),
+            joinedload(CommunityPost.source_trip).joinedload(Itinerary.days).joinedload(ItineraryDay.activities),
+            joinedload(CommunityPost.source_trip).joinedload(Itinerary.owner),
             joinedload(CommunityPost.author)
         )
         .order_by(CommunityPost.created_at.desc())
@@ -52,9 +62,13 @@ def get_community_feed(db: Session = Depends(get_db)):
         budget_est = "Shared budget"
         trip_style = ["Travel Story"]
         is_completed = False
+        target_trip = p.source_trip
 
         if p.source_trip:
             trip = p.source_trip
+            # Server-authoritative visibility boundary: Never leak PRIVATE trips in community feed
+            if trip.visibility == "PRIVATE" and not trip.is_public:
+                continue
             day_count = len(trip.days) if trip.days else 0
             duration = f"{day_count} Days" if day_count > 0 else "Flexible"
             budget_est = f"₹{int(trip.total_budget):,}" if trip.total_budget else "Flexible"
@@ -67,6 +81,38 @@ def get_community_feed(db: Session = Depends(get_db)):
             budget_est = snap.get("budget_est", "₹40,000")
             trip_style = [snap.get("vibe", "Culture")]
             is_completed = True
+            target_trip = Itinerary(
+                id=p.id,
+                title=snap.get("title", p.getaway_title),
+                destination=snap.get("destination", p.location),
+                vibe=snap.get("vibe", "Culture"),
+                persona="culture",
+                total_budget=72000.0,
+                travellers=2
+            )
+        else:
+            target_trip = Itinerary(
+                id=p.id,
+                title=p.getaway_title,
+                destination=p.location,
+                vibe=trip_style[0] if trip_style else "Discovery",
+                persona="discovery",
+                total_budget=40000.0,
+                travellers=p.companions_needed or 2
+            )
+
+        # Compute deterministic compatibility
+        owner_profile = None
+        if target_trip and getattr(target_trip, "owner_id", None):
+            owner_profile = db.query(UserProfile).filter(UserProfile.user_id == target_trip.owner_id).first()
+        elif p.author_id:
+            owner_profile = db.query(UserProfile).filter(UserProfile.user_id == p.author_id).first()
+
+        compat_report = calculate_traveler_trip_compatibility(
+            user_profile=user_profile,
+            trip=target_trip,
+            trip_owner_profile=owner_profile
+        )
 
         # Genuinely derive author identity verification and trust score from current User record
         is_verified = bool(p.author.is_verified) if p.author else False
@@ -97,8 +143,27 @@ def get_community_feed(db: Session = Depends(get_db)):
             "likes_count": p.likes_count or 0,
             "comments_count": None,  # Explicitly None to avoid presenting fake comments
             "companions_needed": p.companions_needed,
-            "created_at": str(p.created_at)
+            "created_at": str(p.created_at),
+            "compatibility_score": compat_report.score if user_profile else None,
+            "compatibility_level": compat_report.compatibility_level if user_profile else None,
+            "has_dealbreaker": compat_report.has_dealbreaker if user_profile else False,
+            "compatibility_explanation": compat_report.explanation if user_profile else None,
+            "shared_interests": compat_report.shared_interests if user_profile else [],
         })
+
+    # When user is profiled, re-rank feed by compatibility:
+    # 1. Non-dealbreaker trips first
+    # 2. Highest compatibility score first
+    # 3. Dealbreaker trips demoted to bottom
+    if user_profile:
+        results.sort(
+            key=lambda r: (
+                not r["has_dealbreaker"],
+                r["compatibility_score"] or 0
+            ),
+            reverse=True
+        )
+
     return results
 
 
@@ -124,6 +189,7 @@ def create_community_post(
             )
         # Mark trip as explicitly public so public snapshot endpoint can safely serve it
         trip.is_public = True
+        trip.visibility = "PUBLIC"
 
     new_post = CommunityPost(
         author_id=user.id,

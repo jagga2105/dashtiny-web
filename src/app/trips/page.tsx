@@ -142,6 +142,26 @@ function TripsContent() {
     }
   };
 
+  const handleUpdateVisibility = async (visibility: 'PUBLIC' | 'FRIENDS_ONLY' | 'PRIVATE') => {
+    if (!currentTrip?.id) return;
+    try {
+      await apiService.updateTripVisibility(currentTrip.id, visibility);
+      setTrips((prevTrips) => {
+        const copy = [...prevTrips];
+        if (copy[activeTripIndex]) {
+          copy[activeTripIndex] = {
+            ...copy[activeTripIndex],
+            visibility,
+            is_public: visibility === 'PUBLIC',
+          };
+        }
+        return copy;
+      });
+    } catch (err) {
+      console.error('Failed to update trip visibility:', err);
+    }
+  };
+
   const loadData = async () => {
     setLoading(true);
     setError(null);
@@ -455,6 +475,7 @@ function TripsContent() {
               bookingsCount={currentTripBookings.length}
               onOpenSquadModal={() => setIsGroupModalOpen(true)}
               onNewTrip={() => router.push('/planner')}
+              onUpdateVisibility={handleUpdateVisibility}
             />
 
             {/* TAB: PLAN (COCKPIT CORE) */}
@@ -534,6 +555,7 @@ function TripsContent() {
             {activeTab === 'people' && (
               <SquadRoomHub
                 squadId={currentTrip.squad_room_code || 'ROOM'}
+                tripId={currentTrip.id}
                 onOpenInviteModal={() => setIsGroupModalOpen(true)}
               />
             )}

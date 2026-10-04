@@ -136,6 +136,32 @@ DESTINATION_KNOWLEDGE: Dict[str, DestinationGeography] = {
                         lng=73.7372,
                         tags=["sunset", "beaches", "relaxed", "nightlife"],
                         why_recommended_template="Prime sunset viewpoint keeping transit under 10 minutes from lunch"
+                    ),
+                    PlaceDetail(
+                        title="Anjuna Beach Coastal Promenade & Flea Fleets",
+                        description="Vibrant shoreline walk along the iconic rocky coves and artisan seaside stalls of Anjuna.",
+                        location="Anjuna Beach, North Goa",
+                        place_type="TA",
+                        cluster="North Goa",
+                        cost_estimate=0.0,
+                        duration_minutes=60,
+                        lat=15.5804,
+                        lng=73.7436,
+                        tags=["beaches", "shopping", "sightseeing", "photography"],
+                        why_recommended_template="Historic bohemian shoreline promenade extending your coastal exploration"
+                    ),
+                    PlaceDetail(
+                        title="Little Vagator Sea Cave & Cliff Overlook",
+                        description="Scenic walk down the laterite cliff stairs to the sculpted stone Shiva carving in the seaside rocks.",
+                        location="Little Vagator, Ozran Beach",
+                        place_type="TA",
+                        cluster="North Goa",
+                        cost_estimate=0.0,
+                        duration_minutes=45,
+                        lat=15.5960,
+                        lng=73.7365,
+                        tags=["nature", "photography", "adventure", "scenic"],
+                        why_recommended_template="Hidden coastal viewpoint providing dramatic Arabian Sea sunset vistas"
                     )
                 ]
             ),

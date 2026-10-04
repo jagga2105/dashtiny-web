@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 
 from app.db.database import Base, get_db
 from app.models.models import User, UserProfile, RewardVoucher
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, get_optional_user
 from app.main import app
 
 # In-memory SQLite database for isolated, fast test execution
@@ -120,6 +120,7 @@ def client(db_session, test_user):
 
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_current_user] = override_get_current_user
+    app.dependency_overrides[get_optional_user] = override_get_current_user
     with TestClient(app) as c:
         yield c
     app.dependency_overrides.clear()

@@ -6,13 +6,18 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.config import settings
 from app.db.database import get_db
-from app.models.models import Itinerary, ItineraryDay, ItineraryActivity, SquadRoom, SquadMember, Booking, User, CommunityPost, TripSnapshot
+from app.models.models import (
+    Itinerary, ItineraryDay, ItineraryActivity, SquadRoom, SquadMember,
+    Booking, User, CommunityPost, TripSnapshot, TripInterestRequest, UserProfile
+)
 from app.api.deps import get_current_user
 from app.services.trip_revision_service import (
     serialize_trip_days,
     record_mutation,
     restore_revision
 )
+from app.services.matching_engine import calculate_traveler_trip_compatibility
+from app.services.notification_service import NotificationService
 
 router = APIRouter(prefix="/trips", tags=["My Trips & Active Passages"])
 
@@ -115,6 +120,7 @@ def get_my_trips(user: User = Depends(get_current_user), db: Session = Depends(g
             "vibe": it.vibe or it.persona or "Discovery",
             "status": it.status or "draft",
             "is_public": bool(it.is_public),
+            "visibility": it.visibility or ("PUBLIC" if it.is_public else "PRIVATE"),
             "source_trip_id": it.source_trip_id,
             "squad_room_code": squad.room_code if squad else None,
             "daysCount": total_days,
@@ -262,16 +268,35 @@ def get_trip_details(
     if not it:
         raise HTTPException(status_code=404, detail="Trip not found")
 
-    # Enforce data ownership
+    # Enforce data ownership and tri-state visibility boundaries
     is_owner = (it.owner_id == user.id)
     squad = it.squad_room
     is_member = False
     if squad:
         is_member = any(m.user_id == user.id for m in squad.members)
-    if not is_owner and not is_member:
+
+    has_access = False
+    if is_owner or is_member:
+        has_access = True
+    elif it.visibility == "PUBLIC" or it.is_public:
+        has_access = True
+    elif it.visibility == "FRIENDS_ONLY":
+        from app.models.models import Friendship
+        from sqlalchemy import or_, and_
+        is_friend = db.query(Friendship).filter(
+            Friendship.status == "accepted",
+            or_(
+                and_(Friendship.user_id == user.id, Friendship.friend_id == it.owner_id),
+                and_(Friendship.user_id == it.owner_id, Friendship.friend_id == user.id)
+            )
+        ).first() is not None
+        if is_friend:
+            has_access = True
+
+    if not has_access:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied. You do not have access to this itinerary."
+            detail="Access denied. This itinerary is private or restricted to friends."
         )
 
     trip_bookings = it.bookings
@@ -321,6 +346,7 @@ def get_trip_details(
         "vibe": it.vibe or it.persona or "Discovery",
         "status": it.status or "draft",
         "is_public": bool(it.is_public),
+        "visibility": it.visibility or ("PUBLIC" if it.is_public else "PRIVATE"),
         "source_trip_id": it.source_trip_id,
         "squad_room_code": squad.room_code if squad else None,
         "daysCount": len(sorted_days),
@@ -619,5 +645,322 @@ def undo_trip_change(
         "summary": new_undo_snap.summary,
         "total_revisions": total_revisions
     }
+
+
+class UpdateVisibilityRequest(BaseModel):
+    visibility: str
+
+
+@router.patch("/{trip_id}/visibility")
+def update_trip_visibility(
+    trip_id: str,
+    request: UpdateVisibilityRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Update trip visibility. Only the trip owner can update visibility.
+    Supported values: PUBLIC, FRIENDS_ONLY, PRIVATE.
+    Synchronizes `visibility` and `is_public` boolean accordingly.
+    """
+    valid_visibilities = {"PUBLIC", "FRIENDS_ONLY", "PRIVATE"}
+    target_visibility = request.visibility.upper()
+    if target_visibility not in valid_visibilities:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid visibility '{request.visibility}'. Allowed values: {sorted(list(valid_visibilities))}"
+        )
+
+    it = db.query(Itinerary).filter(Itinerary.id == trip_id).first()
+    if not it:
+        raise HTTPException(status_code=404, detail="Trip not found")
+
+    if it.owner_id != user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the trip owner can change trip visibility"
+        )
+
+    it.visibility = target_visibility
+    it.is_public = (target_visibility == "PUBLIC")
+    db.commit()
+    db.refresh(it)
+
+    return {
+        "status": "success",
+        "trip_id": it.id,
+        "visibility": it.visibility,
+        "is_public": it.is_public
+    }
+
+
+class CreateInterestRequest(BaseModel):
+    message: Optional[str] = None
+
+
+class RespondInterestRequest(BaseModel):
+    action: str  # "approve" or "reject"
+
+
+@router.post("/{trip_id}/interest")
+def express_interest_in_trip(
+    trip_id: str,
+    request: CreateInterestRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Prospective companion expresses interest to join a trip.
+    Computes deterministic compatibility score between traveler and trip,
+    and records an interest application.
+    """
+    it = db.query(Itinerary).filter(Itinerary.id == trip_id).first()
+    if not it:
+        raise HTTPException(status_code=404, detail="Trip not found")
+
+    if it.owner_id == user.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="You are the creator of this trip"
+        )
+
+    # Check if already a squad member
+    if it.squad_room:
+        is_member = db.query(SquadMember).filter(
+            SquadMember.squad_id == it.squad_room.id,
+            SquadMember.user_id == user.id
+        ).first() is not None
+        if is_member:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="You are already a member of this trip squad"
+            )
+
+    # Check if existing interest request
+    existing = db.query(TripInterestRequest).filter(
+        TripInterestRequest.trip_id == it.id,
+        TripInterestRequest.user_id == user.id
+    ).first()
+
+    user_profile = db.query(UserProfile).filter(UserProfile.user_id == user.id).first()
+    owner_profile = db.query(UserProfile).filter(UserProfile.user_id == it.owner_id).first() if it.owner_id else None
+
+    report = calculate_traveler_trip_compatibility(
+        user_profile=user_profile,
+        trip=it,
+        trip_owner_profile=owner_profile
+    )
+
+    if existing:
+        if existing.status in ("pending", "approved"):
+            return {
+                "status": existing.status,
+                "message": f"Interest request is already {existing.status}",
+                "request_id": existing.id,
+                "compatibility_score": existing.compatibility_score or report.score,
+                "compatibility_level": report.compatibility_level
+            }
+        else:
+            # Re-open rejected/withdrawn request
+            existing.status = "pending"
+            existing.message = request.message
+            existing.compatibility_score = report.score
+            existing.compatibility_breakdown = report.dict()
+            db.commit()
+            return {
+                "status": "pending",
+                "message": "Interest request resubmitted",
+                "request_id": existing.id,
+                "compatibility_score": report.score,
+                "compatibility_level": report.compatibility_level
+            }
+
+    interest_req = TripInterestRequest(
+        trip_id=it.id,
+        user_id=user.id,
+        message=request.message,
+        status="pending",
+        compatibility_score=report.score,
+        compatibility_breakdown=report.dict()
+    )
+    db.add(interest_req)
+    NotificationService.notify_interest_received(db, it, user, request.message)
+    db.commit()
+    db.refresh(interest_req)
+
+    return {
+        "status": "pending",
+        "message": "Interest expressed successfully! The trip creator will review your application.",
+        "request_id": interest_req.id,
+        "compatibility_score": report.score,
+        "compatibility_level": report.compatibility_level,
+        "explanation": report.explanation
+    }
+
+
+@router.get("/{trip_id}/interest")
+def list_trip_interest_requests(
+    trip_id: str,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    List all prospective companion interest requests for this trip.
+    Only accessible by the trip creator (or squad members).
+    Includes applicant traveler profile, compatibility breakdown, and dealbreakers.
+    """
+    it = db.query(Itinerary).filter(Itinerary.id == trip_id).first()
+    if not it:
+        raise HTTPException(status_code=404, detail="Trip not found")
+
+    is_owner = (it.owner_id == user.id)
+    is_member = False
+    if it.squad_room:
+        is_member = db.query(SquadMember).filter(
+            SquadMember.squad_id == it.squad_room.id,
+            SquadMember.user_id == user.id
+        ).first() is not None
+
+    if not is_owner and not is_member:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the trip creator or squad members can review interest applications"
+        )
+
+    requests = db.query(TripInterestRequest).filter(
+        TripInterestRequest.trip_id == it.id
+    ).order_by(TripInterestRequest.created_at.desc()).all()
+
+    results = []
+    for r in requests:
+        applicant = db.query(User).filter(User.id == r.user_id).first()
+        applicant_profile = db.query(UserProfile).filter(UserProfile.user_id == r.user_id).first() if applicant else None
+
+        breakdown = r.compatibility_breakdown or {}
+        results.append({
+            "request_id": r.id,
+            "status": r.status,
+            "message": r.message,
+            "compatibility_score": r.compatibility_score,
+            "compatibility_level": breakdown.get("compatibility_level", "GOOD"),
+            "has_dealbreaker": breakdown.get("has_dealbreaker", False),
+            "dealbreakers": breakdown.get("dealbreakers", []),
+            "shared_interests": breakdown.get("shared_interests", []),
+            "explanation": breakdown.get("explanation"),
+            "created_at": str(r.created_at),
+            "applicant": {
+                "id": applicant.id if applicant else r.user_id,
+                "full_name": applicant.full_name if applicant else "Traveler",
+                "avatar_url": applicant.avatar_url if applicant else None,
+                "trust_score": float(applicant.trust_score or 95.0) if applicant else 95.0,
+                "is_verified": bool(applicant.is_verified) if applicant else False,
+                "pace": applicant_profile.pace if applicant_profile else "balanced",
+                "travel_style": applicant_profile.travel_style if applicant_profile else None,
+                "interests": applicant_profile.interests if applicant_profile else []
+            }
+        })
+
+    return results
+
+
+@router.post("/{trip_id}/interest/{request_id}/respond")
+def respond_to_trip_interest(
+    trip_id: str,
+    request_id: str,
+    body: RespondInterestRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Approve or reject a companion interest request.
+    Only the trip creator can approve or reject.
+    Approving automatically provisions a SquadRoom (if needed) and adds applicant as SquadMember.
+    """
+    it = db.query(Itinerary).filter(Itinerary.id == trip_id).first()
+    if not it:
+        raise HTTPException(status_code=404, detail="Trip not found")
+
+    if it.owner_id != user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the trip creator can approve or reject companion applications"
+        )
+
+    interest_req = db.query(TripInterestRequest).filter(
+        TripInterestRequest.id == request_id,
+        TripInterestRequest.trip_id == it.id
+    ).first()
+
+    if not interest_req:
+        raise HTTPException(status_code=404, detail="Interest application not found")
+
+    action = body.action.lower().strip()
+    if action == "approve":
+        interest_req.status = "approved"
+
+        # 1. Provision SquadRoom if not present
+        squad = db.query(SquadRoom).filter(SquadRoom.itinerary_id == it.id).first()
+        if not squad:
+            import random, string
+            room_code = f"SQ-{''.join(random.choices(string.ascii_uppercase + string.digits, k=6))}"
+            squad = SquadRoom(
+                itinerary_id=it.id,
+                room_code=room_code
+            )
+            db.add(squad)
+            db.flush()
+
+            # Add trip creator as owner
+            owner_member = SquadMember(
+                squad_id=squad.id,
+                user_id=it.owner_id,
+                role="owner"
+            )
+            db.add(owner_member)
+            db.flush()
+
+        # 2. Add applicant as squad member if not already added
+        existing_member = db.query(SquadMember).filter(
+            SquadMember.squad_id == squad.id,
+            SquadMember.user_id == interest_req.user_id
+        ).first()
+
+        if not existing_member:
+            new_member = SquadMember(
+                squad_id=squad.id,
+                user_id=interest_req.user_id,
+                role="member"
+            )
+            db.add(new_member)
+
+        # 3. Decrement companions_needed on linked community post if any
+        post = db.query(CommunityPost).filter(CommunityPost.source_trip_id == it.id).first()
+        if post and post.companions_needed and post.companions_needed > 0:
+            post.companions_needed -= 1
+
+        NotificationService.notify_interest_resolved(db, it, interest_req.user_id, "approve")
+        db.commit()
+
+        return {
+            "status": "approved",
+            "message": "Applicant approved and added to trip squad!",
+            "squad_room_code": squad.room_code
+        }
+
+    elif action == "reject":
+        interest_req.status = "rejected"
+        NotificationService.notify_interest_resolved(db, it, interest_req.user_id, "reject")
+        db.commit()
+        return {
+            "status": "rejected",
+            "message": "Application rejected."
+        }
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid action. Allowed values: 'approve', 'reject'"
+        )
+
+
 
 
