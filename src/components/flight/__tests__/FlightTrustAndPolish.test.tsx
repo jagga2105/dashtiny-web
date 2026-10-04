@@ -1,5 +1,5 @@
 /**
- * DashTiny L2.2 — Flight Trust, UX Polish and Finalization Vitest Suite
+ * DashTiny L2.3 — Flight Trust, Polish & Accessibility Vitest Suite
  *
  * Covers:
  * - USD/EUR/GBP/INR currency formatting
@@ -9,18 +9,27 @@
  * - Mobile filter drawer (open, close on Escape/Apply, accessible dialog)
  * - Deferred categories (trains, buses, cabs) marked disabled / coming soon
  * - Selection & Proposal flow attaching flight to trip with ZERO fake PNR / fake confirmation
+ * - Local date calculation (never uses UTC toISOString T split)
+ * - Modal accessibility (role="dialog", aria-modal="true", aria-labelledby, Escape closes)
+ * - Round-trip segment display (Outbound & Return legs)
+ * - Search response trust contract (no upgrading CURATED/ESTIMATED into VERIFIED/LIVE)
  */
 
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { formatCurrency } from '@/lib/formatCurrency';
+import { getLocalTodayDate, addDaysToDate } from '@/lib/formatDate';
 import { FlightSearchForm } from '../FlightSearchForm';
 import { FlightComparison } from '../FlightComparison';
 import { FlightTripContext } from '../FlightTripContext';
 import { FlightResults } from '../FlightResults';
+import { FlightOfferCard } from '../FlightOfferCard';
+import { AttachFlightModal } from '../AttachFlightModal';
+import { TripProposalModal } from '../TripProposalModal';
 import BookingsPage from '@/app/bookings/page';
 import { FlightOffer } from '@/types/flight';
+import { createMockFlightOffer } from '@/lib/flight/testFixtures';
 import { apiService } from '@/services/api';
 
 // Mock Next.js navigation
@@ -72,39 +81,7 @@ vi.mock('@/services/api', () => ({
       },
     ]),
     getMyBookings: vi.fn().mockResolvedValue([]),
-    searchFlights: vi.fn().mockResolvedValue({
-      offers: [
-        {
-          offer_id: 'fl_offer_6e_501',
-          provider: 'IndiGo',
-          airline: 'IndiGo',
-          flight_number: '6E-501',
-          origin: 'DEL',
-          destination: 'BOM',
-          departure_time: '2026-10-20T06:00:00Z',
-          arrival_time: '2026-10-20T08:15:00Z',
-          duration_minutes: 135,
-          stops: 0,
-          cabin_class: 'economy',
-          price: 5400,
-          currency: 'INR',
-          booking_url: 'https://goindigo.in',
-          provenance: 'CURATED',
-          availability_state: 'ESTIMATED',
-        },
-      ],
-      total_count: 1,
-      currency: 'INR',
-      origin: 'DEL',
-      destination: 'BOM',
-      departure_date: '2026-10-20',
-      travelers: 1,
-      cabin_class: 'economy',
-      search_id: 'search-101',
-      retrieved_at: '2026-10-04T00:00:00Z',
-      provenance: 'CURATED',
-      availability_state: 'ESTIMATED',
-    }),
+    searchFlights: vi.fn(),
     createFlightOfferProposal: vi.fn().mockResolvedValue({
       id: 'prop-xyz-123',
       proposal_id: 'prop-xyz-123',
@@ -122,6 +99,9 @@ vi.mock('@/services/api', () => ({
           destination: 'BOM',
           price: 5400,
           currency: 'INR',
+          departure_time: '06:00 AM',
+          provenance: 'CURATED',
+          availability_state: 'ESTIMATED',
         },
       },
       provenance: {
@@ -139,7 +119,45 @@ vi.mock('@/services/api', () => ({
   },
 }));
 
-describe('DashTiny L2.2 — Trust, Precision & UX Polish Vitest Suite', () => {
+describe('DashTiny L2.3 — Trust, Precision & UX Polish Vitest Suite', () => {
+  beforeEach(() => {
+    vi.mocked(apiService.searchFlights).mockResolvedValue({
+      offers: [
+        createMockFlightOffer({
+          offer_id: 'fl_offer_6e_501',
+          provider: 'DashTiny Curated Catalog',
+          airline: 'IndiGo',
+          flight_number: '6E-501',
+          origin: 'DEL',
+          destination: 'BOM',
+          departure_date: '2026-10-20',
+          departure_time: '06:00 AM',
+          arrival_time: '08:15 AM',
+          duration_minutes: 135,
+          stops: 0,
+          cabin_class: 'economy',
+          price: 5400,
+          currency: 'INR',
+          deep_link: 'https://goindigo.in',
+          provenance: 'CURATED',
+          availability_state: 'ESTIMATED',
+        }),
+      ],
+      total_count: 1,
+      currency: 'INR',
+      origin: 'DEL',
+      destination: 'BOM',
+      departure_date: '2026-10-20',
+      travelers: 1,
+      cabin_class: 'economy',
+      search_id: 'search-101',
+      retrieved_at: '2026-10-04T00:00:00Z',
+      expires_at: '2026-10-04T02:00:00Z',
+      provenance: 'CURATED',
+      availability_state: 'ESTIMATED',
+    });
+  });
+
   describe('1. Currency Formatter (USD, EUR, GBP, INR)', () => {
     it('formats USD correctly with $ symbol', () => {
       const formatted = formatCurrency(120, 'USD');
@@ -192,30 +210,19 @@ describe('DashTiny L2.2 — Trust, Precision & UX Polish Vitest Suite', () => {
   });
 
   describe('3. Comparison: missing baggage and cancellation render "Not provided"', () => {
-    const offerWithMissingInclusions: FlightOffer = {
+    const offerWithMissingInclusions = createMockFlightOffer({
       offer_id: 'fl_offer_test_missing',
-      provider: 'TestAir',
+      provider: 'DashTiny Curated Catalog',
       airline: 'Test Airlines',
       flight_number: 'TA-101',
       origin: 'DEL',
       destination: 'BOM',
-      departure_time: '2026-10-20T08:00:00Z',
-      arrival_time: '2026-10-20T10:15:00Z',
-      duration_minutes: 135,
-      stops: 0,
-      cabin_class: 'economy',
       price: 5200,
       currency: 'INR',
       deep_link: 'https://example.com/book',
-      // Explicitly missing inclusions and cancellation
-      inclusions: {
-        cabin_baggage: undefined as unknown as string,
-        checkin_baggage: undefined as unknown as string,
-      },
-      cancellation: undefined as unknown as string,
-      provenance: 'CURATED',
-      availability_state: 'ESTIMATED',
-    } as unknown as FlightOffer;
+      baggage: undefined,
+      cancellation: undefined,
+    });
 
     it('renders "Not provided" for missing baggage and cancellation policy without inventing terms', () => {
       render(
@@ -294,27 +301,19 @@ describe('DashTiny L2.2 — Trust, Precision & UX Polish Vitest Suite', () => {
 
   describe('5. Mobile Filter Drawer behavior', () => {
     const dummyOffers: FlightOffer[] = [
-      {
+      createMockFlightOffer({
         offer_id: 'dummy-1',
-        provider: 'IndiGo',
+        provider: 'DashTiny Curated Catalog',
         airline: 'IndiGo',
         flight_number: '6E-101',
         origin: 'DEL',
         destination: 'BOM',
-        departure_time: '2026-10-20T06:00:00Z',
-        arrival_time: '2026-10-20T08:15:00Z',
-        duration_minutes: 135,
-        stops: 0,
-        cabin_class: 'economy',
         price: 4500,
         currency: 'INR',
-        deep_link: 'https://indigo.in',
-        provenance: 'CURATED',
-        availability_state: 'ESTIMATED',
-      } as unknown as FlightOffer,
+      }),
     ];
 
-    const mockResponse: any = {
+    const mockResponse = {
       search: {
         origin: 'DEL',
         destination: 'BOM',
@@ -465,6 +464,276 @@ describe('DashTiny L2.2 — Trust, Precision & UX Polish Vitest Suite', () => {
       expect(screen.queryByText(/PROP-/i)).toBeNull();
       expect(screen.queryByText(/PNR:/i)).toBeNull();
       expect(screen.queryByText(/Booking Confirmed!/i)).toBeNull();
+    });
+  });
+
+  describe('8. Local Date & Timezone Integrity', () => {
+    it('getLocalTodayDate returns YYYY-MM-DD representing local calendar day', () => {
+      const today = getLocalTodayDate();
+      expect(today).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+
+      const d = new Date();
+      const expectedYear = d.getFullYear();
+      const expectedMonth = String(d.getMonth() + 1).padStart(2, '0');
+      const expectedDay = String(d.getDate()).padStart(2, '0');
+      expect(today).toBe(`${expectedYear}-${expectedMonth}-${expectedDay}`);
+    });
+
+    it('addDaysToDate cleanly adds days across month/year boundaries', () => {
+      expect(addDaysToDate('2026-10-31', 1)).toBe('2026-11-01');
+      expect(addDaysToDate('2026-12-31', 1)).toBe('2027-01-01');
+      expect(addDaysToDate('2026-02-28', 1)).toBe('2026-03-01');
+    });
+  });
+
+  describe('9. Accessible Modal Contracts', () => {
+    it('FlightComparison has dialog role, aria-modal, aria-labelledby, and closes on Escape', () => {
+      const onClose = vi.fn();
+      const offer = createMockFlightOffer({ offer_id: 'comp-1' });
+
+      render(
+        <FlightComparison
+          isOpen={true}
+          onClose={onClose}
+          selectedOffers={[offer]}
+          onRemoveOffer={vi.fn()}
+          onSelectOffer={vi.fn()}
+        />
+      );
+
+      const dialog = screen.getByRole('dialog');
+      expect(dialog).toBeTruthy();
+      expect(dialog.getAttribute('aria-modal')).toBe('true');
+      expect(dialog.getAttribute('aria-labelledby')).toBe('flight-comparison-title');
+
+      fireEvent.keyDown(window, { key: 'Escape' });
+      expect(onClose).toHaveBeenCalled();
+    });
+
+    it('AttachFlightModal has dialog role, aria-modal, aria-labelledby, and closes on Escape', () => {
+      const onClose = vi.fn();
+      const offer = createMockFlightOffer({ offer_id: 'att-1' });
+
+      render(
+        <AttachFlightModal
+          isOpen={true}
+          onClose={onClose}
+          offer={offer}
+          activeTrips={[{ id: 't1', destination: 'BOM', title: 'Mumbai Trip' }]}
+          selectedTripId="t1"
+          onSelectTripId={vi.fn()}
+          onSubmit={vi.fn()}
+          isSubmitting={false}
+        />
+      );
+
+      const dialog = screen.getByRole('dialog');
+      expect(dialog).toBeTruthy();
+      expect(dialog.getAttribute('aria-modal')).toBe('true');
+      expect(dialog.getAttribute('aria-labelledby')).toBe('attach-flight-title');
+
+      fireEvent.keyDown(window, { key: 'Escape' });
+      expect(onClose).toHaveBeenCalled();
+    });
+
+    it('TripProposalModal has dialog role, aria-modal, aria-labelledby, and closes on Escape', () => {
+      const onClose = vi.fn();
+      const mockProposal = {
+        id: 'prop-1',
+        parent_version: 1,
+        changes: {
+          flight_offer: {
+            offer_id: 'fl-1',
+            airline: 'IndiGo',
+            flight_number: '6E-501',
+            price: 5400,
+            currency: 'INR',
+            origin: 'DEL',
+            destination: 'BOM',
+            departure_time: '06:00 AM',
+            provenance: 'CURATED',
+            availability_state: 'ESTIMATED',
+          },
+        },
+      };
+
+      render(
+        <TripProposalModal
+          isOpen={true}
+          onClose={onClose}
+          activeProposal={mockProposal}
+          onAccept={vi.fn()}
+          isSubmitting={false}
+        />
+      );
+
+      const dialog = screen.getByRole('dialog');
+      expect(dialog).toBeTruthy();
+      expect(dialog.getAttribute('aria-modal')).toBe('true');
+      expect(dialog.getAttribute('aria-labelledby')).toBe('trip-proposal-title');
+
+      fireEvent.keyDown(window, { key: 'Escape' });
+      expect(onClose).toHaveBeenCalled();
+    });
+  });
+
+  describe('10. Round-Trip Segment Display vs One-Way', () => {
+    it('renders Outbound and Return segments on round-trip flight card', () => {
+      const roundtripOffer = createMockFlightOffer({
+        offer_id: 'rt-offer-1',
+        origin: 'DEL',
+        destination: 'GOI',
+        departure_date: '2026-11-01',
+        return_date: '2026-11-06',
+        trip_type: 'roundtrip',
+        outbound: {
+          origin: 'DEL',
+          destination: 'GOI',
+          departure_date: '2026-11-01',
+          departure_time: '06:15',
+          arrival_date: '2026-11-01',
+          arrival_time: '08:50',
+          duration_minutes: 155,
+          stops: 0,
+        },
+        inbound: {
+          origin: 'GOI',
+          destination: 'DEL',
+          departure_date: '2026-11-06',
+          departure_time: '18:20',
+          arrival_date: '2026-11-06',
+          arrival_time: '20:50',
+          duration_minutes: 150,
+          stops: 0,
+        },
+      });
+
+      render(
+        <FlightOfferCard
+          offer={roundtripOffer}
+          onSelectOffer={vi.fn()}
+          onToggleCompare={vi.fn()}
+          isCompared={false}
+        />
+      );
+
+      // Verify both Outbound and Return labels are rendered
+      expect(screen.getByText('Outbound')).toBeTruthy();
+      expect(screen.getByText('Return')).toBeTruthy();
+      expect(screen.getByText(/06:15\s*→\s*08:50/)).toBeTruthy();
+      expect(screen.getByText(/18:20\s*→\s*20:50/)).toBeTruthy();
+    });
+
+    it('renders single segment without Return label on one-way flight card', () => {
+      const onewayOffer = createMockFlightOffer({
+        offer_id: 'ow-offer-1',
+        origin: 'DEL',
+        destination: 'GOI',
+        departure_time: '06:15',
+        arrival_time: '08:50',
+        trip_type: 'oneway',
+        return_date: null,
+        inbound: null,
+        outbound: {
+          origin: 'DEL',
+          destination: 'GOI',
+          departure_date: '2026-11-01',
+          departure_time: '06:15',
+          arrival_date: '2026-11-01',
+          arrival_time: '08:50',
+          duration_minutes: 155,
+          stops: 0,
+        },
+      });
+
+      render(
+        <FlightOfferCard
+          offer={onewayOffer}
+          onSelectOffer={vi.fn()}
+          onToggleCompare={vi.fn()}
+          isCompared={false}
+        />
+      );
+
+      // No Return segment should be rendered
+      expect(screen.queryByText('Return')).toBeNull();
+      expect(screen.getByText('06:15')).toBeTruthy();
+      expect(screen.getByText('08:50')).toBeTruthy();
+    });
+  });
+
+  describe('11. Comparison Modal Round-Trip & Honest Attributes', () => {
+    it('displays Outbound, Return, Total fare, Duration, Stops, Baggage, Cancellation, and Catalog provenance', () => {
+      const roundtripOffer = createMockFlightOffer({
+        offer_id: 'comp-rt-1',
+        trip_type: 'roundtrip',
+        price: 9800,
+        currency: 'INR',
+        outbound: {
+          origin: 'DEL',
+          destination: 'GOI',
+          departure_date: '2026-11-01',
+          departure_time: '06:15',
+          arrival_date: '2026-11-01',
+          arrival_time: '08:50',
+          duration_minutes: 155,
+          stops: 0,
+        },
+        inbound: {
+          origin: 'GOI',
+          destination: 'DEL',
+          departure_date: '2026-11-06',
+          departure_time: '18:20',
+          arrival_date: '2026-11-06',
+          arrival_time: '20:50',
+          duration_minutes: 150,
+          stops: 0,
+        },
+        baggage: '15kg check-in',
+        cancellation: 'Refundable with standard fee',
+      });
+
+      render(
+        <FlightComparison
+          isOpen={true}
+          onClose={vi.fn()}
+          selectedOffers={[roundtripOffer]}
+          onRemoveOffer={vi.fn()}
+          onSelectOffer={vi.fn()}
+        />
+      );
+
+      // Verify rows
+      expect(screen.getByText('Outbound')).toBeTruthy();
+      expect(screen.getByText('Return')).toBeTruthy();
+      expect(screen.getByText('Total fare')).toBeTruthy();
+      expect(screen.getByText('Total duration')).toBeTruthy();
+      expect(screen.getByText('Baggage')).toBeTruthy();
+      expect(screen.getByText('Cancellation')).toBeTruthy();
+      expect(screen.getByText('Catalog provenance')).toBeTruthy();
+      expect(screen.getByText(/CURATED\s*·\s*ESTIMATED/)).toBeTruthy();
+    });
+  });
+
+  describe('12. Search Response Trust Contract', () => {
+    it('preserves CURATED and ESTIMATED without ever upgrading to VERIFIED or LIVE', () => {
+      const offer = createMockFlightOffer({
+        provenance: 'CURATED',
+        availability_state: 'ESTIMATED',
+      });
+
+      render(
+        <FlightOfferCard
+          offer={offer}
+          onSelectOffer={vi.fn()}
+          onToggleCompare={vi.fn()}
+          isCompared={false}
+        />
+      );
+
+      expect(screen.getByText(/Curated catalog/i)).toBeTruthy();
+      expect(screen.queryByText(/verified/i)).toBeNull();
+      expect(screen.queryByText(/live inventory/i)).toBeNull();
     });
   });
 });

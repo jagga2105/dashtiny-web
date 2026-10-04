@@ -31,10 +31,33 @@ class AirportRef(BaseModel):
     country: str = "India"
 
 
+class FlightSegment(BaseModel):
+    """
+    Individual flight leg segment representing outbound or return travel.
+    """
+    origin: str
+    destination: str
+    departure_date: str
+    departure_time: str
+    arrival_date: str
+    arrival_time: str
+    duration_minutes: int
+    stops: int = 0
+    stop_details: List[Dict[str, Any]] = Field(default_factory=list)
+
+    def __getitem__(self, item: str):
+        if hasattr(self, item):
+            return getattr(self, item)
+        raise KeyError(item)
+
+    def __contains__(self, item: str):
+        return hasattr(self, item)
+
+
 class FlightOffer(BaseModel):
     """
     Canonical Normalized FlightOffer schema required across Provider, API, and Frontend.
-    Contains all 29 mandatory fields.
+    Contains all mandatory fields, including outbound and inbound segments.
     """
     offer_id: str
     provider: str
@@ -66,6 +89,16 @@ class FlightOffer(BaseModel):
     expires_at: str
     deep_link: str
     why_recommended: str
+    outbound: FlightSegment
+    inbound: Optional[FlightSegment] = None
+
+    @model_validator(mode="after")
+    def validate_trip_segments(self) -> "FlightOffer":
+        if self.trip_type == "roundtrip" and self.inbound is None:
+            raise ValueError("inbound segment is required for roundtrip flight offers")
+        if self.trip_type == "oneway" and self.inbound is not None:
+            raise ValueError("inbound segment must be None for oneway flight offers")
+        return self
 
     def __getitem__(self, item: str):
         if hasattr(self, item):

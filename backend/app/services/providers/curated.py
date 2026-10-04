@@ -1,7 +1,8 @@
+import hashlib
 from datetime import datetime, timezone, timedelta
 from typing import List, Dict, Any, Optional
 
-from app.schemas.flight import FlightOffer
+from app.schemas.flight import FlightOffer, FlightSegment
 from app.services.providers.base import FlightProvider, HotelProvider, ActivityProvider
 from app.db.database import SessionLocal
 from app.models.models import Airport
@@ -103,10 +104,26 @@ def _format_time_with_duration(base_time_str: str, duration_mins: int) -> str:
         return "11:30 AM"
 
 
+def _stable_hash_int(seed: str, modulo: int) -> int:
+    """Deterministic positive integer from sha256 hash across process restarts."""
+    h = hashlib.sha256(seed.encode("utf-8")).hexdigest()
+    return int(h[:8], 16) % modulo
+
+
+def _calculate_arrival_date(dep_date_str: str, dep_time_str: str, duration_mins: int) -> str:
+    """Calculates arrival date string (YYYY-MM-DD) from departure date and duration."""
+    try:
+        dt = datetime.strptime(f"{dep_date_str} {dep_time_str}", "%Y-%m-%d %I:%M %p")
+        arr_dt = dt + timedelta(minutes=duration_mins)
+        return arr_dt.strftime("%Y-%m-%d")
+    except Exception:
+        return dep_date_str
+
+
 class CuratedFlightProvider(FlightProvider):
     """
     Curated adapter representing standardized flight offers with explicit CURATED provenance.
-    Synthesizes deterministic, contemporary airline catalog offers.
+    Synthesizes deterministic, reference airline catalog offers.
     Adheres strictly to current-date airline safety (IndiGo, Air India, Air India Express, Akasa Air, SpiceJet).
     Never exposes defunct carriers (Vistara, Go First).
     Never labeled as live provider inventory.
@@ -153,90 +170,119 @@ class CuratedFlightProvider(FlightProvider):
         expires_at = (now_utc + timedelta(hours=2)).isoformat()
 
         # Determine corridor duration and base fare
-        corridor_key = f"{origin_clean}_{dest_clean}"
-        base_duration = CORRIDOR_DURATIONS.get(corridor_key, 125)
+        origin_code = origin_info.get("code", origin_clean)
+        dest_code = dest_info.get("code", dest_clean)
+        corridor_key = f"{origin_code}_{dest_code}"
+
+        # P0: Unsupported corridor -> return [] without synthesizing fake durations.
+        if corridor_key not in CORRIDOR_DURATIONS:
+            return []
+
+        base_duration = CORRIDOR_DURATIONS[corridor_key]
+
+        # For round-trip, ensure return corridor is also supported
+        ret_corridor_key = f"{dest_code}_{origin_code}"
+        if is_roundtrip and ret_corridor_key not in CORRIDOR_DURATIONS:
+            return []
+
+        ret_base_duration = CORRIDOR_DURATIONS.get(ret_corridor_key, base_duration) if is_roundtrip else 0
         
         # Base fare calculation anchored in duration
         base_corridor_fare = max(2800, int(base_duration * 28 + 400))
 
-        # 5 Contemporary Indian & Regional Carriers (Safe contemporary identities)
+        # 5 Contemporary Indian & Regional Carriers (Normalized provider identity)
         catalog_blueprints = [
             {
                 "suffix": "01",
                 "airline": "IndiGo",
-                "provider": "IndiGo Premier",
-                "flight_number": f"6E-{2000 + (hash(corridor_key + '1') % 800)}",
+                "provider": "DashTiny Curated Catalog",
+                "flight_number": f"6E-{2000 + _stable_hash_int(corridor_key + '_1', 800)}",
                 "dep_time": "06:15 AM",
+                "ret_dep_time": "06:20 PM",
                 "stops": 0,
                 "layover": 0,
                 "base_fare": base_corridor_fare + 250,
                 "baggage": "15kg Checked • 7kg Cabin" if cabin == "economy" else "30kg Checked • 10kg Cabin",
                 "cancellation": "Free cancellation within 24 hours of booking",
                 "deep_link": "https://www.goindigo.in",
-                "why_recommended": "Early morning direct flight; arrives early for a full day of travel"
+                "why_recommended": "Direct morning flight under 3 hours" if base_duration <= 180 else "Direct morning flight"
             },
             {
                 "suffix": "02",
                 "airline": "Air India",
-                "provider": "Air India",
-                "flight_number": f"AI-{800 + (hash(corridor_key + '2') % 150)}",
+                "provider": "DashTiny Curated Catalog",
+                "flight_number": f"AI-{800 + _stable_hash_int(corridor_key + '_2', 150)}",
                 "dep_time": "10:30 AM",
+                "ret_dep_time": "02:15 PM",
                 "stops": 0,
                 "layover": 0,
                 "base_fare": base_corridor_fare + 750,
                 "baggage": "20kg Checked • 7kg Cabin" if cabin == "economy" else "35kg Checked • 12kg Cabin • Lounge Access",
                 "cancellation": "Refundable with nominal partner fee",
                 "deep_link": "https://www.airindia.com",
-                "why_recommended": "Generous luggage allowance and comfortable prime mid-day timing"
+                "why_recommended": "Direct flight with 20kg checked baggage included"
             },
             {
                 "suffix": "03",
                 "airline": "Akasa Air",
-                "provider": "Akasa Air",
-                "flight_number": f"QP-{1300 + (hash(corridor_key + '3') % 200)}",
+                "provider": "DashTiny Curated Catalog",
+                "flight_number": f"QP-{1300 + _stable_hash_int(corridor_key + '_3', 200)}",
                 "dep_time": "03:45 PM",
+                "ret_dep_time": "08:10 PM",
                 "stops": 0,
                 "layover": 0,
                 "base_fare": max(2600, base_corridor_fare - 350),
                 "baggage": "15kg Checked • 7kg Cabin • USB port charging",
                 "cancellation": "Standard fee applies",
                 "deep_link": "https://www.akasaair.com",
-                "why_recommended": "Lowest direct base fare on this corridor, arriving right before sunset"
+                "why_recommended": "Lowest fare among current catalog options"
             },
             {
                 "suffix": "04",
                 "airline": "SpiceJet",
-                "provider": "SpiceJet",
-                "flight_number": f"SG-{350 + (hash(corridor_key + '4') % 300)}",
+                "provider": "DashTiny Curated Catalog",
+                "flight_number": f"SG-{350 + _stable_hash_int(corridor_key + '_4', 300)}",
                 "dep_time": "12:40 PM",
+                "ret_dep_time": "05:45 PM",
                 "stops": 1,
                 "layover": 50,
                 "base_fare": max(2400, base_corridor_fare - 500),
                 "baggage": "15kg Checked • 7kg Cabin",
                 "cancellation": "Standard airline terms apply",
                 "deep_link": "https://www.spicejet.com",
-                "why_recommended": "Budget-friendly connecting option with a short, single stop"
+                "why_recommended": "Connecting option with single stop"
             },
             {
                 "suffix": "05",
                 "airline": "Air India Express",
-                "provider": "Air India Express",
-                "flight_number": f"IX-{1100 + (hash(corridor_key + '5') % 250)}",
+                "provider": "DashTiny Curated Catalog",
+                "flight_number": f"IX-{1100 + _stable_hash_int(corridor_key + '_5', 250)}",
                 "dep_time": "07:15 PM",
+                "ret_dep_time": "10:30 PM",
                 "stops": 0,
                 "layover": 0,
                 "base_fare": base_corridor_fare + 100,
                 "baggage": "15kg Checked • 7kg Cabin" if cabin == "economy" else "30kg Checked • 10kg Cabin",
                 "cancellation": "Partially refundable",
                 "deep_link": "https://www.airindiaexpress.com",
-                "why_recommended": "Evening departure ideal for post-work weekend getaways"
+                "why_recommended": "Direct evening flight"
             }
         ]
+
+        effective_dep_date = departure_date or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        effective_return_date = return_date
+        if is_roundtrip and not effective_return_date:
+            try:
+                dep_dt = datetime.strptime(effective_dep_date, "%Y-%m-%d")
+                effective_return_date = (dep_dt + timedelta(days=5)).strftime("%Y-%m-%d")
+            except Exception:
+                effective_return_date = (datetime.now(timezone.utc) + timedelta(days=5)).strftime("%Y-%m-%d")
 
         offers: List[FlightOffer] = []
         for b in catalog_blueprints:
             dur_mins = base_duration + (b["layover"] if b["stops"] > 0 else 0)
             arr_time = _format_time_with_duration(b["dep_time"], dur_mins)
+            arr_date = _calculate_arrival_date(effective_dep_date, b["dep_time"], dur_mins)
             
             calculated_total = float(round(b["base_fare"] * cabin_multiplier * trip_multiplier * num_pax))
             per_pax = float(round(calculated_total / num_pax))
@@ -251,6 +297,44 @@ class CuratedFlightProvider(FlightProvider):
                     "duration_minutes": b["layover"]
                 }]
 
+            outbound_segment = FlightSegment(
+                origin=origin_clean,
+                destination=dest_clean,
+                departure_date=effective_dep_date,
+                departure_time=b["dep_time"],
+                arrival_date=arr_date,
+                arrival_time=arr_time,
+                duration_minutes=dur_mins,
+                stops=b["stops"],
+                stop_details=stop_details
+            )
+
+            inbound_segment = None
+            if is_roundtrip and effective_return_date:
+                ret_dur_mins = ret_base_duration + (b["layover"] if b["stops"] > 0 else 0)
+                ret_dep_time = b.get("ret_dep_time", "06:20 PM")
+                ret_arr_time = _format_time_with_duration(ret_dep_time, ret_dur_mins)
+                ret_arr_date = _calculate_arrival_date(effective_return_date, ret_dep_time, ret_dur_mins)
+                ret_stop_details = []
+                if b["stops"] > 0:
+                    ret_layover_hub = "HYD" if "HYD" not in (origin_clean, dest_clean) else "BOM"
+                    ret_stop_details = [{
+                        "airport": ret_layover_hub,
+                        "city": KNOWN_AIRPORT_REFS.get(ret_layover_hub, {}).get("city", ret_layover_hub),
+                        "duration_minutes": b["layover"]
+                    }]
+                inbound_segment = FlightSegment(
+                    origin=dest_clean,
+                    destination=origin_clean,
+                    departure_date=effective_return_date,
+                    departure_time=ret_dep_time,
+                    arrival_date=ret_arr_date,
+                    arrival_time=ret_arr_time,
+                    duration_minutes=ret_dur_mins,
+                    stops=b["stops"],
+                    stop_details=ret_stop_details
+                )
+
             offers.append(FlightOffer(
                 offer_id=offer_id,
                 provider=b["provider"],
@@ -260,8 +344,8 @@ class CuratedFlightProvider(FlightProvider):
                 destination=dest_clean,
                 origin_airport=origin_info,
                 destination_airport=dest_info,
-                departure_date=departure_date or datetime.now(timezone.utc).strftime("%Y-%m-%d"),
-                return_date=return_date if is_roundtrip else None,
+                departure_date=effective_dep_date,
+                return_date=effective_return_date if is_roundtrip else None,
                 departure_time=b["dep_time"],
                 arrival_time=arr_time,
                 duration_minutes=dur_mins,
@@ -281,7 +365,9 @@ class CuratedFlightProvider(FlightProvider):
                 retrieved_at=retrieved_at,
                 expires_at=expires_at,
                 deep_link=b["deep_link"],
-                why_recommended=b["why_recommended"]
+                why_recommended=b["why_recommended"],
+                outbound=outbound_segment,
+                inbound=inbound_segment
             ))
 
         return offers

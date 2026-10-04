@@ -5,6 +5,7 @@ import { ArrowLeftRight, Calendar, Users, Briefcase, Search, AlertCircle } from 
 import { AirportAutocomplete } from '@/components/location/AirportAutocomplete';
 import { AirportLocation } from '@/services/api';
 import { FlightSearchParams } from '@/types/flight';
+import { getLocalTodayDate, addDaysToDate } from '@/lib/formatDate';
 
 interface FlightSearchFormProps {
   initialOrigin?: string;
@@ -33,7 +34,7 @@ export function FlightSearchForm({
   onParamsChange,
   className = '',
 }: FlightSearchFormProps) {
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = getLocalTodayDate();
 
   const [tripType, setTripType] = useState<'oneway' | 'roundtrip'>(initialTripType);
   const [origin, setOrigin] = useState(initialOrigin);
@@ -280,10 +281,8 @@ export function FlightSearchForm({
               onChange={(e) => {
                 setDepartureDate(e.target.value);
                 if (tripType === 'roundtrip' && returnDate && returnDate <= e.target.value) {
-                  // Push return date to day after departure
-                  const nextDay = new Date(e.target.value);
-                  nextDay.setDate(nextDay.getDate() + 1);
-                  setReturnDate(nextDay.toISOString().split('T')[0]);
+                  // Push return date to day after departure without timezone drift
+                  setReturnDate(addDaysToDate(e.target.value, 1));
                 }
               }}
               className="w-full text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500 cursor-pointer"

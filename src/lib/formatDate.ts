@@ -105,3 +105,28 @@ export function formatFriendlyDateRange(startStr?: string | null, endStr?: strin
 
   return `${formatFriendlyDate(startStr, { includeYear: false })} – ${formatFriendlyDate(endStr, { includeYear: true })}`;
 }
+
+/**
+ * Returns today's date in the user's local timezone formatted as YYYY-MM-DD.
+ * Prevents UTC offset bugs where early-morning local dates are treated as yesterday.
+ */
+export function getLocalTodayDate(dateObj: Date = new Date()): string {
+  const year = dateObj.getFullYear();
+  const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+  const day = String(dateObj.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+/**
+ * Adds days to a YYYY-MM-DD date string using local date math without timezone drift.
+ */
+export function addDaysToDate(dateStr: string, days: number): string {
+  if (!dateStr) return '';
+  const parts = dateStr.split('T')[0].split('-').map(Number);
+  if (parts.length !== 3 || isNaN(parts[0]) || isNaN(parts[1]) || isNaN(parts[2])) {
+    return dateStr;
+  }
+  const d = new Date(parts[0], parts[1] - 1, parts[2]);
+  d.setDate(d.getDate() + days);
+  return getLocalTodayDate(d);
+}

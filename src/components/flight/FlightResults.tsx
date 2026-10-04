@@ -185,10 +185,10 @@ export function FlightResults({
             <div className="w-5 h-5 rounded-full border-2 border-orange-500 border-t-transparent animate-spin shrink-0" />
             <div>
               <p className="text-xs font-bold text-slate-800">
-                Searching contemporary airline corridors...
+                Searching curated airline corridors...
               </p>
               <p className="text-[11px] text-slate-500">
-                Fetching catalog schedules across IndiGo, Air India, Akasa Air, and SpiceJet
+                Fetching reference catalog schedules across IndiGo, Air India, Akasa Air, and SpiceJet
               </p>
             </div>
           </div>
@@ -288,7 +288,7 @@ export function FlightResults({
           Ready to compare flights
         </h3>
         <p className="text-xs text-slate-500 max-w-md mx-auto">
-          Ready to search flights — specify your departure and arrival airports above to view contemporary schedules, fares, and baggage rules.
+          Ready to search flights — specify your departure and arrival airports above to view curated flight options, estimated fares, and reference schedules.
         </p>
       </div>
     );

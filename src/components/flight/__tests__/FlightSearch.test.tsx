@@ -9,6 +9,7 @@ import { FlightSearchForm } from '../FlightSearchForm';
 import { FlightResults } from '../FlightResults';
 import { FlightTripContext } from '../FlightTripContext';
 import { FlightOffer, FlightSearchResponse } from '@/types/flight';
+import { createMockFlightOffer } from '@/lib/flight/testFixtures';
 
 vi.mock('@/services/api', () => ({
   apiService: {
@@ -41,25 +42,13 @@ vi.mock('@/services/api', () => ({
 
 // Mock Mock Data for Flights
 const MOCK_OFFERS: FlightOffer[] = [
-  {
+  createMockFlightOffer({
     offer_id: 'fl_offer_6e_501',
-    provider: 'IndiGo',
+    provider: 'DashTiny Curated Catalog',
     airline: 'IndiGo',
     flight_number: '6E-501',
     origin: 'DEL',
     destination: 'BOM',
-    origin_airport: {
-      code: 'DEL',
-      name: 'Indira Gandhi International Airport',
-      city: 'Delhi',
-      country: 'India',
-    },
-    destination_airport: {
-      code: 'BOM',
-      name: 'Chhatrapati Shivaji Maharaj International Airport',
-      city: 'Mumbai',
-      country: 'India',
-    },
     departure_date: '2026-10-20',
     return_date: '2026-10-25',
     departure_time: '06:00',
@@ -75,33 +64,16 @@ const MOCK_OFFERS: FlightOffer[] = [
     currency: 'INR',
     baggage: '15kg check-in included',
     cancellation: 'Standard cancellation terms',
-    availability_state: 'ESTIMATED',
-    provenance: 'CURATED',
-    source: 'CURATED_DATABASE',
-    retrieved_at: '2026-10-20T00:00:00Z',
-    expires_at: '2026-10-20T02:00:00Z',
     deep_link: 'https://www.goindigo.in',
     why_recommended: 'Balanced option: Direct morning departure',
-  },
-  {
+  }),
+  createMockFlightOffer({
     offer_id: 'fl_offer_ai_805',
-    provider: 'Air India',
+    provider: 'DashTiny Curated Catalog',
     airline: 'Air India',
     flight_number: 'AI-805',
     origin: 'DEL',
     destination: 'BOM',
-    origin_airport: {
-      code: 'DEL',
-      name: 'Indira Gandhi International Airport',
-      city: 'Delhi',
-      country: 'India',
-    },
-    destination_airport: {
-      code: 'BOM',
-      name: 'Chhatrapati Shivaji Maharaj International Airport',
-      city: 'Mumbai',
-      country: 'India',
-    },
     departure_date: '2026-10-20',
     return_date: '2026-10-25',
     departure_time: '18:30',
@@ -117,33 +89,16 @@ const MOCK_OFFERS: FlightOffer[] = [
     currency: 'INR',
     baggage: '25kg check-in included',
     cancellation: 'Refundable with fee',
-    availability_state: 'ESTIMATED',
-    provenance: 'CURATED',
-    source: 'CURATED_DATABASE',
-    retrieved_at: '2026-10-20T00:00:00Z',
-    expires_at: '2026-10-20T02:00:00Z',
     deep_link: 'https://www.airindia.com',
     why_recommended: 'Higher baggage allowance',
-  },
-  {
+  }),
+  createMockFlightOffer({
     offer_id: 'fl_offer_qp_1102',
-    provider: 'Akasa Air',
+    provider: 'DashTiny Curated Catalog',
     airline: 'Akasa Air',
     flight_number: 'QP-1102',
     origin: 'DEL',
     destination: 'BOM',
-    origin_airport: {
-      code: 'DEL',
-      name: 'Indira Gandhi International Airport',
-      city: 'Delhi',
-      country: 'India',
-    },
-    destination_airport: {
-      code: 'BOM',
-      name: 'Chhatrapati Shivaji Maharaj International Airport',
-      city: 'Mumbai',
-      country: 'India',
-    },
     departure_date: '2026-10-20',
     return_date: '2026-10-25',
     departure_time: '13:15',
@@ -159,14 +114,9 @@ const MOCK_OFFERS: FlightOffer[] = [
     currency: 'INR',
     baggage: '15kg check-in included',
     cancellation: 'Non-refundable',
-    availability_state: 'ESTIMATED',
-    provenance: 'CURATED',
-    source: 'CURATED_DATABASE',
-    retrieved_at: '2026-10-20T00:00:00Z',
-    expires_at: '2026-10-20T02:00:00Z',
     deep_link: 'https://www.akasaair.com',
     why_recommended: 'Budget-friendly corridor fare',
-  },
+  }),
 ];
 
 const MOCK_SEARCH_RESPONSE: FlightSearchResponse = {
@@ -308,7 +258,7 @@ describe('DashTiny L2 — Flight Search Frontend Components', () => {
         />
       );
       expect(screen.getByTestId('flight-search-loading')).toBeTruthy();
-      expect(screen.getByText(/searching contemporary airline corridors/i)).toBeTruthy();
+      expect(screen.getByText(/searching curated airline corridors/i)).toBeTruthy();
     });
 
     it('renders error notice when error prop is provided', () => {

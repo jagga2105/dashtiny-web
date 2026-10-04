@@ -16,6 +16,18 @@ export interface FlightStopDetail {
   duration_minutes: number;
 }
 
+export interface FlightSegment {
+  origin: string;
+  destination: string;
+  departure_date: string;
+  departure_time: string;
+  arrival_date: string;
+  arrival_time: string;
+  duration_minutes: number;
+  stops: number;
+  stop_details?: FlightStopDetail[];
+}
+
 export interface FlightOffer {
   offer_id: string;
   provider: string;
@@ -47,6 +59,8 @@ export interface FlightOffer {
   expires_at: string;
   deep_link: string;
   why_recommended: string;
+  outbound: FlightSegment;
+  inbound?: FlightSegment | null;
 }
 
 export interface FlightSearchParams {

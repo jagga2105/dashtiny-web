@@ -13,17 +13,16 @@ import {
   computeFactualWhyThisFits,
 } from '../ranking';
 import { FlightOffer } from '@/types/flight';
+import { createMockFlightOffer } from '../testFixtures';
 
 const MOCK_OFFERS: FlightOffer[] = [
-  {
+  createMockFlightOffer({
     offer_id: 'fl_indigo_del_bom',
-    provider: 'IndiGo',
+    provider: 'DashTiny Curated Catalog',
     airline: 'IndiGo',
     flight_number: '6E-501',
     origin: 'DEL',
     destination: 'BOM',
-    origin_airport: { code: 'DEL', name: 'Indira Gandhi', city: 'Delhi', country: 'India' },
-    destination_airport: { code: 'BOM', name: 'CSMIA', city: 'Mumbai', country: 'India' },
     departure_date: '2026-10-20',
     return_date: '2026-10-25',
     departure_time: '06:30',
@@ -39,23 +38,16 @@ const MOCK_OFFERS: FlightOffer[] = [
     currency: 'INR',
     baggage: '15kg check-in',
     cancellation: 'Refundable with fee',
-    availability_state: 'ESTIMATED',
-    provenance: 'CURATED',
-    source: 'CURATED_DATABASE',
-    retrieved_at: '2026-10-20T00:00:00Z',
-    expires_at: '2026-10-20T02:00:00Z',
     deep_link: 'https://www.goindigo.in',
     why_recommended: 'Balanced option',
-  },
-  {
+  }),
+  createMockFlightOffer({
     offer_id: 'fl_airindia_del_bom',
-    provider: 'Air India',
+    provider: 'DashTiny Curated Catalog',
     airline: 'Air India',
     flight_number: 'AI-805',
     origin: 'DEL',
     destination: 'BOM',
-    origin_airport: { code: 'DEL', name: 'Indira Gandhi', city: 'Delhi', country: 'India' },
-    destination_airport: { code: 'BOM', name: 'CSMIA', city: 'Mumbai', country: 'India' },
     departure_date: '2026-10-20',
     return_date: '2026-10-25',
     departure_time: '20:00',
@@ -71,23 +63,16 @@ const MOCK_OFFERS: FlightOffer[] = [
     currency: 'INR',
     baggage: '25kg check-in',
     cancellation: 'Free cancellation within 24h',
-    availability_state: 'ESTIMATED',
-    provenance: 'CURATED',
-    source: 'CURATED_DATABASE',
-    retrieved_at: '2026-10-20T00:00:00Z',
-    expires_at: '2026-10-20T02:00:00Z',
     deep_link: 'https://www.airindia.com',
     why_recommended: 'Fastest flight',
-  },
-  {
+  }),
+  createMockFlightOffer({
     offer_id: 'fl_spicejet_del_bom',
-    provider: 'SpiceJet',
+    provider: 'DashTiny Curated Catalog',
     airline: 'SpiceJet',
     flight_number: 'SG-819',
     origin: 'DEL',
     destination: 'BOM',
-    origin_airport: { code: 'DEL', name: 'Indira Gandhi', city: 'Delhi', country: 'India' },
-    destination_airport: { code: 'BOM', name: 'CSMIA', city: 'Mumbai', country: 'India' },
     departure_date: '2026-10-20',
     return_date: '2026-10-25',
     departure_time: '14:15',
@@ -103,14 +88,9 @@ const MOCK_OFFERS: FlightOffer[] = [
     currency: 'INR',
     baggage: '15kg check-in',
     cancellation: 'Non-refundable',
-    availability_state: 'ESTIMATED',
-    provenance: 'CURATED',
-    source: 'CURATED_DATABASE',
-    retrieved_at: '2026-10-20T00:00:00Z',
-    expires_at: '2026-10-20T02:00:00Z',
     deep_link: 'https://www.spicejet.com',
     why_recommended: 'Lowest fare',
-  },
+  }),
 ];
 
 describe('Flight Utility Functions', () => {

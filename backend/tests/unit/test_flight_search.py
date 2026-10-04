@@ -353,5 +353,100 @@ def test_api_flight_search_empty_results(client):
     )
     assert res.status_code == 200
     data = res.json()
-    # Curated catalog returns offers for supported corridors
+    # Curated catalog returns strict empty list for unsupported corridors
     assert "offers" in data
+    assert data["offers"] == []
+
+
+def test_curated_provider_unsupported_corridor_returns_empty(flight_provider):
+    """Unsupported corridor returns [] without synthesizing fake durations."""
+    offers = flight_provider.search_flights(
+        origin="JAI",
+        destination="SXR",
+        departure_date="2026-11-20",
+        trip_type="oneway"
+    )
+    assert offers == []
+
+
+def test_curated_provider_supported_corridor_deterministic(flight_provider):
+    """Supported corridor returns deterministic curated offers with normalized provider."""
+    offers = flight_provider.search_flights(
+        origin="DEL",
+        destination="BOM",
+        departure_date="2026-11-20",
+        trip_type="oneway"
+    )
+    assert len(offers) == 5
+    for o in offers:
+        assert o.provider == "DashTiny Curated Catalog"
+        assert o.outbound is not None
+        assert o.outbound.origin == "DEL"
+        assert o.outbound.destination == "BOM"
+        assert o.inbound is None
+
+
+def test_curated_provider_stability_across_separate_instances():
+    """Same request to separate provider instances yields identical offer IDs and flight numbers."""
+    provider1 = CuratedFlightProvider()
+    provider2 = CuratedFlightProvider()
+
+    offers1 = provider1.search_flights(
+        origin="DEL",
+        destination="BLR",
+        departure_date="2026-11-20",
+        return_date="2026-11-25",
+        trip_type="roundtrip"
+    )
+    offers2 = provider2.search_flights(
+        origin="DEL",
+        destination="BLR",
+        departure_date="2026-11-20",
+        return_date="2026-11-25",
+        trip_type="roundtrip"
+    )
+
+    assert len(offers1) == len(offers2) == 5
+    for o1, o2 in zip(offers1, offers2):
+        assert o1.offer_id == o2.offer_id
+        assert o1.flight_number == o2.flight_number
+        assert o1.price == o2.price
+        assert o1.why_recommended == o2.why_recommended
+        assert o1.outbound.departure_time == o2.outbound.departure_time
+        assert o1.inbound.departure_time == o2.inbound.departure_time
+
+
+def test_curated_provider_oneway_has_no_inbound_segment(flight_provider):
+    """One-way flight offer has outbound segment but inbound is None."""
+    offers = flight_provider.search_flights(
+        origin="DEL",
+        destination="GOI",
+        departure_date="2026-11-20",
+        trip_type="oneway"
+    )
+    assert len(offers) > 0
+    for o in offers:
+        assert o.outbound is not None
+        assert o.outbound.origin == "DEL"
+        assert o.outbound.destination == "GOI"
+        assert o.inbound is None
+
+
+def test_curated_provider_roundtrip_has_inbound_segment(flight_provider):
+    """Round-trip flight offer requires outbound and inbound segments with inverted route."""
+    offers = flight_provider.search_flights(
+        origin="DEL",
+        destination="GOI",
+        departure_date="2026-11-20",
+        return_date="2026-11-25",
+        trip_type="roundtrip"
+    )
+    assert len(offers) > 0
+    for o in offers:
+        assert o.outbound is not None
+        assert o.outbound.origin == "DEL"
+        assert o.outbound.destination == "GOI"
+        assert o.inbound is not None
+        assert o.inbound.origin == "GOI"
+        assert o.inbound.destination == "DEL"
+        assert o.inbound.departure_date == "2026-11-25"

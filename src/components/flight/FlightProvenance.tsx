@@ -35,7 +35,7 @@ export function FlightProvenance({
       <div className="flex items-center gap-1.5 text-amber-800/90 text-[11px]">
         <Info className="w-3.5 h-3.5 text-amber-600 shrink-0" />
         <span>
-          Contemporary curated airline schedules. Direct live OTA connection deferred to future phase.
+          These are curated catalog examples, not live airline inventory.
         </span>
       </div>
     </div>

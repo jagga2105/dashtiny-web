@@ -33,6 +33,8 @@ import { AirportAutocomplete } from '@/components/location/AirportAutocomplete';
 import { FlightSearchForm } from '@/components/flight/FlightSearchForm';
 import { FlightResults } from '@/components/flight/FlightResults';
 import { FlightTripContext } from '@/components/flight/FlightTripContext';
+import { AttachFlightModal } from '@/components/flight/AttachFlightModal';
+import { TripProposalModal } from '@/components/flight/TripProposalModal';
 import { FlightOffer, FlightSearchParams, FlightSearchResponse } from '@/types/flight';
 import { formatCurrency } from '@/lib/formatCurrency';
 import { formatFriendlyDate } from '@/lib/formatDate';
@@ -700,165 +702,26 @@ function BookingsContent() {
             )}
 
             {/* Step 1: Attach this flight to Trip Modal */}
-            {pendingOfferForProposal && (
-              <div
-                className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in"
-                data-testid="attach-flight-modal"
-              >
-                <div className="w-full max-w-md bg-white rounded-3xl p-6 shadow-2xl border border-slate-200 space-y-4">
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                    <div className="flex items-center gap-2 text-slate-900 font-serif-editorial font-bold text-base sm:text-lg">
-                      <Plane className="w-5 h-5 text-orange-500" />
-                      <span>Attach flight to Trip</span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setPendingOfferForProposal(null)}
-                      className="p-1 rounded-full text-slate-400 hover:text-slate-600 cursor-pointer"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  </div>
-
-                  {/* Trip Context */}
-                  <div className="space-y-1.5 text-xs">
-                    <label className="font-semibold text-slate-700">Attach this flight to:</label>
-                    {activeTrips.length > 0 ? (
-                      <select
-                        value={selectedTripId}
-                        onChange={(e) => setSelectedTripId(e.target.value)}
-                        className="w-full text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500 cursor-pointer"
-                        data-testid="attach-trip-selector"
-                      >
-                        {activeTrips.map((t) => (
-                          <option key={t.id} value={t.id}>
-                            {t.title || t.destination} · {t.destination}
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      <p className="text-amber-800 bg-amber-50 p-2.5 rounded-xl border border-amber-200 text-[11px]">
-                        No active trips found. Please select or create a trip first to attach transport options.
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Flight Info Card */}
-                  <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-2 text-xs">
-                    <div className="font-semibold text-slate-800">
-                      Flight:
-                    </div>
-                    <div className="font-bold text-sm text-slate-900">
-                      {pendingOfferForProposal.airline} {pendingOfferForProposal.flight_number}
-                    </div>
-                    <div className="flex items-center justify-between text-slate-600 text-[11px]">
-                      <span>{pendingOfferForProposal.origin} → {pendingOfferForProposal.destination}</span>
-                      <span>{formatFriendlyDate(departureDate || pendingOfferForProposal.departure_time)}</span>
-                    </div>
-                    <div className="font-mono text-orange-600 font-bold text-sm pt-1 border-t border-slate-200">
-                      {formatCurrency(pendingOfferForProposal.price, pendingOfferForProposal.currency)} total
-                    </div>
-                  </div>
-
-                  {/* Catalog Status */}
-                  <div className="p-3 rounded-xl bg-slate-100/80 border border-slate-200/80 text-[11px] text-slate-600 space-y-0.5">
-                    <span className="font-semibold text-slate-700 block">Catalog status:</span>
-                    <span>Curated · Estimated availability</span>
-                  </div>
-
-                  {/* Actions */}
-                  <div className="flex items-center justify-end gap-2.5 pt-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setPendingOfferForProposal(null)}
-                      disabled={isSubmittingProposal}
-                      className="text-xs cursor-pointer"
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      onClick={handleCreateProposalFromOffer}
-                      isLoading={isSubmittingProposal}
-                      disabled={!selectedTripId && activeTrips.length === 0}
-                      className="bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs px-4 py-2 rounded-xl cursor-pointer shadow-sm"
-                      data-testid="create-trip-proposal-btn"
-                    >
-                      Create Trip Proposal →
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            )}
+            <AttachFlightModal
+              isOpen={Boolean(pendingOfferForProposal)}
+              onClose={() => setPendingOfferForProposal(null)}
+              offer={pendingOfferForProposal}
+              activeTrips={activeTrips}
+              selectedTripId={selectedTripId}
+              onSelectTripId={setSelectedTripId}
+              departureDate={departureDate}
+              onSubmit={handleCreateProposalFromOffer}
+              isSubmitting={isSubmittingProposal}
+            />
 
             {/* Step 2: Trip Proposal Review Modal */}
-            {activeProposal && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in" data-testid="flight-proposal-modal">
-                <div className="w-full max-w-lg bg-white rounded-3xl p-6 shadow-2xl border border-slate-200 space-y-4">
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                    <div className="flex items-center gap-2 text-slate-900 font-serif-editorial font-bold text-lg">
-                      <Sparkles className="w-5 h-5 text-orange-500" />
-                      <span>Trip Proposal</span>
-                    </div>
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
-                      Parent v{activeProposal.parent_version}
-                    </span>
-                  </div>
-
-                  <p className="text-xs text-slate-600">
-                    This change will attach the selected transport option to your Trip. No provider booking will occur.
-                  </p>
-
-                  <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 space-y-2 text-xs">
-                    <div className="flex justify-between font-semibold text-slate-800">
-                      <span>{activeProposal.changes?.flight_offer?.airline} ({activeProposal.changes?.flight_offer?.flight_number})</span>
-                      <span className="font-mono text-orange-600 font-bold">
-                        {formatCurrency(activeProposal.changes?.flight_offer?.price, activeProposal.changes?.flight_offer?.currency)}
-                      </span>
-                    </div>
-                    <div className="flex justify-between text-slate-500 text-[11px]">
-                      <span>Route: {activeProposal.changes?.flight_offer?.origin} → {activeProposal.changes?.flight_offer?.destination}</span>
-                      <span>Dep: {activeProposal.changes?.flight_offer?.departure_time}</span>
-                    </div>
-                    <div className="pt-2 border-t border-slate-200 flex items-center justify-between text-[11px] text-slate-500">
-                      <span>Provenance: <strong className="text-slate-700">{activeProposal.changes?.flight_offer?.provenance || 'CURATED'}</strong></span>
-                      <span>Availability: <strong className="text-slate-700">{activeProposal.changes?.flight_offer?.availability_state || 'ESTIMATED'}</strong></span>
-                    </div>
-                  </div>
-
-                  <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 text-blue-900 text-[11px] space-y-1">
-                    <p className="font-semibold">Trust Guarantee:</p>
-                    <p className="text-blue-800">
-                      DashTiny attaches transport to your trip itinerary. To complete ticketing and secure seats, proceed to the provider.
-                    </p>
-                  </div>
-
-                  <div className="flex items-center justify-end gap-2.5 pt-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setActiveProposal(null)}
-                      disabled={isSubmittingProposal}
-                      className="text-xs cursor-pointer"
-                    >
-                      Discard
-                    </Button>
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      onClick={handleAcceptProposal}
-                      isLoading={isSubmittingProposal}
-                      className="bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs px-4 py-2 rounded-xl cursor-pointer shadow-sm"
-                      data-testid="accept-proposal-btn"
-                    >
-                      Accept Proposal & Update Trip →
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            )}
+            <TripProposalModal
+              isOpen={Boolean(activeProposal)}
+              onClose={() => setActiveProposal(null)}
+              activeProposal={activeProposal}
+              onAccept={handleAcceptProposal}
+              isSubmitting={isSubmittingProposal}
+            />
 
             {/* Flight Results Component */}
             <FlightResults

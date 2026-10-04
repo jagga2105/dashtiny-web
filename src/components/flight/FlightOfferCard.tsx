@@ -121,50 +121,78 @@ export function FlightOfferCard({
             </div>
           </div>
 
-          {/* Time & Stops Line */}
-          <div className="grid grid-cols-[1fr,auto,1fr] gap-3 items-center pt-1">
-            {/* Departure */}
-            <div>
-              <div className="font-bold text-base sm:text-lg text-slate-900 tracking-tight">
-                {offer.departure_time}
+          {/* Time & Stops Line: Single-segment or Round-trip legs */}
+          {offer.trip_type === 'roundtrip' && offer.inbound ? (
+            <div className="space-y-2 pt-1 border-t border-slate-100">
+              {/* Outbound leg */}
+              <div className="flex items-center justify-between text-xs bg-slate-50/80 p-2.5 rounded-xl border border-slate-100">
+                <div className="space-y-0.5">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-orange-600 block">Outbound</span>
+                  <span className="font-bold text-slate-900">{offer.outbound?.origin || offer.origin} → {offer.outbound?.destination || offer.destination}</span>
+                </div>
+                <div className="text-right space-y-0.5">
+                  <span className="font-mono font-semibold text-slate-800">{offer.outbound?.departure_time || offer.departure_time} → {offer.outbound?.arrival_time || offer.arrival_time}</span>
+                  <span className="text-[10px] text-slate-500 block">{formatFlightDuration(offer.outbound?.duration_minutes || offer.duration_minutes)}</span>
+                </div>
               </div>
-              <div className="text-xs font-semibold text-slate-700">
-                {offer.origin}
-              </div>
-              <div className="text-[11px] text-slate-500 truncate max-w-[140px]" title={offer.origin_airport?.name}>
-                {offer.origin_airport?.city || offer.origin}
-              </div>
-            </div>
 
-            {/* Flight Path Graphic */}
-            <div className="flex flex-col items-center px-2 min-w-[110px]">
-              <span className="text-[11px] font-semibold text-slate-500 flex items-center gap-1">
-                <Clock className="w-3 h-3 text-slate-400" />
-                {formatFlightDuration(offer.duration_minutes)}
-              </span>
-              <div className="w-full flex items-center gap-1 my-1">
-                <div className="h-0.5 flex-1 bg-slate-300" />
-                <Plane className="w-3.5 h-3.5 text-slate-400 shrink-0 transform rotate-90" />
-                <div className="h-0.5 flex-1 bg-slate-300" />
+              {/* Return leg */}
+              <div className="flex items-center justify-between text-xs bg-slate-50/80 p-2.5 rounded-xl border border-slate-100">
+                <div className="space-y-0.5">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">Return</span>
+                  <span className="font-bold text-slate-900">{offer.inbound.origin} → {offer.inbound.destination}</span>
+                </div>
+                <div className="text-right space-y-0.5">
+                  <span className="font-mono font-semibold text-slate-800">{offer.inbound.departure_time} → {offer.inbound.arrival_time}</span>
+                  <span className="text-[10px] text-slate-500 block">{formatFlightDuration(offer.inbound.duration_minutes)}</span>
+                </div>
               </div>
-              <span className={`text-[11px] font-medium ${offer.stops === 0 ? 'text-emerald-700' : 'text-amber-700'}`}>
-                {offer.stops === 0 ? 'Non-stop' : `${offer.stops} stop${offer.stops > 1 ? 's' : ''}`}
-              </span>
             </div>
+          ) : (
+            <div className="grid grid-cols-[1fr,auto,1fr] gap-3 items-center pt-1">
+              {/* Departure */}
+              <div>
+                <div className="font-bold text-base sm:text-lg text-slate-900 tracking-tight">
+                  {offer.departure_time}
+                </div>
+                <div className="text-xs font-semibold text-slate-700">
+                  {offer.origin}
+                </div>
+                <div className="text-[11px] text-slate-500 truncate max-w-[140px]" title={offer.origin_airport?.name}>
+                  {offer.origin_airport?.city || offer.origin}
+                </div>
+              </div>
 
-            {/* Arrival */}
-            <div className="text-right">
-              <div className="font-bold text-base sm:text-lg text-slate-900 tracking-tight">
-                {offer.arrival_time}
+              {/* Flight Path Graphic */}
+              <div className="flex flex-col items-center px-2 min-w-[110px]">
+                <span className="text-[11px] font-semibold text-slate-500 flex items-center gap-1">
+                  <Clock className="w-3 h-3 text-slate-400" />
+                  {formatFlightDuration(offer.duration_minutes)}
+                </span>
+                <div className="w-full flex items-center gap-1 my-1">
+                  <div className="h-0.5 flex-1 bg-slate-300" />
+                  <Plane className="w-3.5 h-3.5 text-slate-400 shrink-0 transform rotate-90" />
+                  <div className="h-0.5 flex-1 bg-slate-300" />
+                </div>
+                <span className={`text-[11px] font-medium ${offer.stops === 0 ? 'text-emerald-700' : 'text-amber-700'}`}>
+                  {offer.stops === 0 ? 'Non-stop' : `${offer.stops} stop${offer.stops > 1 ? 's' : ''}`}
+                </span>
               </div>
-              <div className="text-xs font-semibold text-slate-700">
-                {offer.destination}
-              </div>
-              <div className="text-[11px] text-slate-500 truncate max-w-[140px] ml-auto" title={offer.destination_airport?.name}>
-                {offer.destination_airport?.city || offer.destination}
+
+              {/* Arrival */}
+              <div className="text-right">
+                <div className="font-bold text-base sm:text-lg text-slate-900 tracking-tight">
+                  {offer.arrival_time}
+                </div>
+                <div className="text-xs font-semibold text-slate-700">
+                  {offer.destination}
+                </div>
+                <div className="text-[11px] text-slate-500 truncate max-w-[140px] ml-auto" title={offer.destination_airport?.name}>
+                  {offer.destination_airport?.city || offer.destination}
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
           {/* Perks & Inclusions */}
           <div className="flex flex-wrap items-center gap-3 pt-2 text-[11px] text-slate-600">

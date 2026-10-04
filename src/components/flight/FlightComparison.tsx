@@ -5,6 +5,7 @@ import { X, Check, ExternalLink, Sparkles } from 'lucide-react';
 import { FlightOffer } from '@/types/flight';
 import { formatFlightDuration } from '@/lib/flight/ranking';
 import { formatCurrency } from '@/lib/formatCurrency';
+import { useAccessibleModal } from '@/hooks/useAccessibleModal';
 
 interface FlightComparisonProps {
   selectedOffers: FlightOffer[];
@@ -23,18 +24,27 @@ export function FlightComparison({
   onSelectOffer,
   className = '',
 }: FlightComparisonProps) {
+  const { containerRef } = useAccessibleModal({ isOpen, onClose });
+
   if (!isOpen || !selectedOffers || selectedOffers.length === 0) return null;
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="flight-comparison-title"
       className={`fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 md:p-6 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200 ${className}`}
       data-testid="flight-comparison-modal"
     >
-      <div className="relative w-full max-w-5xl max-h-[92vh] bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col">
+      <div
+        ref={containerRef}
+        tabIndex={-1}
+        className="relative w-full max-w-5xl max-h-[92vh] bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col focus:outline-none"
+      >
         {/* Modal Header */}
         <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-slate-100 bg-slate-50/80">
           <div className="space-y-0.5">
-            <h2 className="text-base sm:text-lg font-bold font-serif-editorial text-slate-900 flex items-center gap-2">
+            <h2 id="flight-comparison-title" className="text-base sm:text-lg font-bold font-serif-editorial text-slate-900 flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-orange-500 shrink-0" />
               <span>Compare Flights Side-by-Side</span>
             </h2>
@@ -88,27 +98,71 @@ export function FlightComparison({
               </div>
             ))}
 
-            {/* Row 1: Schedule */}
+            {/* Row 1: Outbound */}
             <div className="sticky left-0 bg-white z-20 font-semibold text-xs text-slate-500 pt-2 border-t border-slate-100">
-              Schedule
+              Outbound
             </div>
             {selectedOffers.map((offer) => (
               <div
-                key={`sched-${offer.offer_id}`}
+                key={`out-${offer.offer_id}`}
                 className="pt-2 border-t border-slate-100 text-xs text-slate-800"
               >
                 <div className="font-bold text-slate-900">
-                  {offer.departure_time} → {offer.arrival_time}
+                  {offer.outbound?.origin || offer.origin} → {offer.outbound?.destination || offer.destination}
                 </div>
-                <div className="text-[11px] text-slate-500">
-                  {offer.origin} to {offer.destination}
+                <div className="text-[11px] text-slate-600 font-mono mt-0.5">
+                  {offer.outbound?.departure_time || offer.departure_time} → {offer.outbound?.arrival_time || offer.arrival_time}
                 </div>
               </div>
             ))}
 
-            {/* Row 2: Duration */}
+            {/* Row 2: Return */}
             <div className="sticky left-0 bg-white z-20 font-semibold text-xs text-slate-500 pt-2 border-t border-slate-100">
-              Duration
+              Return
+            </div>
+            {selectedOffers.map((offer) => (
+              <div
+                key={`ret-${offer.offer_id}`}
+                className="pt-2 border-t border-slate-100 text-xs text-slate-800"
+              >
+                {offer.inbound ? (
+                  <>
+                    <div className="font-bold text-slate-900">
+                      {offer.inbound.origin} → {offer.inbound.destination}
+                    </div>
+                    <div className="text-[11px] text-slate-600 font-mono mt-0.5">
+                      {offer.inbound.departure_time} → {offer.inbound.arrival_time}
+                    </div>
+                  </>
+                ) : (
+                  <span className="text-slate-400 italic">One-way</span>
+                )}
+              </div>
+            ))}
+
+            {/* Row 3: Total fare */}
+            <div className="sticky left-0 bg-white z-20 font-semibold text-xs text-slate-500 pt-2 border-t border-slate-100">
+              Total fare
+            </div>
+            {selectedOffers.map((offer) => (
+              <div
+                key={`price-${offer.offer_id}`}
+                className="pt-2 border-t border-slate-100"
+              >
+                <div className="text-base font-bold text-slate-900 font-serif-editorial">
+                  {formatCurrency(offer.price, offer.currency)}
+                </div>
+                {offer.passengers > 1 && offer.per_passenger_price && (
+                  <div className="text-[10px] text-slate-500">
+                    {formatCurrency(offer.per_passenger_price, offer.currency)} / pax
+                  </div>
+                )}
+              </div>
+            ))}
+
+            {/* Row 4: Total duration */}
+            <div className="sticky left-0 bg-white z-20 font-semibold text-xs text-slate-500 pt-2 border-t border-slate-100">
+              Total duration
             </div>
             {selectedOffers.map((offer) => (
               <div
@@ -119,7 +173,7 @@ export function FlightComparison({
               </div>
             ))}
 
-            {/* Row 3: Stops */}
+            {/* Row 5: Stops */}
             <div className="sticky left-0 bg-white z-20 font-semibold text-xs text-slate-500 pt-2 border-t border-slate-100">
               Stops
             </div>
@@ -143,7 +197,7 @@ export function FlightComparison({
               </div>
             ))}
 
-            {/* Row 4: Baggage */}
+            {/* Row 6: Baggage */}
             <div className="sticky left-0 bg-white z-20 font-semibold text-xs text-slate-500 pt-2 border-t border-slate-100">
               Baggage
             </div>
@@ -156,7 +210,7 @@ export function FlightComparison({
               </div>
             ))}
 
-            {/* Row 5: Cancellation Policy */}
+            {/* Row 7: Cancellation */}
             <div className="sticky left-0 bg-white z-20 font-semibold text-xs text-slate-500 pt-2 border-t border-slate-100">
               Cancellation
             </div>
@@ -169,29 +223,9 @@ export function FlightComparison({
               </div>
             ))}
 
-            {/* Row 6: Total Price */}
+            {/* Row 8: Catalog provenance */}
             <div className="sticky left-0 bg-white z-20 font-semibold text-xs text-slate-500 pt-2 border-t border-slate-100">
-              Total Price
-            </div>
-            {selectedOffers.map((offer) => (
-              <div
-                key={`price-${offer.offer_id}`}
-                className="pt-2 border-t border-slate-100"
-              >
-                <div className="text-base font-bold text-slate-900 font-serif-editorial">
-                  {formatCurrency(offer.price, offer.currency)}
-                </div>
-                {offer.passengers > 1 && offer.per_passenger_price && (
-                  <div className="text-[10px] text-slate-500">
-                    {formatCurrency(offer.per_passenger_price, offer.currency)} / pax
-                  </div>
-                )}
-              </div>
-            ))}
-
-            {/* Row 7: Provenance */}
-            <div className="sticky left-0 bg-white z-20 font-semibold text-xs text-slate-500 pt-2 border-t border-slate-100">
-              Catalog Tier
+              Catalog provenance
             </div>
             {selectedOffers.map((offer) => (
               <div
@@ -199,7 +233,7 @@ export function FlightComparison({
                 className="pt-2 border-t border-slate-100 text-[11px] text-slate-600"
               >
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 font-medium">
-                  Curated Catalog ({offer.availability_state})
+                  {offer.provenance || 'CURATED'} · {offer.availability_state || 'ESTIMATED'}
                 </span>
               </div>
             ))}
