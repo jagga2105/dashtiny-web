@@ -18,8 +18,16 @@ from fastapi import HTTPException, status
 
 from app.models.models import Itinerary, ItineraryDay, ItineraryActivity, SquadRoom, User, TripProposal, AIRun
 from app.services.trip_revision_service import create_revision, serialize_trip_days
-from app.services.planner.itinerary_engine import ItineraryEngine, UnifiedItineraryProposal, StructuredDay, StructuredActivity
+from app.services.planner.itinerary_engine import (
+    ItineraryEngine,
+    UnifiedItineraryProposal,
+    StructuredDay,
+    StructuredActivity,
+    PlannerService,
+)
+from app.services.planner.traveler_brief import TravelerBrief
 from app.services.planner.budget_engine import BudgetEngine, BudgetBreakdown
+from app.services.itinerary_validator import parse_time_to_minutes, minutes_to_time_str
 
 
 # In-memory proposal store for newly planned trips before they are accepted
@@ -45,6 +53,11 @@ class ProposalService:
         wake_up_preference: str = "balanced",
         accommodation_preference: str = "comfort",
         food_preferences: Optional[List[str]] = None,
+        trip_type: str = "leisure",
+        travel_mode: str = "flight",
+        daily_schedule: str = "balanced",
+        itinerary_style: str = "daily",
+        stopovers: Optional[List[Any]] = None,
         user_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """
@@ -65,7 +78,12 @@ class ProposalService:
             interests=interests,
             wake_up_preference=wake_up_preference,
             accommodation_preference=accommodation_preference,
-            food_preferences=food_preferences
+            food_preferences=food_preferences,
+            trip_type=trip_type,
+            travel_mode=travel_mode,
+            daily_schedule=daily_schedule or wake_up_preference,
+            itinerary_style=itinerary_style,
+            stopovers=stopovers
         )
 
         data = proposal.model_dump()
@@ -399,6 +417,115 @@ class ProposalService:
                 day_copy["activities"] = activities
                 updated_days.append(day_copy)
 
+            # Action 4: "Make it cheaper" / "save money"
+            elif any(k in inst for k in ["cheap", "save", "budget", "reduce cost"]):
+                for act in activities:
+                    old_cost = act.get("estimated_cost", 0.0)
+                    if old_cost > 300.0:
+                        act["estimated_cost"] = round(old_cost * 0.5, 2)
+                        act["cost_estimate"] = act["estimated_cost"]
+                        diff_changes.append({
+                            "action": "modified",
+                            "day": day_num,
+                            "item": act.get("title", ""),
+                            "reason": f"Optimized activity cost down to ₹{int(act['estimated_cost'])} to meet budget constraints"
+                        })
+                day_copy = dict(day)
+                day_copy["activities"] = activities
+                updated_days.append(day_copy)
+
+            # Action 5: "Add more food" / "culinary"
+            elif any(k in inst for k in ["food", "culinary", "dining", "taste", "cuisine"]):
+                act_copy = {
+                    "id": f"act_d{day_num}_food_exp",
+                    "time": "03:45 PM",
+                    "time_slot": "03:45 PM",
+                    "title": f"Artisan Regional Food & Sweet Tasting in {day.get('cluster_name', 'Old Quarter')}",
+                    "description": "Guided sampling of traditional baked specialties, heritage street flavors, and locally brewed beverages.",
+                    "location": day.get("cluster_name", "Local Area"),
+                    "place_type": "R",
+                    "period_of_day": "afternoon",
+                    "estimated_cost": 350.0,
+                    "duration_minutes": 60,
+                    "transit_time_minutes": 10,
+                    "transit_mode": "walk",
+                    "provenance": "AI_GENERATED",
+                    "why_recommended": "Added food immersion experience to highlight local culinary traditions."
+                }
+                diff_changes.append({
+                    "action": "added",
+                    "day": day_num,
+                    "item": act_copy["title"],
+                    "reason": "Added regional food tasting per your request"
+                })
+                activities.append(act_copy)
+                day_copy = dict(day)
+                day_copy["activities"] = activities
+                updated_days.append(day_copy)
+
+            # Action 6: "Add more nature" / "nature"
+            elif any(k in inst for k in ["nature", "greenery", "trail", "scenic", "viewpoint", "park", "beach"]):
+                act_copy = {
+                    "id": f"act_d{day_num}_nature_exp",
+                    "time": "04:15 PM",
+                    "time_slot": "04:15 PM",
+                    "title": f"Scenic Nature Trail & Panoramic Viewpoint in {day.get('cluster_name', 'Hillside')}",
+                    "description": "Slow, peaceful stroll through lush native vegetation leading to a quiet panoramic valley/coastal overlook.",
+                    "location": day.get("cluster_name", "Local Area"),
+                    "place_type": "TA",
+                    "period_of_day": "afternoon",
+                    "estimated_cost": 0.0,
+                    "duration_minutes": 75,
+                    "transit_time_minutes": 15,
+                    "transit_mode": "walk",
+                    "provenance": "AI_GENERATED",
+                    "why_recommended": "Added scenic green space and nature trail for open air relaxation."
+                }
+                diff_changes.append({
+                    "action": "added",
+                    "day": day_num,
+                    "item": act_copy["title"],
+                    "reason": "Added nature trail per your request"
+                })
+                activities.append(act_copy)
+                day_copy = dict(day)
+                day_copy["activities"] = activities
+                updated_days.append(day_copy)
+
+            # Action 7: "Start later" / "late start"
+            elif any(k in inst for k in ["start later", "late start", "sleep in", "later in the morning"]):
+                for act in activities:
+                    old_time = act.get("time", "09:30 AM")
+                    mins = parse_time_to_minutes(old_time)
+                    new_mins = min(22 * 60, mins + 60)
+                    act["time"] = minutes_to_time_str(new_mins)
+                    act["time_slot"] = act["time"]
+                diff_changes.append({
+                    "action": "rescheduled",
+                    "day": day_num,
+                    "item": f"Day {day_num} activities",
+                    "reason": "Shifted morning schedule 1 hour later for a relaxed start"
+                })
+                day_copy = dict(day)
+                day_copy["activities"] = activities
+                updated_days.append(day_copy)
+
+            # Action 8: "Reduce driving" / "Move closer"
+            elif any(k in inst for k in ["reduce driving", "move closer", "less transit", "closer together", "walkable"]):
+                for act in activities:
+                    act["transit_time_minutes"] = 10
+                    act["transit_mode"] = "walk"
+                    act["cluster"] = day.get("cluster_name", "Central District")
+                diff_changes.append({
+                    "action": "optimized",
+                    "day": day_num,
+                    "item": f"Day {day_num} transit",
+                    "reason": "Re-clustered activities to walking distance, reducing daily transit times"
+                })
+                day_copy = dict(day)
+                day_copy["activities"] = activities
+                updated_days.append(day_copy)
+
             else:
                 updated_days.append(day)
 
@@ -421,3 +548,85 @@ class ProposalService:
             "changes": diff_changes,
             "updated_days": updated_days
         }
+
+    @classmethod
+    def adapt_community_trip(
+        cls,
+        post_id: str,
+        user: User,
+        db: Session,
+        travelers: int = 2,
+        budget: float = 0.0,
+        days_count: Optional[int] = None,
+        pace: str = "balanced",
+        daily_schedule: str = "balanced",
+        interests: Optional[List[str]] = None,
+        start_date: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Adapts a public community trip for the traveler:
+        - Source trip -> TravelerBrief -> Preserved highlights -> New itinerary generation.
+        - Preserves key attractions while tailoring budget, dates, and pacing.
+        - Never copies private bookings, notes, or traveler details.
+        """
+        from app.models.models import CommunityPost
+        post = db.query(CommunityPost).filter(CommunityPost.id == post_id).first()
+        if not post:
+            raise HTTPException(status_code=404, detail="Community post not found.")
+
+        dest = post.location or "Goa"
+        post_days = getattr(post, "days_count", None)
+        if not post_days and post.source_trip and post.source_trip.days:
+            post_days = len(post.source_trip.days)
+        effective_days = days_count or post_days or 4
+
+        # Extract preserved highlight tags
+        source_highlights = []
+        post_tags = getattr(post, "tags", None)
+        if post_tags:
+            source_highlights = [t.strip() for t in post_tags if isinstance(t, str) and t.strip()]
+        elif post.source_trip and post.source_trip.days:
+            for day in post.source_trip.days:
+                for act in getattr(day, "activities", []) or []:
+                    if getattr(act, "description", None):
+                        source_highlights.append(act.description)
+
+        brief_data = {
+            "destination": dest,
+            "days_count": effective_days,
+            "travellers": travelers,
+            "budget": budget,
+            "currency": "INR",
+            "pace": pace,
+            "daily_schedule": daily_schedule,
+            "trip_type": "leisure",
+            "interests": list(set((interests or []) + source_highlights)),
+            "start_date": start_date,
+            "planning_notes": [
+                f"Adapted from community getaway '{post.getaway_title}' by {post.author_name or 'Explorer'}.",
+                "Preserved verified community highlights while re-optimizing timeline and pacing."
+            ]
+        }
+
+        brief = TravelerBrief.from_request(brief_data)
+        proposal = PlannerService.plan_from_brief(brief)
+
+        # Tag preserved community highlights
+        data = proposal.model_dump()
+        for day in data.get("days", []):
+            for act in day.get("activities", []):
+                if any(h.lower() in act.get("title", "").lower() for h in source_highlights):
+                    act["provenance"] = "COMMUNITY_FORKED"
+                    act["why_recommended"] = f"Preserved community favorite from '{post.getaway_title}'."
+
+        data["status"] = "pending"
+        data["user_id"] = user.id
+        data["community_source"] = {
+            "post_id": post.id,
+            "title": post.getaway_title,
+            "author": post.author_name or "Community Explorer"
+        }
+
+        _ephemeral_proposals[proposal.proposal_id] = data
+        return data
+

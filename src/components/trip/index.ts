@@ -8,3 +8,5 @@ export * from './TripDayTimeline';
 export * from './TripBookings';
 export * from './TripBudget';
 export * from './TripHistory';
+export * from './TripSuggestionPanel';
+

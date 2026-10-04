@@ -201,3 +201,77 @@ def test_community_fork_private_ownership(client: TestClient, db_session: Sessio
     assert len(new_trip.days) == 1
     assert len(new_trip.days[0].activities) == 1
     assert "Paragliding" in new_trip.days[0].activities[0].description
+
+
+def test_adapt_community_trip_proposal(client: TestClient, db_session: Session, test_user):
+    """
+    Test ProposalService.adapt_community_trip via POST /api/v1/planner/adapt-community:
+    Ensures TravelerBrief and PlannerService build a valid ephemeral proposal without crashing.
+    """
+    author = User(
+        email="explorer_adapt@example.com",
+        full_name="Arjun Explorer",
+        password_hash="hashed_explorer",
+        account_type="personal_traveler"
+    )
+    db_session.add(author)
+    db_session.commit()
+
+    source_trip = Itinerary(
+        title="Coorg Trails",
+        destination="Coorg",
+        owner_id=author.id,
+        total_budget=30000.0,
+        currency="INR",
+        start_date=date(2026, 12, 10),
+        end_date=date(2026, 12, 13),
+        is_public=True
+    )
+    db_session.add(source_trip)
+    db_session.commit()
+
+    day1 = ItineraryDay(itinerary_id=source_trip.id, day_number=1, title="Arrival in Coorg")
+    db_session.add(day1)
+    db_session.commit()
+
+    act1 = ItineraryActivity(
+        day_id=day1.id,
+        time_slot="10:00 AM",
+        description="Abbey Falls Exploration",
+        location="Abbey Falls",
+        place_type="TA",
+        cost_estimate=200.0,
+        sort_order=0
+    )
+    db_session.add(act1)
+    db_session.commit()
+
+    post = CommunityPost(
+        author_id=author.id,
+        source_trip_id=source_trip.id,
+        author_name=author.full_name,
+        author_avatar="https://example.com/avatar.jpg",
+        image_url="https://example.com/cover.jpg",
+        getaway_title="Coorg Coffee Trails & Waterfalls",
+        location="Coorg",
+        content="Relaxed weekend getaway in the hills of Coorg."
+    )
+    db_session.add(post)
+    db_session.commit()
+
+    res = client.post("/api/v1/planner/adapt-community", json={
+        "post_id": post.id,
+        "travellers": 2,
+        "budget": 30000.0,
+        "days_count": 3,
+        "pace": "relaxed",
+        "daily_schedule": "relaxed"
+    })
+    assert res.status_code == 200, res.text
+    data = res.json()
+    assert data["status"] == "pending"
+    assert "proposal_id" in data
+    assert len(data["days"]) == 3
+    assert data["community_source"]["post_id"] == post.id
+    assert data["community_source"]["title"] == "Coorg Coffee Trails & Waterfalls"
+

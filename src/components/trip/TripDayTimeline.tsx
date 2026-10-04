@@ -7,6 +7,7 @@ import { TripActivityCard } from './TripActivityCard';
 import { TripMap } from './TripMap';
 import { TripChecklist } from './TripChecklist';
 import { TripCopilot } from './TripCopilot';
+import { TripSuggestionPanel } from './TripSuggestionPanel';
 import { CopilotProposal, AIDiffChange } from './TripProposalCard';
 
 interface TripDayTimelineProps {
@@ -215,6 +216,14 @@ export const TripDayTimeline: React.FC<TripDayTimelineProps> = ({
           ))}
         </div>
       </div>
+
+      {/* Contextual Trip Intelligence Suggestion Panel */}
+      <TripSuggestionPanel
+        currentTrip={currentTrip}
+        selectedDayIdx={selectedDayIdx}
+        onApplySuggestion={(instruction) => handleExecuteCopilotAction(instruction)}
+        isExecuting={isExecutingCopilot}
+      />
 
       {/* 2-COLUMN DESKTOP COCKPIT: Timeline (60%) + Sticky Map (40%) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">

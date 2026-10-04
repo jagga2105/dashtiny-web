@@ -39,8 +39,13 @@ class ItineraryProposalRequest(BaseModel):
     travellers: int = Field(2, ge=1, le=50)
     budget: float = Field(0.0, ge=0.0, le=100_000_000.0)
     currency: str = Field("INR", max_length=10)
-    pace: str = Field("balanced", max_length=50)  # relaxed, balanced, packed
+    pace: str = Field("balanced", max_length=50)  # relaxed, balanced, fast
     persona: str = Field("solo", max_length=50)
+    trip_type: str = Field("leisure", max_length=50)  # leisure, adventure, romantic, business, backpacking, luxury, family
+    travel_mode: str = Field("flight", max_length=50)  # flight, train, bus, car, mixed
+    daily_schedule: str = Field("balanced", max_length=50)  # early_riser, balanced, night_owl
+    itinerary_style: str = Field("daily", max_length=50)  # daily, detailed
+    stopovers: Optional[List[Dict[str, Any]]] = None
     vibe: Optional[str] = Field(None, max_length=100)
     interests: Optional[List[str]] = None
     wake_up_preference: str = Field("balanced", max_length=50)
@@ -137,6 +142,11 @@ def create_itinerary_proposal_endpoint(
         wake_up_preference=request.wake_up_preference,
         accommodation_preference=request.accommodation_preference,
         food_preferences=request.food_preferences,
+        trip_type=request.trip_type,
+        travel_mode=request.travel_mode,
+        daily_schedule=request.daily_schedule,
+        itinerary_style=request.itinerary_style,
+        stopovers=request.stopovers,
         user_id=user.id
     )
 
@@ -203,6 +213,42 @@ def edit_proposal_endpoint(
         instruction=request.instruction,
         target_day=request.target_day
     )
+
+
+class AdaptCommunityRequest(BaseModel):
+    post_id: str
+    travellers: int = Field(2, ge=1, le=50)
+    budget: float = Field(0.0, ge=0.0)
+    days_count: Optional[int] = Field(None, ge=1, le=30)
+    pace: str = Field("balanced")
+    daily_schedule: str = Field("balanced")
+    interests: Optional[List[str]] = None
+    start_date: Optional[str] = None
+
+
+@router.post("/adapt-community")
+def adapt_community_endpoint(
+    request: AdaptCommunityRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Adapts a public community trip into an optimized personal proposal:
+    Preserves key community highlights while adjusting budget, dates, pacing, and rhythm.
+    """
+    return ProposalService.adapt_community_trip(
+        post_id=request.post_id,
+        user=user,
+        db=db,
+        travelers=request.travellers,
+        budget=request.budget,
+        days_count=request.days_count,
+        pace=request.pace,
+        daily_schedule=request.daily_schedule,
+        interests=request.interests,
+        start_date=request.start_date
+    )
+
 
 
 @router.post("/generate")

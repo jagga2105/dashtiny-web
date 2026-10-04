@@ -21,11 +21,16 @@ class UnderstoodIntent(BaseModel):
     travelers: int = 2
     budget: float = 0.0
     currency: str = "INR"
-    pace: str = "balanced"  # relaxed, balanced, packed
+    pace: str = "balanced"  # relaxed, balanced, fast
     persona: str = "solo"   # solo, couple, family, squad, nomad
+    trip_type: str = "leisure"  # leisure, adventure, romantic, business, backpacking, luxury, family
+    travel_mode: str = "flight"  # flight, train, bus, car, mixed
+    daily_schedule: str = "balanced"  # early_riser, balanced, night_owl
+    itinerary_style: str = "daily"  # daily, detailed
+    stopovers: List[Dict[str, Any]] = Field(default_factory=list)
     vibe: str = "Leisure & Scenic"
     interests: List[str] = Field(default_factory=list)
-    wake_up_preference: str = "balanced"  # early_bird, balanced, late_morning
+    wake_up_preference: str = "balanced"  # early_riser, balanced, night_owl
     accommodation_preference: str = "comfort"  # budget, comfort, boutique, luxury
     transport_preference: str = "mix"  # walking, cab, public_transit, rental_car, mix
     food_preferences: List[str] = Field(default_factory=list)  # vegetarian, vegan, seafood, any
@@ -282,9 +287,91 @@ def extract_pace(text: str) -> str:
     lower = text.lower()
     if any(k in lower for k in ["relaxed", "slow", "easy", "chill", "leisure", "unhurried"]):
         return "relaxed"
-    if any(k in lower for k in ["packed", "fast", "dense", "hectic", "cover everything", "maximum"]):
-        return "packed"
+    if any(k in lower for k in ["packed", "fast", "dense", "hectic", "cover everything", "maximum", "quick"]):
+        return "fast"
     return "balanced"
+
+
+def extract_trip_type(text: str, persona: str = "solo") -> str:
+    lower = text.lower()
+    if any(k in lower for k in ["romantic", "honeymoon", "partner", "couple", "anniversary"]):
+        return "romantic"
+    if any(k in lower for k in ["adventure", "trek", "hike", "scuba", "kayak", "rafting", "thrill"]):
+        return "adventure"
+    if any(k in lower for k in ["backpack", "hostel", "budget trip", "backpacker"]):
+        return "backpacking"
+    if any(k in lower for k in ["luxury", "5-star", "five star", "resort", "luxurious", "lavish", "fine dining"]):
+        return "luxury"
+    if any(k in lower for k in ["family", "kids", "children", "parents", "elderly"]):
+        return "family"
+    if any(k in lower for k in ["business", "work", "conference", "workation", "meeting"]):
+        return "business"
+    if persona == "couple":
+        return "romantic"
+    if persona == "family":
+        return "family"
+    return "leisure"
+
+
+def extract_travel_mode(text: str) -> str:
+    lower = text.lower()
+    if any(k in lower for k in ["train", "rail", "shatabdi", "rajdhani", "vande bharat", "railway"]):
+        return "train"
+    if any(k in lower for k in ["bus", "volvo", "sleeper coach"]):
+        return "bus"
+    if any(k in lower for k in ["car", "road trip", "self-drive", "drive", "driving", "cab", "taxi"]):
+        return "car"
+    if any(k in lower for k in ["mixed", "mix of flights and trains", "multimodal"]):
+        return "mixed"
+    if any(k in lower for k in ["flight", "fly", "airplane", "air"]):
+        return "flight"
+    return "flight"
+
+
+def extract_daily_schedule(text: str) -> str:
+    lower = text.lower()
+    if any(k in lower for k in ["early", "early riser", "sunrise", "start early", "7 am", "8 am", "8:30", "08:00", "08:30"]):
+        return "early_riser"
+    if any(k in lower for k in ["late", "night owl", "start late", "10 am", "10:30", "11 am", "late morning", "nightlife", "evening focus"]):
+        return "night_owl"
+    return "balanced"
+
+
+def extract_itinerary_style(text: str) -> str:
+    lower = text.lower()
+    if any(k in lower for k in ["detailed", "minute by minute", "with transit", "hourly", "transfer times", "step by step"]):
+        return "detailed"
+    return "daily"
+
+
+def extract_stopovers(text: str, destination: Optional[str] = None) -> List[Dict[str, Any]]:
+    lower = text.lower()
+    stopovers: List[Dict[str, Any]] = []
+    
+    # 1. Pattern: "include <place> for <n> nights"
+    m_inc = re.findall(r"(?:include|add|with)\s+([A-Za-z\s]+?)\s+for\s+(\d+)\s*(?:night|nights|day|days)", text, re.IGNORECASE)
+    for place, nights in m_inc:
+        p_clean = clean_city(place)
+        if p_clean and (not destination or p_clean.lower() != destination.lower()):
+            stopovers.append({"location": p_clean, "nights": int(nights), "sequence": len(stopovers) + 1})
+
+    # 2. Pattern: "<n> nights in <place>"
+    m_nights = re.findall(r"(\d+)\s*(?:night|nights|day|days)\s+in\s+([A-Za-z\s]+?)(?=\s+(?:and|then|,|\.|$))", text, re.IGNORECASE)
+    for nights, place in m_nights:
+        p_clean = clean_city(place)
+        if p_clean and (not destination or p_clean.lower() != destination.lower()):
+            if not any(s["location"].lower() == p_clean.lower() for s in stopovers):
+                stopovers.append({"location": p_clean, "nights": int(nights), "sequence": len(stopovers) + 1})
+
+    # 3. Pattern: "then <place> for <n> nights"
+    m_then = re.findall(r"(?:then|afterwards|next)\s+([A-Za-z\s]+?)\s+(?:for\s+)?(\d+)\s*(?:night|nights)", text, re.IGNORECASE)
+    for place, nights in m_then:
+        p_clean = clean_city(place)
+        if p_clean and (not destination or p_clean.lower() != destination.lower()):
+            if not any(s["location"].lower() == p_clean.lower() for s in stopovers):
+                stopovers.append({"location": p_clean, "nights": int(nights), "sequence": len(stopovers) + 1})
+
+    return stopovers
 
 
 def extract_food_preference(text: str) -> List[str]:
@@ -318,6 +405,11 @@ def parse_travel_intent(prompt: str) -> IntentClarificationResponse:
     travelers, persona = extract_travelers_and_persona(prompt)
     interests = extract_interests(prompt)
     pace = extract_pace(prompt)
+    trip_type = extract_trip_type(prompt, persona=persona)
+    travel_mode = extract_travel_mode(prompt)
+    daily_schedule = extract_daily_schedule(prompt)
+    itinerary_style = extract_itinerary_style(prompt)
+    stopovers = extract_stopovers(prompt, destination=dest)
     food_prefs = extract_food_preference(prompt)
 
     # Determine missing fields
@@ -352,10 +444,15 @@ def parse_travel_intent(prompt: str) -> IntentClarificationResponse:
         currency="INR",
         pace=pace,
         persona=persona,
-        vibe="Relaxed Coastal & Culture" if pace == "relaxed" else "Scenic Discovery",
+        trip_type=trip_type,
+        travel_mode=travel_mode,
+        daily_schedule=daily_schedule,
+        itinerary_style=itinerary_style,
+        stopovers=stopovers,
+        vibe="Relaxed Coastal & Culture" if pace == "relaxed" else ("Romantic Escape" if trip_type == "romantic" else "Scenic Discovery"),
         interests=interests or ["sightseeing", "food"],
-        wake_up_preference="late_morning" if pace == "relaxed" else "balanced",
-        accommodation_preference="luxury" if budget > 80000 else "comfort",
+        wake_up_preference=daily_schedule,
+        accommodation_preference="luxury" if budget > 80000 or trip_type == "luxury" else "comfort",
         transport_preference="mix",
         food_preferences=food_prefs,
         raw_prompt=prompt
@@ -373,6 +470,10 @@ def parse_travel_intent(prompt: str) -> IntentClarificationResponse:
     else:
         parts.append("Flexible budget")
     parts.append(f"{pace.title()} pace")
+    if trip_type != "leisure":
+        parts.append(trip_type.title())
+    if stopovers:
+        parts.append(f"{len(stopovers)} stopover{'s' if len(stopovers) > 1 else ''}")
     if interests:
         parts.append(" + ".join(i.title() for i in interests[:3]))
 

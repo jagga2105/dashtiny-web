@@ -63,9 +63,17 @@ export interface StructuredDay {
   day?: number;
   date?: string;
   title: string;
+  day_title?: string;
+  day_theme?: string;
+  dayTheme?: string;
   cluster_name?: string;
+  location?: string;
   cover_image_url?: string;
   weather_summary?: string;
+  weather_advisory?: string;
+  daily_estimated_cost?: number;
+  daily_travel_time_minutes?: number;
+  daily_distance_km?: number | null;
   morning_summary?: string;
   afternoon_summary?: string;
   evening_summary?: string;
@@ -556,6 +564,11 @@ export function ItineraryProposalReview({
                 <span className="px-2.5 py-0.5 rounded-full bg-orange-100 text-orange-800 text-[10px] font-bold uppercase tracking-wider">
                   Day {selectedDay.day_number || selectedDay.day}
                 </span>
+                {(selectedDay.day_theme || selectedDay.dayTheme) && (
+                  <span className="px-2.5 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-[10px] font-semibold">
+                    {selectedDay.day_theme || selectedDay.dayTheme}
+                  </span>
+                )}
                 {selectedDay.cluster_name && (
                   <span className="px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[10px] font-semibold flex items-center gap-1">
                     <Compass className="w-3 h-3 text-slate-500" />
