@@ -93,25 +93,26 @@ export function AttachFlightModal({
         </div>
 
         {/* Flight Info Card */}
-        <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-2 text-xs">
-          <div className="font-semibold text-slate-800">Flight:</div>
-          <div className="font-bold text-sm text-slate-900">
-            {offer.airline} {offer.flight_number}
+        <div className="p-3.5 rounded-2xl bg-stone-50 border border-stone-200 space-y-2 text-xs">
+          <div className="flex items-center justify-between">
+            <span className="font-bold text-sm text-stone-900">
+              {offer.airline} {offer.flight_number}
+            </span>
+            <span className="font-mono text-orange-600 font-bold text-sm">
+              {formatCurrency(offer.price, offer.currency)} total
+            </span>
           </div>
-          <div className="flex items-center justify-between text-slate-600 text-[11px]">
+          <div className="flex items-center justify-between text-stone-600 text-[11px]">
             <span>
               {offer.origin} → {offer.destination}
             </span>
             <span>{formatFriendlyDate(departureDate || offer.departure_time)}</span>
           </div>
-          <div className="font-mono text-orange-600 font-bold text-sm pt-1 border-t border-slate-200">
-            {formatCurrency(offer.price, offer.currency)} total
-          </div>
         </div>
 
         {/* Catalog Status */}
-        <div className="p-3 rounded-xl bg-slate-100/80 border border-slate-200/80 text-[11px] text-slate-600 space-y-0.5">
-          <span className="font-semibold text-slate-700 block">Catalog status:</span>
+        <div className="p-2.5 rounded-xl bg-stone-100/80 border border-stone-200/80 text-[11px] text-stone-600 space-y-0.5">
+          <span className="font-semibold text-stone-700 block">Catalog status:</span>
           <span>Curated · Estimated availability</span>
         </div>
 
@@ -143,7 +144,7 @@ export function AttachFlightModal({
             className="bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs px-4 py-2 rounded-xl cursor-pointer shadow-sm"
             data-testid="create-trip-proposal-btn"
           >
-            Create Trip Proposal →
+            Review change →
           </Button>
         </div>
       </div>

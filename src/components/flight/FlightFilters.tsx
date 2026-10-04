@@ -74,22 +74,24 @@ export function FlightFilters({
   };
 
   const activeCount =
-    filters.stops.length +
-    filters.airlines.length +
-    filters.departureSlots.length +
-    (filters.arrivalSlots && filters.arrivalSlots.length > 0 ? filters.arrivalSlots.length : 0) +
-    (filters.maxPrice < maxPrice ? 1 : 0);
+    totalCount > 0
+      ? filters.stops.length +
+        filters.airlines.length +
+        filters.departureSlots.length +
+        (filters.arrivalSlots && filters.arrivalSlots.length > 0 ? filters.arrivalSlots.length : 0) +
+        (maxPrice > minPrice && filters.maxPrice < maxPrice ? 1 : 0)
+      : 0;
 
   const isFiltered = activeCount > 0;
 
   return (
-    <aside
-      className={`p-4 rounded-2xl bg-white border border-slate-200/90 shadow-2xs space-y-5 text-xs text-slate-800 ${className}`}
+    <div
+      className={`p-4 rounded-2xl bg-white border border-stone-200/90 shadow-2xs space-y-4 text-xs text-stone-800 ${className}`}
       data-testid="flight-filters"
     >
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-        <div className="flex items-center gap-1.5 font-bold text-slate-900">
+      <div className="flex items-center justify-between border-b border-stone-100 pb-3">
+        <div className="flex items-center gap-1.5 font-bold text-stone-900">
           <Filter className="w-4 h-4 text-orange-500" />
           <span>Filters</span>
           {activeCount > 0 && (
@@ -97,8 +99,12 @@ export function FlightFilters({
               {activeCount} {activeCount === 1 ? 'filter' : 'filters'}
             </span>
           )}
-          <span className="text-[11px] font-medium text-slate-500 ml-1">
-            {totalCount !== filteredCount ? `${totalCount} → ${filteredCount} flights` : `${totalCount} flights`}
+          <span className="text-[11px] font-medium text-stone-500 ml-1">
+            {totalCount === 0
+              ? '0 flights'
+              : totalCount !== filteredCount
+              ? `${totalCount} → ${filteredCount} flights`
+              : `${totalCount} flights`}
           </span>
         </div>
         {isFiltered && (
@@ -114,46 +120,57 @@ export function FlightFilters({
         )}
       </div>
 
-      {/* Stops Filter */}
-      <div className="space-y-2">
-        <div className="font-semibold text-slate-700 flex items-center justify-between">
-          <span>Stops</span>
-          {filters.stops.length > 0 && (
-            <span className="text-[10px] text-orange-600 font-medium">Active</span>
-          )}
+      {totalCount === 0 ? (
+        <div className="py-6 px-1 text-center space-y-1.5">
+          <p className="text-stone-600 text-xs font-semibold">
+            No flights to filter
+          </p>
+          <p className="text-[11px] text-stone-400 leading-relaxed">
+            Filters will activate when flights are found for your selected route.
+          </p>
         </div>
-        <div className="grid grid-cols-3 gap-1.5">
-          {[
-            { val: 0, label: 'Non-stop' },
-            { val: 1, label: '1 Stop' },
-            { val: 2, label: '2+ Stops' },
-          ].map((item) => {
-            const isSelected = filters.stops.includes(item.val);
-            return (
-              <button
-                key={item.val}
-                type="button"
-                onClick={() => toggleStop(item.val)}
-                className={`py-1.5 px-2 rounded-xl text-center text-xs font-semibold border transition-all cursor-pointer ${
-                  isSelected
-                    ? 'bg-orange-500 text-white border-orange-500 shadow-2xs'
-                    : 'bg-slate-50 text-slate-700 border-slate-200 hover:border-slate-300'
-                }`}
-                data-testid={`filter-stop-${item.val}`}
-              >
-                {item.label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
+      ) : (
+        <>
+          {/* Stops Filter */}
+          <div className="space-y-2">
+            <div className="font-semibold text-stone-700 flex items-center justify-between">
+              <span>Stops</span>
+              {filters.stops.length > 0 && (
+                <span className="text-[10px] text-orange-600 font-medium">Active</span>
+              )}
+            </div>
+            <div className="grid grid-cols-3 gap-1.5">
+              {[
+                { val: 0, label: 'Non-stop' },
+                { val: 1, label: '1 Stop' },
+                { val: 2, label: '2+ Stops' },
+              ].map((item) => {
+                const isSelected = filters.stops.includes(item.val);
+                return (
+                  <button
+                    key={item.val}
+                    type="button"
+                    onClick={() => toggleStop(item.val)}
+                    className={`py-1.5 px-2 rounded-xl text-center text-xs font-semibold border transition-all cursor-pointer ${
+                      isSelected
+                        ? 'bg-orange-500 text-white border-orange-500 shadow-2xs'
+                        : 'bg-stone-50 text-stone-700 border-stone-200 hover:border-stone-300'
+                    }`}
+                    data-testid={`filter-stop-${item.val}`}
+                  >
+                    {item.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
 
       {/* Airlines Filter */}
       {availableAirlines.length > 0 && (
-        <div className="space-y-2 border-t border-slate-100 pt-3">
-          <div className="font-semibold text-slate-700 flex items-center justify-between">
+        <div className="space-y-2 border-t border-stone-100 pt-3">
+          <div className="font-semibold text-stone-700 flex items-center justify-between">
             <span className="flex items-center gap-1">
-              <Plane className="w-3.5 h-3.5 text-slate-400" />
+              <Plane className="w-3.5 h-3.5 text-stone-400" />
               Airlines
             </span>
             {filters.airlines.length > 0 && (
@@ -168,18 +185,18 @@ export function FlightFilters({
               return (
                 <label
                   key={airline.name}
-                  className="flex items-center justify-between gap-2 p-1.5 rounded-lg hover:bg-slate-50 cursor-pointer"
+                  className="flex items-center justify-between gap-2 p-1.5 rounded-lg hover:bg-stone-50 cursor-pointer"
                 >
                   <div className="flex items-center gap-2">
                     <input
                       type="checkbox"
                       checked={isChecked}
                       onChange={() => toggleAirline(airline.name)}
-                      className="rounded border-slate-300 text-orange-600 focus:ring-orange-500 cursor-pointer"
+                      className="rounded border-stone-300 text-orange-600 focus:ring-orange-500 cursor-pointer"
                     />
-                    <span className="font-medium text-slate-700 text-xs">{airline.name}</span>
+                    <span className="font-medium text-stone-700 text-xs">{airline.name}</span>
                   </div>
-                  <span className="text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-md">
+                  <span className="text-[10px] text-stone-400 bg-stone-100 px-1.5 py-0.5 rounded-md">
                     {airline.count}
                   </span>
                 </label>
@@ -191,10 +208,10 @@ export function FlightFilters({
 
       {/* Max Price Slider (Explicitly labeled Max Price, not Price range) */}
       {maxPrice > minPrice && (
-        <div className="space-y-2 border-t border-slate-100 pt-3">
-          <div className="flex items-center justify-between font-semibold text-slate-700">
+        <div className="space-y-2 border-t border-stone-100 pt-3">
+          <div className="flex items-center justify-between font-semibold text-stone-700">
             <span className="flex items-center gap-1">
-              <DollarSign className="w-3.5 h-3.5 text-slate-400" />
+              <DollarSign className="w-3.5 h-3.5 text-stone-400" />
               Max Price
             </span>
             <span className="text-orange-600 font-bold">
@@ -211,7 +228,7 @@ export function FlightFilters({
             className="w-full accent-orange-500 cursor-pointer"
             data-testid="filter-max-price"
           />
-          <div className="flex justify-between text-[10px] text-slate-400 font-medium">
+          <div className="flex justify-between text-[10px] text-stone-400 font-medium">
             <span>₹{minPrice.toLocaleString('en-IN')}</span>
             <span>₹{maxPrice.toLocaleString('en-IN')}</span>
           </div>
@@ -219,10 +236,10 @@ export function FlightFilters({
       )}
 
       {/* Departure Time Slots */}
-      <div className="space-y-2 border-t border-slate-100 pt-3">
-        <div className="font-semibold text-slate-700 flex items-center justify-between">
+      <div className="space-y-2 border-t border-stone-100 pt-3">
+        <div className="font-semibold text-stone-700 flex items-center justify-between">
           <span className="flex items-center gap-1">
-            <Clock className="w-3.5 h-3.5 text-slate-400" />
+            <Clock className="w-3.5 h-3.5 text-stone-400" />
             Departure Time
           </span>
           {filters.departureSlots.length > 0 && (
@@ -237,18 +254,18 @@ export function FlightFilters({
             return (
               <label
                 key={slot.id}
-                className="flex items-center justify-between gap-2 p-1.5 rounded-lg hover:bg-slate-50 cursor-pointer"
+                className="flex items-center justify-between gap-2 p-1.5 rounded-lg hover:bg-stone-50 cursor-pointer"
               >
                 <div className="flex items-center gap-2">
                   <input
                     type="checkbox"
                     checked={isChecked}
                     onChange={() => toggleDepartureSlot(slot.id)}
-                    className="rounded border-slate-300 text-orange-600 focus:ring-orange-500 cursor-pointer"
+                    className="rounded border-stone-300 text-orange-600 focus:ring-orange-500 cursor-pointer"
                   />
-                  <span className="font-medium text-slate-700 text-xs">{slot.label}</span>
+                  <span className="font-medium text-stone-700 text-xs">{slot.label}</span>
                 </div>
-                <span className="text-[10px] text-slate-400">{slot.desc}</span>
+                <span className="text-[10px] text-stone-400">{slot.desc}</span>
               </label>
             );
           })}
@@ -256,10 +273,10 @@ export function FlightFilters({
       </div>
 
       {/* Arrival Time Slots */}
-      <div className="space-y-2 border-t border-slate-100 pt-3">
-        <div className="font-semibold text-slate-700 flex items-center justify-between">
+      <div className="space-y-2 border-t border-stone-100 pt-3">
+        <div className="font-semibold text-stone-700 flex items-center justify-between">
           <span className="flex items-center gap-1">
-            <Clock className="w-3.5 h-3.5 text-slate-400" />
+            <Clock className="w-3.5 h-3.5 text-stone-400" />
             Arrival Time
           </span>
           {filters.arrivalSlots && filters.arrivalSlots.length > 0 && (
@@ -274,23 +291,25 @@ export function FlightFilters({
             return (
               <label
                 key={slot.id}
-                className="flex items-center justify-between gap-2 p-1.5 rounded-lg hover:bg-slate-50 cursor-pointer"
+                className="flex items-center justify-between gap-2 p-1.5 rounded-lg hover:bg-stone-50 cursor-pointer"
               >
                 <div className="flex items-center gap-2">
                   <input
                     type="checkbox"
                     checked={isChecked}
                     onChange={() => toggleArrivalSlot(slot.id)}
-                    className="rounded border-slate-300 text-orange-600 focus:ring-orange-500 cursor-pointer"
+                    className="rounded border-stone-300 text-orange-600 focus:ring-orange-500 cursor-pointer"
                   />
-                  <span className="font-medium text-slate-700 text-xs">{slot.label}</span>
+                  <span className="font-medium text-stone-700 text-xs">{slot.label}</span>
                 </div>
-                <span className="text-[10px] text-slate-400">{slot.desc}</span>
+                <span className="text-[10px] text-stone-400">{slot.desc}</span>
               </label>
             );
           })}
         </div>
       </div>
-    </aside>
+    </>
+  )}
+</div>
   );
 }

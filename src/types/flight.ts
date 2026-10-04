@@ -74,7 +74,7 @@ export interface FlightSearchParams {
 }
 
 export interface FlightSearchResponse {
-  search: {
+  search?: {
     origin: string;
     destination: string;
     departure_date: string;
@@ -83,11 +83,22 @@ export interface FlightSearchResponse {
     cabin_class: string;
     trip_type: string;
   };
+  search_params?: {
+    origin: string;
+    destination: string;
+    departure_date: string;
+    return_date?: string | null;
+    passengers: number;
+    cabin_class: string;
+    trip_type: string;
+  };
+  search_id?: string;
+  total_count?: number;
   offers: FlightOffer[];
-  provenance: string;
-  availability_state: string;
-  retrieved_at: string;
-  expires_at: string;
+  provenance?: string;
+  availability_state?: string;
+  retrieved_at?: string;
+  expires_at?: string;
 }
 
 export type TimeSlotId = 'early_morning' | 'morning' | 'afternoon' | 'evening' | 'night';
@@ -106,3 +117,5 @@ export interface FlightComparisonState {
   selectedOffers: FlightOffer[];
   isOpen: boolean;
 }
+
+export { DEFAULT_FLIGHT_FILTERS } from '@/lib/flight/filtering';

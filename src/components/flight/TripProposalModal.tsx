@@ -63,7 +63,7 @@ export function TripProposalModal({
             className="flex items-center gap-2 text-slate-900 font-serif-editorial font-bold text-lg"
           >
             <Sparkles className="w-5 h-5 text-orange-500" />
-            <span>Trip Proposal</span>
+            <span>Trip change</span>
           </div>
           <div className="flex items-center gap-2">
             <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
@@ -81,7 +81,7 @@ export function TripProposalModal({
         </div>
 
         <p className="text-xs text-slate-600">
-          This change will attach the selected transport option to your Trip. No provider booking will occur.
+          This change will attach the selected transport option to your Trip. Add {offer?.airline} {offer?.flight_number} ({offer?.origin} → {offer?.destination}). No provider booking will occur.
         </p>
 
         <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 space-y-2 text-xs">
@@ -126,9 +126,9 @@ export function TripProposalModal({
             size="sm"
             onClick={onClose}
             disabled={isSubmitting}
-            className="text-xs cursor-pointer"
+            className="text-xs cursor-pointer text-slate-600"
           >
-            Discard
+            Reject
           </Button>
           <Button
             variant="primary"
@@ -138,7 +138,7 @@ export function TripProposalModal({
             className="bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs px-4 py-2 rounded-xl cursor-pointer shadow-sm"
             data-testid="accept-proposal-btn"
           >
-            Accept Proposal & Update Trip →
+            Accept change →
           </Button>
         </div>
       </div>

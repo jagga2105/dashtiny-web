@@ -43,22 +43,26 @@ export function FlightProvenance({
         onMouseEnter={() => setShowExplanation(true)}
         onMouseLeave={() => setShowExplanation(false)}
         aria-expanded={showExplanation}
-        className="text-[11px] font-semibold text-orange-600 hover:text-orange-700 underline underline-offset-2 cursor-pointer ml-1"
+        className="text-[11px] font-semibold text-orange-600 hover:text-orange-700 underline underline-offset-2 cursor-pointer ml-1 inline-flex items-center gap-0.5"
         data-testid="provenance-why-trigger"
       >
-        Why?
+        <span>Why?</span>
+        <span aria-hidden="true" className="text-xs font-normal">ⓘ</span>
       </button>
 
       {showExplanation && (
         <div
           role="tooltip"
-          className="absolute z-30 top-full left-0 mt-1.5 p-3.5 w-76 bg-white rounded-xl shadow-xl border border-slate-200 text-xs text-slate-600 space-y-2 animate-in fade-in duration-150"
+          className="absolute z-30 top-full left-0 mt-1.5 p-3.5 w-80 bg-white rounded-xl shadow-xl border border-slate-200 text-xs text-slate-600 space-y-2 animate-in fade-in duration-150"
         >
           <div className="flex items-center gap-1.5 font-bold text-slate-900 border-b border-slate-100 pb-1.5">
             <Info className="w-3.5 h-3.5 text-orange-500 shrink-0" />
             <span>Inventory Provenance</span>
           </div>
-          <div className="space-y-1 text-[11px] leading-relaxed">
+          <p className="text-[11px] text-slate-700 leading-relaxed font-medium">
+            This option comes from DashTiny&apos;s curated travel catalog. Fare and availability are estimated and should be verified with the provider.
+          </p>
+          <div className="space-y-1 text-[11px] leading-relaxed pt-1 border-t border-slate-100">
             <p>
               <span className="text-slate-500">Current offer source:</span>{' '}
               <strong className="text-slate-800">

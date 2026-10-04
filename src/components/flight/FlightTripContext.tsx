@@ -47,122 +47,119 @@ export function FlightTripContext({
 
   return (
     <div
-      className={`p-4 rounded-2xl bg-white border border-slate-200 shadow-2xs space-y-3 ${className}`}
+      className={`rounded-2xl bg-stone-100/80 border border-stone-200/70 p-3 sm:px-4 sm:py-2.5 text-xs text-stone-700 space-y-2 ${className}`}
       data-testid="flight-trip-context"
     >
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
-        <div className="flex items-center gap-2 text-xs font-bold text-slate-900">
-          <Briefcase className="w-4 h-4 text-orange-500" />
-          <span>Active Trip Context</span>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+        {/* Left: Quiet Trip Grounding */}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-1.5 font-semibold text-stone-900">
+            <Briefcase className="w-3.5 h-3.5 text-orange-600 shrink-0" />
+            <span>Using Trip:</span>
+          </div>
+
+          {/* Quick Selector Dropdown */}
+          <div className="relative inline-block">
+            <select
+              value={selectedTripId}
+              onChange={(e) => onSelectTrip(e.target.value)}
+              className="text-xs font-semibold bg-white border border-stone-200 rounded-lg px-2.5 py-1 text-stone-800 focus:outline-none focus:ring-2 focus:ring-orange-500 cursor-pointer shadow-2xs"
+              data-testid="trip-context-selector"
+              aria-label="Select active trip"
+            >
+              <option value="">No trip selected (Standalone search)</option>
+              {activeTrips.map((trip) => (
+                <option key={trip.id} value={trip.id}>
+                  {trip.title || trip.destination} · {trip.destination}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Current Trip Metadata */}
           {currentTrip && (
-            <span className="text-[11px] font-normal text-slate-500">
-              · Planning from your Trip
-            </span>
+            <div className="flex flex-wrap items-center gap-1.5 text-stone-600">
+              <span className="text-stone-300 hidden sm:inline">·</span>
+              <span className="font-medium">
+                {currentTrip.origin ? `${currentTrip.origin} → ` : ''}
+                {currentTrip.destination}
+              </span>
+
+              {currentTrip.startDate && (
+                <>
+                  <span className="text-stone-300">·</span>
+                  <span>{formatFriendlyDateRange(currentTrip.startDate, currentTrip.endDate)}</span>
+                </>
+              )}
+
+              {typeof currentTrip.travellers === 'number' && currentTrip.travellers > 0 && (
+                <>
+                  <span className="text-stone-300">·</span>
+                  <span>
+                    {currentTrip.travellers} {currentTrip.travellers === 1 ? 'Traveler' : 'Travelers'}
+                  </span>
+                </>
+              )}
+            </div>
           )}
         </div>
-        {selectedTripId && onClearTrip && (
-          <button
-            type="button"
-            onClick={onClearTrip}
-            className="text-[11px] font-medium text-slate-500 hover:text-slate-800 inline-flex items-center gap-1 cursor-pointer"
-            title="Search flights without trip attachment"
-          >
-            <X className="w-3 h-3" />
-            Unlink trip
-          </button>
-        )}
-      </div>
 
-      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
-        {/* Trip Selector Dropdown */}
-        <div className="flex-1 min-w-[260px]">
-          <select
-            value={selectedTripId}
-            onChange={(e) => onSelectTrip(e.target.value)}
-            className="w-full text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500 cursor-pointer"
-            data-testid="trip-context-selector"
-          >
-            <option value="">No trip selected (Standalone search)</option>
-            {activeTrips.map((trip) => (
-              <option key={trip.id} value={trip.id}>
-                {trip.title || trip.destination} · {trip.destination} ({trip.startDate || 'Dates flexible'})
-              </option>
-            ))}
-          </select>
+        {/* Right: Context Actions & Unlink */}
+        <div className="flex items-center gap-2 self-end sm:self-center">
+          {currentTrip?.startDate && onApplyTripDates && (
+            <button
+              type="button"
+              onClick={() => onApplyTripDates(currentTrip.startDate!, currentTrip.endDate)}
+              className="text-[11px] font-semibold text-orange-600 hover:text-orange-700 hover:underline cursor-pointer"
+              title="Sync search dates with trip dates"
+            >
+              Use Trip dates
+            </button>
+          )}
+
+          {typeof currentTrip?.travellers === 'number' && currentTrip.travellers > 0 && onApplyTripTravelers && (
+            <button
+              type="button"
+              onClick={() => onApplyTripTravelers(currentTrip.travellers!)}
+              className="text-[11px] font-semibold text-orange-600 hover:text-orange-700 hover:underline cursor-pointer"
+              title="Sync passengers count with trip"
+            >
+              Use Trip travelers
+            </button>
+          )}
+
+          {selectedTripId && onClearTrip && (
+            <button
+              type="button"
+              onClick={onClearTrip}
+              className="text-[11px] font-medium text-stone-400 hover:text-stone-700 inline-flex items-center gap-0.5 cursor-pointer ml-1"
+              title="Search flights without trip attachment"
+              aria-label="Unlink trip"
+            >
+              <X className="w-3 h-3" />
+              <span>Unlink trip</span>
+            </button>
+          )}
         </div>
-
-        {/* Current Trip Metadata & Quick Actions */}
-        {currentTrip && (
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Route */}
-            <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-800 bg-slate-100 px-3 py-1.5 rounded-xl">
-              <MapPin className="w-3.5 h-3.5 text-orange-500" />
-              <span>{currentTrip.origin || 'Any Origin'}</span>
-              <ArrowRight className="w-3 h-3 text-slate-400" />
-              <span>{currentTrip.destination}</span>
-            </div>
-
-            {/* Dates Action */}
-            {currentTrip.startDate && (
-              <div className="flex items-center gap-1">
-                <span className="flex items-center gap-1 text-[11px] font-medium text-slate-600 bg-slate-50 border border-slate-200 px-2.5 py-1.5 rounded-xl">
-                  <Calendar className="w-3 h-3 text-slate-400" />
-                  {formatFriendlyDateRange(currentTrip.startDate, currentTrip.endDate)}
-                </span>
-                {onApplyTripDates && (
-                  <button
-                    type="button"
-                    onClick={() => onApplyTripDates(currentTrip.startDate!, currentTrip.endDate)}
-                    className="text-[10px] font-bold text-orange-600 hover:text-orange-700 bg-orange-50 hover:bg-orange-100 border border-orange-200 px-2 py-1 rounded-lg transition-colors cursor-pointer"
-                    title="Populate search form with trip dates"
-                  >
-                    Use Trip dates
-                  </button>
-                )}
-              </div>
-            )}
-
-            {/* Travelers Action */}
-            {typeof currentTrip.travellers === 'number' && currentTrip.travellers > 0 && (
-              <div className="flex items-center gap-1">
-                <span className="flex items-center gap-1 text-[11px] font-medium text-slate-600 bg-slate-50 border border-slate-200 px-2.5 py-1.5 rounded-xl">
-                  <Users className="w-3 h-3 text-slate-400" />
-                  {currentTrip.travellers} {currentTrip.travellers === 1 ? 'traveler' : 'travelers'}
-                </span>
-                {onApplyTripTravelers && (
-                  <button
-                    type="button"
-                    onClick={() => onApplyTripTravelers(currentTrip.travellers!)}
-                    className="text-[10px] font-bold text-orange-600 hover:text-orange-700 bg-orange-50 hover:bg-orange-100 border border-orange-200 px-2 py-1 rounded-lg transition-colors cursor-pointer"
-                    title="Populate passengers count from trip"
-                  >
-                    Use Trip travelers
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-        )}
       </div>
 
-      {/* Suggested Origin Airport Banner (Prevents silent resolution) */}
+      {/* Suggested Origin Airport Notice */}
       {currentTrip && suggestedOriginAirport && (
         <div
-          className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 rounded-xl bg-orange-50/70 border border-orange-200/80 text-xs text-orange-950"
+          className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-stone-200/60 text-[11px] text-stone-700"
           data-testid="suggested-origin-airport-banner"
         >
-          <div className="flex items-center gap-2">
-            <Sparkles className="w-3.5 h-3.5 text-orange-600 shrink-0" />
+          <div className="flex items-center gap-1.5">
+            <Sparkles className="w-3 h-3 text-orange-600 shrink-0" />
             <span>
-              Trip origin = <strong>{currentTrip.origin}</strong>. Suggested:{' '}
-              <strong>{suggestedOriginAirport.iata_code} — {suggestedOriginAirport.city}</strong>
+              Trip origin = <strong>{suggestedOriginAirport.iata_code} — {suggestedOriginAirport.city || currentTrip.origin}</strong> ({suggestedOriginAirport.name})
             </span>
           </div>
           {onApplySuggestedOriginAirport && (
             <button
               type="button"
               onClick={() => onApplySuggestedOriginAirport(suggestedOriginAirport.iata_code)}
-              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-orange-600 hover:bg-orange-700 text-white font-bold text-[11px] shrink-0 transition-colors cursor-pointer"
+              className="font-bold text-orange-600 hover:text-orange-700 hover:underline cursor-pointer"
               data-testid="apply-suggested-origin-btn"
             >
               Use {suggestedOriginAirport.iata_code}
@@ -171,24 +168,23 @@ export function FlightTripContext({
         </div>
       )}
 
-      {/* Suggested Destination Airport Banner (Prevents silent resolution) */}
+      {/* Suggested Destination Airport Notice */}
       {currentTrip && suggestedAirport && (
         <div
-          className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 rounded-xl bg-orange-50/70 border border-orange-200/80 text-xs text-orange-950"
+          className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-stone-200/60 text-[11px] text-stone-700"
           data-testid="suggested-airport-banner"
         >
-          <div className="flex items-center gap-2">
-            <Sparkles className="w-3.5 h-3.5 text-orange-600 shrink-0" />
+          <div className="flex items-center gap-1.5">
+            <Sparkles className="w-3 h-3 text-orange-600 shrink-0" />
             <span>
-              Trip destination = <strong>{currentTrip.destination}</strong>. Suggested:{' '}
-              <strong>{suggestedAirport.iata_code} — {suggestedAirport.city}</strong>
+              Trip destination = <strong>{suggestedAirport.iata_code} — {suggestedAirport.city || currentTrip.destination}</strong> ({suggestedAirport.name})
             </span>
           </div>
           {onApplySuggestedAirport && (
             <button
               type="button"
               onClick={() => onApplySuggestedAirport(suggestedAirport.iata_code)}
-              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-orange-600 hover:bg-orange-700 text-white font-bold text-[11px] shrink-0 transition-colors cursor-pointer"
+              className="font-bold text-orange-600 hover:text-orange-700 hover:underline cursor-pointer"
               data-testid="apply-suggested-dest-btn"
             >
               Use {suggestedAirport.iata_code}

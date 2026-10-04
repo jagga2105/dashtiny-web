@@ -454,27 +454,26 @@ function BookingsContent() {
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 md:px-8 py-6 space-y-6">
         {/* Page Header */}
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-slate-200/90 pb-6">
-          <div className="space-y-1.5">
-            <h1 className="text-2xl sm:text-3xl font-serif-editorial font-bold text-slate-900 tracking-tight">
-              Compare Flights & Stays
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-stone-200/90 pb-5">
+          <div className="space-y-1">
+            <h1 className="text-2xl sm:text-3xl font-serif-editorial font-bold text-stone-900 tracking-tight">
+              Find your way there
             </h1>
-            <p className="text-slate-600 text-xs sm:text-sm font-medium max-w-2xl">
-              Compare travel options in DashTiny&apos;s current catalog. Once booked, attach your confirmed reference to your trip workspace.
+            <p className="text-stone-600 text-xs sm:text-sm font-medium max-w-2xl">
+              Compare current DashTiny travel options and choose what fits your Trip.
             </p>
           </div>
 
-          {/* Trip Attachment Dropdown Selector */}
+          {/* Quiet Grounding of Active Trip */}
           {activeTrips.length > 0 && (
-            <div className="p-3.5 rounded-2xl bg-white border border-slate-200 shadow-2xs space-y-1.5 shrink-0 min-w-[280px]">
-              <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-700">
-                <Briefcase className="w-3.5 h-3.5 text-orange-500" />
-                <span>Attach to trip:</span>
-              </div>
+            <div className="flex items-center gap-2 text-xs text-stone-600 bg-white px-3.5 py-2 rounded-2xl border border-stone-200/90 shadow-2xs">
+              <Briefcase className="w-3.5 h-3.5 text-orange-500 shrink-0" />
+              <span className="text-stone-500 font-medium">Trip:</span>
               <select
                 value={selectedTripId}
                 onChange={(e) => setSelectedTripId(e.target.value)}
-                className="w-full text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                className="font-bold text-stone-900 bg-transparent border-0 p-0 text-xs focus:ring-0 focus:outline-none cursor-pointer"
+                aria-label="Active trip"
               >
                 {activeTrips.map((t) => (
                   <option key={t.id} value={t.id}>
@@ -486,63 +485,34 @@ function BookingsContent() {
           )}
         </div>
 
-        {/* 4-Step Booking Mental Model Banner */}
-        <div className="p-4 rounded-2xl bg-white border border-slate-200 text-xs text-slate-600 flex flex-wrap items-center justify-between gap-3 shadow-2xs">
-          <div className="flex items-center gap-2">
-            <span className="w-5 h-5 rounded-full bg-orange-100 text-orange-700 font-bold flex items-center justify-center text-[11px]">1</span>
-            <span className="font-semibold text-slate-800">Compare options</span>
-          </div>
-          <ArrowRight className="w-3.5 h-3.5 text-slate-300 hidden sm:inline" />
-          <div className="flex items-center gap-2">
-            <span className="w-5 h-5 rounded-full bg-slate-100 text-slate-700 font-bold flex items-center justify-center text-[11px]">2</span>
-            <span>Book directly on provider</span>
-          </div>
-          <ArrowRight className="w-3.5 h-3.5 text-slate-300 hidden sm:inline" />
-          <div className="flex items-center gap-2">
-            <span className="w-5 h-5 rounded-full bg-slate-100 text-slate-700 font-bold flex items-center justify-center text-[11px]">3</span>
-            <span>Save confirmation reference</span>
-          </div>
-          <ArrowRight className="w-3.5 h-3.5 text-slate-300 hidden sm:inline" />
-          <div className="flex items-center gap-2">
-            <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-800 font-bold flex items-center justify-center text-[11px]">4</span>
-            <span className="font-semibold text-emerald-900">Manage in Trip Workspace</span>
-          </div>
-        </div>
-
         {/* Flight Attached to Trip Notification Banner (Zero Fake PNR) */}
         {flightAttached && (
           <div
-            className="p-5 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-950 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm animate-in fade-in"
+            className="p-3.5 sm:p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-950 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs animate-in fade-in"
             data-testid="flight-attached-banner"
           >
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-700 shrink-0">
-                <CheckCircle2 className="w-5 h-5" />
-              </div>
-              <div className="space-y-0.5">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-bold text-emerald-950">
-                    ✓ Flight attached to Trip
-                  </span>
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+            <div className="flex items-center gap-2.5">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-bold text-emerald-950">✓ Flight attached to Trip</span>
+                  <span className="text-emerald-800">· {flightAttached.airline} {flightAttached.flightNumber}</span>
+                  <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
                     Revision v{flightAttached.version}
                   </span>
                 </div>
-                <p className="text-emerald-800 font-medium text-xs">
-                  Flight attached to your Trip. No booking has been made by DashTiny. Continue to the provider to book.
-                </p>
-                <p className="text-[11px] text-emerald-700">
-                  {flightAttached.airline} {flightAttached.flightNumber} • Attached to Trip Workspace
+                <p className="text-[11px] text-emerald-700 mt-0.5">
+                  No booking has been made by DashTiny. Continue to the provider to book.
                 </p>
               </div>
             </div>
-            <div className="flex flex-wrap items-center gap-2.5">
+            <div className="flex items-center gap-2 shrink-0">
               {flightAttached.deepLink && (
                 <a
                   href={flightAttached.deepLink}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-emerald-300 bg-white hover:bg-emerald-50 text-emerald-900 font-semibold text-xs transition-colors cursor-pointer"
+                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl border border-emerald-300 bg-white hover:bg-emerald-50 text-emerald-900 font-semibold text-xs transition-colors cursor-pointer"
                   data-testid="continue-provider-btn"
                 >
                   <span>Continue to provider</span>
@@ -555,13 +525,14 @@ function BookingsContent() {
                 onClick={() => router.push(flightAttached.tripId ? `/trips?tripId=${flightAttached.tripId}` : '/trips')}
                 className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs border-0 shadow-2xs cursor-pointer"
               >
-                Open in Trip Workspace →
+                Open Trip →
               </Button>
               <button
+                type="button"
                 onClick={() => setFlightAttached(null)}
-                className="text-emerald-700 hover:text-emerald-900 text-xs font-semibold px-2 cursor-pointer"
+                className="text-stone-500 hover:text-stone-800 text-xs px-1.5 py-1 cursor-pointer font-medium"
               >
-                Dismiss
+                Continue browsing
               </button>
             </div>
           </div>
@@ -757,6 +728,7 @@ function BookingsContent() {
               selectedOfferId={activeProposal?.changes?.flight_offer?.offer_id || pendingOfferForProposal?.offer_id}
               onSelectOffer={handleSelectFlightOffer}
               onRetrySearch={() => lastSearchedParams && handleSearchFlights(lastSearchedParams)}
+              onSearchWithParams={handleSearchFlights}
             />
           </section>
         )}

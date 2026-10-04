@@ -28,6 +28,15 @@ export function FlightComparison({
 
   if (!isOpen || !selectedOffers || selectedOffers.length === 0) return null;
 
+  const minPrice = Math.min(...selectedOffers.map((o) => o.price));
+  const minDuration = Math.min(...selectedOffers.map((o) => o.duration_minutes));
+  const parseBaggageKg = (str?: string | null) => {
+    if (!str) return 0;
+    const match = str.match(/(\d+)\s*kg/i);
+    return match ? parseInt(match[1], 10) : 0;
+  };
+  const maxBaggage = Math.max(...selectedOffers.map((o) => parseBaggageKg(o.baggage)));
+
   return (
     <div
       role="dialog"
@@ -152,6 +161,11 @@ export function FlightComparison({
                 <div className="text-base font-bold text-slate-900 font-serif-editorial">
                   {formatCurrency(offer.price, offer.currency)}
                 </div>
+                {selectedOffers.length > 1 && offer.price === minPrice && (
+                  <span className="inline-block mt-0.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-100 text-orange-800">
+                    Lowest fare
+                  </span>
+                )}
                 {offer.passengers > 1 && offer.per_passenger_price && (
                   <div className="text-[10px] text-slate-500">
                     {formatCurrency(offer.per_passenger_price, offer.currency)} / pax
@@ -169,7 +183,12 @@ export function FlightComparison({
                 key={`dur-${offer.offer_id}`}
                 className="pt-2 border-t border-slate-100 text-xs font-semibold text-slate-800"
               >
-                {formatFlightDuration(offer.duration_minutes)}
+                <div>{formatFlightDuration(offer.duration_minutes)}</div>
+                {selectedOffers.length > 1 && offer.duration_minutes === minDuration && (
+                  <span className="inline-block mt-0.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-stone-100 text-stone-700">
+                    Shortest journey
+                  </span>
+                )}
               </div>
             ))}
 
@@ -201,14 +220,23 @@ export function FlightComparison({
             <div className="sticky left-0 bg-white z-20 font-semibold text-xs text-slate-500 pt-2 border-t border-slate-100">
               Baggage
             </div>
-            {selectedOffers.map((offer) => (
-              <div
-                key={`bag-${offer.offer_id}`}
-                className="pt-2 border-t border-slate-100 text-xs text-slate-700"
-              >
-                {offer.baggage || <span className="text-slate-400 italic">Not provided</span>}
-              </div>
-            ))}
+            {selectedOffers.map((offer) => {
+              const weight = parseBaggageKg(offer.baggage);
+              const isMoreBaggage = maxBaggage > 0 && weight === maxBaggage && selectedOffers.some((o) => parseBaggageKg(o.baggage) < maxBaggage);
+              return (
+                <div
+                  key={`bag-${offer.offer_id}`}
+                  className="pt-2 border-t border-slate-100 text-xs text-slate-700"
+                >
+                  <div>{offer.baggage || <span className="text-slate-400 italic">Not provided</span>}</div>
+                  {isMoreBaggage && (
+                    <span className="inline-block mt-0.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-stone-100 text-stone-700">
+                      More baggage
+                    </span>
+                  )}
+                </div>
+              );
+            })}
 
             {/* Row 7: Cancellation */}
             <div className="sticky left-0 bg-white z-20 font-semibold text-xs text-slate-500 pt-2 border-t border-slate-100">
