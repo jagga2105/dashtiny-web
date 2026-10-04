@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { Briefcase, Calendar, Users, MapPin, X, ArrowRight, Sparkles } from 'lucide-react';
+import { formatFriendlyDateRange } from '@/lib/formatDate';
 
 export interface ActiveTripSummary {
   id: string;
@@ -20,6 +21,8 @@ interface FlightTripContextProps {
   onClearTrip?: () => void;
   onApplyTripDates?: (start: string, end?: string) => void;
   onApplyTripTravelers?: (travelers: number) => void;
+  suggestedOriginAirport?: { iata_code: string; name: string; city: string } | null;
+  onApplySuggestedOriginAirport?: (iata_code: string) => void;
   suggestedAirport?: { iata_code: string; name: string; city: string } | null;
   onApplySuggestedAirport?: (iata_code: string) => void;
   className?: string;
@@ -32,6 +35,8 @@ export function FlightTripContext({
   onClearTrip,
   onApplyTripDates,
   onApplyTripTravelers,
+  suggestedOriginAirport,
+  onApplySuggestedOriginAirport,
   suggestedAirport,
   onApplySuggestedAirport,
   className = '',
@@ -102,7 +107,7 @@ export function FlightTripContext({
               <div className="flex items-center gap-1">
                 <span className="flex items-center gap-1 text-[11px] font-medium text-slate-600 bg-slate-50 border border-slate-200 px-2.5 py-1.5 rounded-xl">
                   <Calendar className="w-3 h-3 text-slate-400" />
-                  {currentTrip.startDate} {currentTrip.endDate ? `– ${currentTrip.endDate}` : ''}
+                  {formatFriendlyDateRange(currentTrip.startDate, currentTrip.endDate)}
                 </span>
                 {onApplyTripDates && (
                   <button
@@ -140,6 +145,32 @@ export function FlightTripContext({
         )}
       </div>
 
+      {/* Suggested Origin Airport Banner (Prevents silent resolution) */}
+      {currentTrip && suggestedOriginAirport && (
+        <div
+          className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 rounded-xl bg-orange-50/70 border border-orange-200/80 text-xs text-orange-950"
+          data-testid="suggested-origin-airport-banner"
+        >
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-3.5 h-3.5 text-orange-600 shrink-0" />
+            <span>
+              Trip origin = <strong>{currentTrip.origin}</strong>. Suggested:{' '}
+              <strong>{suggestedOriginAirport.iata_code} — {suggestedOriginAirport.city}</strong>
+            </span>
+          </div>
+          {onApplySuggestedOriginAirport && (
+            <button
+              type="button"
+              onClick={() => onApplySuggestedOriginAirport(suggestedOriginAirport.iata_code)}
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-orange-600 hover:bg-orange-700 text-white font-bold text-[11px] shrink-0 transition-colors cursor-pointer"
+              data-testid="apply-suggested-origin-btn"
+            >
+              Use {suggestedOriginAirport.iata_code}
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Suggested Destination Airport Banner (Prevents silent resolution) */}
       {currentTrip && suggestedAirport && (
         <div
@@ -149,8 +180,8 @@ export function FlightTripContext({
           <div className="flex items-center gap-2">
             <Sparkles className="w-3.5 h-3.5 text-orange-600 shrink-0" />
             <span>
-              Trip destination is <strong>{currentTrip.destination}</strong>. Suggested primary airport is{' '}
-              <strong>{suggestedAirport.name} ({suggestedAirport.iata_code})</strong>.
+              Trip destination = <strong>{currentTrip.destination}</strong>. Suggested:{' '}
+              <strong>{suggestedAirport.iata_code} — {suggestedAirport.city}</strong>
             </span>
           </div>
           {onApplySuggestedAirport && (
@@ -158,6 +189,7 @@ export function FlightTripContext({
               type="button"
               onClick={() => onApplySuggestedAirport(suggestedAirport.iata_code)}
               className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-orange-600 hover:bg-orange-700 text-white font-bold text-[11px] shrink-0 transition-colors cursor-pointer"
+              data-testid="apply-suggested-dest-btn"
             >
               Use {suggestedAirport.iata_code}
             </button>

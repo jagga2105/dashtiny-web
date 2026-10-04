@@ -166,12 +166,6 @@ export function FlightSearchForm({
             type="button"
             onClick={() => {
               setTripType('roundtrip');
-              if (!returnDate && departureDate) {
-                // Default return date to 5 days ahead
-                const d = new Date(departureDate);
-                d.setDate(d.getDate() + 5);
-                setReturnDate(d.toISOString().split('T')[0]);
-              }
             }}
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
               tripType === 'roundtrip'
@@ -279,6 +273,7 @@ export function FlightSearchForm({
           <div className="relative">
             <input
               id="flight-departure-date"
+              data-testid="flight-departure-date-input"
               type="date"
               min={todayStr}
               value={departureDate}
@@ -305,6 +300,7 @@ export function FlightSearchForm({
           <div className="relative">
             <input
               id="flight-return-date"
+              data-testid="flight-return-date-input"
               type="date"
               min={departureDate || todayStr}
               disabled={tripType === 'oneway'}

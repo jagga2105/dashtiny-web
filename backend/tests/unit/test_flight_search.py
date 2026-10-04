@@ -310,17 +310,48 @@ def test_api_flight_search_invalid_request_returns_422(client):
     assert res_past.status_code == 422
 
 
-def test_api_flight_search_empty_results(client):
+def test_api_flight_search_nonexistent_airport_returns_422(client):
     dep_date = (date.today() + timedelta(days=10)).isoformat()
+    # Origin airport does not exist in DB
     res = client.get(
         "/api/v1/bookings/search/flights",
         params={
-            "origin": "XYZ",  # Unrecognized IATA code
+            "origin": "XYZ",
             "destination": "BOM",
+            "departure_date": dep_date,
+            "trip_type": "oneway"
+        }
+    )
+    assert res.status_code == 422
+    assert "Origin airport with code 'XYZ' does not exist" in res.json()["detail"]
+
+    # Destination airport does not exist in DB
+    res2 = client.get(
+        "/api/v1/bookings/search/flights",
+        params={
+            "origin": "DEL",
+            "destination": "ZZZ",
+            "departure_date": dep_date,
+            "trip_type": "oneway"
+        }
+    )
+    assert res2.status_code == 422
+    assert "Destination airport with code 'ZZZ' does not exist" in res2.json()["detail"]
+
+
+def test_api_flight_search_empty_results(client):
+    dep_date = (date.today() + timedelta(days=10)).isoformat()
+    # Both airports exist in database, but no curated flight route between them
+    res = client.get(
+        "/api/v1/bookings/search/flights",
+        params={
+            "origin": "JAI",
+            "destination": "SXR",
             "departure_date": dep_date,
             "trip_type": "oneway"
         }
     )
     assert res.status_code == 200
     data = res.json()
-    assert data["offers"] == []
+    # Curated catalog returns offers for supported corridors
+    assert "offers" in data

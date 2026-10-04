@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { FlightOffer } from '@/types/flight';
 import { formatFlightDuration } from '@/lib/flight/ranking';
+import { formatCurrency } from '@/lib/formatCurrency';
 
 interface FlightOfferCardProps {
   offer: FlightOffer;
@@ -194,11 +195,11 @@ export function FlightOfferCard({
           <div className="md:text-right">
             <span className="text-[11px] text-slate-500 font-medium">Total fare:</span>
             <div className="text-xl sm:text-2xl font-bold font-serif-editorial text-slate-900">
-              ₹{offer.price.toLocaleString('en-IN')}
+              {formatCurrency(offer.price, offer.currency)}
             </div>
             {offer.passengers > 1 && offer.per_passenger_price && (
               <p className="text-[11px] text-slate-500">
-                ₹{offer.per_passenger_price.toLocaleString('en-IN')} / person
+                {formatCurrency(offer.per_passenger_price, offer.currency)} / person
               </p>
             )}
           </div>

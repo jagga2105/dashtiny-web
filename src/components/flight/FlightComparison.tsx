@@ -4,6 +4,7 @@ import React from 'react';
 import { X, Check, ExternalLink, Sparkles } from 'lucide-react';
 import { FlightOffer } from '@/types/flight';
 import { formatFlightDuration } from '@/lib/flight/ranking';
+import { formatCurrency } from '@/lib/formatCurrency';
 
 interface FlightComparisonProps {
   selectedOffers: FlightOffer[];
@@ -15,14 +16,14 @@ interface FlightComparisonProps {
 }
 
 export function FlightComparison({
-  selectedOffers,
+  selectedOffers = [],
   isOpen,
   onClose,
   onRemoveOffer,
   onSelectOffer,
   className = '',
 }: FlightComparisonProps) {
-  if (!isOpen || selectedOffers.length === 0) return null;
+  if (!isOpen || !selectedOffers || selectedOffers.length === 0) return null;
 
   return (
     <div
@@ -151,7 +152,7 @@ export function FlightComparison({
                 key={`bag-${offer.offer_id}`}
                 className="pt-2 border-t border-slate-100 text-xs text-slate-700"
               >
-                {offer.baggage || 'Standard allowance'}
+                {offer.baggage || <span className="text-slate-400 italic">Not provided</span>}
               </div>
             ))}
 
@@ -164,7 +165,7 @@ export function FlightComparison({
                 key={`canc-${offer.offer_id}`}
                 className="pt-2 border-t border-slate-100 text-xs text-slate-700"
               >
-                {offer.cancellation || 'Standard terms'}
+                {offer.cancellation || <span className="text-slate-400 italic">Not provided</span>}
               </div>
             ))}
 
@@ -178,11 +179,11 @@ export function FlightComparison({
                 className="pt-2 border-t border-slate-100"
               >
                 <div className="text-base font-bold text-slate-900 font-serif-editorial">
-                  ₹{offer.price.toLocaleString('en-IN')}
+                  {formatCurrency(offer.price, offer.currency)}
                 </div>
                 {offer.passengers > 1 && offer.per_passenger_price && (
                   <div className="text-[10px] text-slate-500">
-                    ₹{offer.per_passenger_price.toLocaleString('en-IN')} / pax
+                    {formatCurrency(offer.per_passenger_price, offer.currency)} / pax
                   </div>
                 )}
               </div>

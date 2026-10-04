@@ -20,6 +20,7 @@ import {
   Search,
   Briefcase,
   AlertTriangle,
+  X,
 } from 'lucide-react';
 import { TopNavbar } from '@/components/layout/TopNavbar';
 import { BottomNav } from '@/components/layout/BottomNav';
@@ -33,6 +34,8 @@ import { FlightSearchForm } from '@/components/flight/FlightSearchForm';
 import { FlightResults } from '@/components/flight/FlightResults';
 import { FlightTripContext } from '@/components/flight/FlightTripContext';
 import { FlightOffer, FlightSearchParams, FlightSearchResponse } from '@/types/flight';
+import { formatCurrency } from '@/lib/formatCurrency';
+import { formatFriendlyDate } from '@/lib/formatDate';
 
 type BookingCategory = 'flights' | 'hotels' | 'trains' | 'buses' | 'cabs' | 'my_bookings';
 
@@ -44,6 +47,14 @@ function BookingsContent() {
   const { setCoins } = useAuthStore();
   const [activeCategory, setActiveCategory] = useState<BookingCategory>('flights');
   const [bookingConfirmed, setBookingConfirmed] = useState<{ title: string; pnr: string; provider: string; tripId?: string } | null>(null);
+  const [flightAttached, setFlightAttached] = useState<{
+    airline: string;
+    flightNumber: string;
+    version: number;
+    tripId: string;
+    deepLink?: string;
+    provider: string;
+  } | null>(null);
   const [bookingError, setBookingError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [userBookings, setUserBookings] = useState<any[]>([]);
@@ -53,6 +64,7 @@ function BookingsContent() {
   // Flight search states (Clean defaults — populated via selected Trip)
   const [flightOrigin, setFlightOrigin] = useState('');
   const [flightDest, setFlightDest] = useState('');
+  const [suggestedOriginAirport, setSuggestedOriginAirport] = useState<{ iata_code: string; name: string; city: string } | null>(null);
   const [suggestedAirport, setSuggestedAirport] = useState<{ iata_code: string; name: string; city: string } | null>(null);
   const [departureDate, setDepartureDate] = useState('');
   const [returnDate, setReturnDate] = useState('');
@@ -62,9 +74,10 @@ function BookingsContent() {
   const [rawFlights, setRawFlights] = useState<FlightOffer[]>([]);
   const [flightResponse, setFlightResponse] = useState<FlightSearchResponse | null>(null);
   const [lastSearchedParams, setLastSearchedParams] = useState<FlightSearchParams | null>(null);
-  const [currentLiveFlightParams, setCurrentLiveFlightParams] = useState<FlightSearchParams | null>(null);
+  const [currentFlightParams, setCurrentFlightParams] = useState<FlightSearchParams | null>(null);
   const [isSearchingFlights, setIsSearchingFlights] = useState(false);
   const [flightError, setFlightError] = useState<string | null>(null);
+  const [pendingOfferForProposal, setPendingOfferForProposal] = useState<FlightOffer | null>(null);
   const [activeProposal, setActiveProposal] = useState<any | null>(null);
   const [isSubmittingProposal, setIsSubmittingProposal] = useState(false);
   const [proposalSuccess, setProposalSuccess] = useState<string | null>(null);
@@ -92,16 +105,16 @@ function BookingsContent() {
   const currentHotelKey = `${hotelDest}-${hotelGuests}-${hotelCheckIn}-${hotelCheckOut}`;
   const isFlightSearchStale = Boolean(
     lastSearchedParams &&
-    currentLiveFlightParams &&
+    currentFlightParams &&
     rawFlights.length > 0 &&
     (
-      lastSearchedParams.origin !== currentLiveFlightParams.origin ||
-      lastSearchedParams.destination !== currentLiveFlightParams.destination ||
-      lastSearchedParams.departureDate !== currentLiveFlightParams.departureDate ||
-      (lastSearchedParams.returnDate || '') !== (currentLiveFlightParams.returnDate || '') ||
-      lastSearchedParams.passengers !== currentLiveFlightParams.passengers ||
-      lastSearchedParams.cabinClass !== currentLiveFlightParams.cabinClass ||
-      lastSearchedParams.tripType !== currentLiveFlightParams.tripType
+      lastSearchedParams.origin !== currentFlightParams.origin ||
+      lastSearchedParams.destination !== currentFlightParams.destination ||
+      lastSearchedParams.departureDate !== currentFlightParams.departureDate ||
+      (lastSearchedParams.returnDate || '') !== (currentFlightParams.returnDate || '') ||
+      lastSearchedParams.passengers !== currentFlightParams.passengers ||
+      lastSearchedParams.cabinClass !== currentFlightParams.cabinClass ||
+      lastSearchedParams.tripType !== currentFlightParams.tripType
     )
   );
   const isHotelSearchStale = lastSearchedHotelKey !== '' && lastSearchedHotelKey !== currentHotelKey && hotelsList.length > 0;
@@ -116,11 +129,21 @@ function BookingsContent() {
         ]);
 
         if (tripsData && tripsData.length > 0) {
-          setActiveTrips(tripsData);
-          if (paramTripId && tripsData.some((t: any) => t.id === paramTripId)) {
+          const normalizedTrips = tripsData.map((t: any) => ({
+            id: t.id,
+            title: t.title || t.destination,
+            destination: t.destination,
+            origin: t.origin || t.origin_city || '',
+            startDate: t.startDate || t.start_date || '',
+            endDate: t.endDate || t.end_date || '',
+            travellers: t.travellers || t.travelers_count || 1,
+            status: t.status || 'planning',
+          }));
+          setActiveTrips(normalizedTrips);
+          if (paramTripId && normalizedTrips.some((t: any) => t.id === paramTripId)) {
             setSelectedTripId(paramTripId);
           } else {
-            setSelectedTripId(tripsData[0].id);
+            setSelectedTripId(normalizedTrips[0].id);
           }
         }
         if (bookingsData && bookingsData.length > 0) {
@@ -171,15 +194,24 @@ function BookingsContent() {
           const orig = match.origin.trim();
           if (/^[A-Za-z]{3}$/.test(orig)) {
             setFlightOrigin(orig.toUpperCase());
+            setSuggestedOriginAirport(null);
           } else {
             apiService.searchLocations(orig, 1).then((airports) => {
               if (airports && airports.length > 0) {
-                setFlightOrigin(airports[0].iata_code);
+                setSuggestedOriginAirport({
+                  iata_code: airports[0].iata_code,
+                  name: airports[0].name,
+                  city: airports[0].city,
+                });
               } else {
-                setFlightOrigin('');
+                setSuggestedOriginAirport(null);
               }
-            }).catch(() => setFlightOrigin(''));
+            }).catch(() => setSuggestedOriginAirport(null));
+            setFlightOrigin('');
           }
+        } else {
+          setFlightOrigin('');
+          setSuggestedOriginAirport(null);
         }
 
         if (match.startDate) {
@@ -233,16 +265,26 @@ function BookingsContent() {
     }
   };
 
-  const handleSelectFlightOffer = async (offer: FlightOffer) => {
-    if (!selectedTripId) {
+  const handleSelectFlightOffer = (offer: FlightOffer) => {
+    if (!selectedTripId && activeTrips.length > 0) {
+      setSelectedTripId(activeTrips[0].id);
+    }
+    setPendingOfferForProposal(offer);
+  };
+
+  const handleCreateProposalFromOffer = async () => {
+    if (!pendingOfferForProposal) return;
+    const targetTripId = selectedTripId || (activeTrips.length > 0 ? activeTrips[0].id : null);
+    if (!targetTripId) {
       setBookingError('Please link an active trip from the context selector to attach this flight offer.');
       return;
     }
     setIsSubmittingProposal(true);
     setBookingError(null);
     try {
-      const proposal = await apiService.createFlightOfferProposal(selectedTripId, offer);
+      const proposal = await apiService.createFlightOfferProposal(targetTripId, pendingOfferForProposal);
       setActiveProposal(proposal);
+      setPendingOfferForProposal(null);
     } catch (err: any) {
       console.error('Failed to create proposal:', err);
       setBookingError(err?.message || 'Failed to create flight proposal.');
@@ -256,13 +298,16 @@ function BookingsContent() {
     setIsSubmittingProposal(true);
     try {
       const res = await apiService.acceptAIProposal(activeProposal.id);
-      setActiveProposal(null);
-      setBookingConfirmed({
-        title: `${activeProposal.changes?.flight_offer?.airline || 'Flight'} (${activeProposal.changes?.flight_offer?.flight_number || 'Transport'})`,
-        pnr: `PROP-${activeProposal.id.slice(0, 8).toUpperCase()}`,
-        provider: activeProposal.changes?.flight_offer?.provider || 'Curated Catalog',
+      const offer = activeProposal.changes?.flight_offer;
+      setFlightAttached({
+        airline: offer?.airline || 'Flight',
+        flightNumber: offer?.flight_number || '',
+        version: res.version,
         tripId: selectedTripId,
+        deepLink: offer?.deep_link,
+        provider: offer?.provider || 'Curated Catalog',
       });
+      setActiveProposal(null);
       setProposalSuccess(`Flight successfully attached to Trip revision (v${res.version})!`);
     } catch (err: any) {
       console.error('Failed to accept proposal:', err);
@@ -328,13 +373,13 @@ function BookingsContent() {
     }
   };
 
-  const categories = [
-    { id: 'flights' as BookingCategory, label: 'Flights', icon: Plane },
-    { id: 'hotels' as BookingCategory, label: 'Stays & Hotels', icon: Hotel },
-    { id: 'trains' as BookingCategory, label: 'Trains', icon: Train },
-    { id: 'buses' as BookingCategory, label: 'Buses', icon: Bus },
-    { id: 'cabs' as BookingCategory, label: 'Cabs', icon: Car },
-    { id: 'my_bookings' as BookingCategory, label: `Saved Bookings (${userBookings.length})`, icon: Ticket },
+  const categories: { id: BookingCategory; label: string; icon: any; disabled?: boolean; badge?: string }[] = [
+    { id: 'flights', label: 'Flights', icon: Plane, disabled: false },
+    { id: 'hotels', label: 'Stays & Hotels', icon: Hotel, disabled: false },
+    { id: 'trains', label: 'Trains', icon: Train, disabled: true, badge: 'Coming soon' },
+    { id: 'buses', label: 'Buses', icon: Bus, disabled: true, badge: 'Coming soon' },
+    { id: 'cabs', label: 'Cabs', icon: Car, disabled: true, badge: 'Coming soon' },
+    { id: 'my_bookings', label: `Saved Bookings (${userBookings.length})`, icon: Ticket, disabled: false },
   ];
 
   const handleSaveBookingReference = async (
@@ -440,6 +485,64 @@ function BookingsContent() {
           </div>
         </div>
 
+        {/* Flight Attached to Trip Notification Banner (Zero Fake PNR) */}
+        {flightAttached && (
+          <div
+            className="p-5 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-950 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm animate-in fade-in"
+            data-testid="flight-attached-banner"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-700 shrink-0">
+                <CheckCircle2 className="w-5 h-5" />
+              </div>
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-bold text-emerald-950">
+                    ✓ Flight attached to Trip
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                    Revision v{flightAttached.version}
+                  </span>
+                </div>
+                <p className="text-emerald-800 font-medium text-xs">
+                  Flight attached to your Trip. No booking has been made by DashTiny. Continue to the provider to book.
+                </p>
+                <p className="text-[11px] text-emerald-700">
+                  {flightAttached.airline} {flightAttached.flightNumber} • Attached to Trip Workspace
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2.5">
+              {flightAttached.deepLink && (
+                <a
+                  href={flightAttached.deepLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-emerald-300 bg-white hover:bg-emerald-50 text-emerald-900 font-semibold text-xs transition-colors cursor-pointer"
+                  data-testid="continue-provider-btn"
+                >
+                  <span>Continue to provider</span>
+                  <ExternalLink className="w-3 h-3 text-emerald-600" />
+                </a>
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => router.push(flightAttached.tripId ? `/trips?tripId=${flightAttached.tripId}` : '/trips')}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs border-0 shadow-2xs cursor-pointer"
+              >
+                Open in Trip Workspace →
+              </Button>
+              <button
+                onClick={() => setFlightAttached(null)}
+                className="text-emerald-700 hover:text-emerald-900 text-xs font-semibold px-2 cursor-pointer"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Confirmation Banner */}
         {bookingConfirmed && (
           <div className="p-5 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-950 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm animate-in fade-in">
@@ -495,10 +598,28 @@ function BookingsContent() {
         )}
 
         {/* Category Switcher Tabs */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar" data-testid="booking-category-tabs">
           {categories.map((cat) => {
             const Icon = cat.icon;
             const isActive = activeCategory === cat.id;
+
+            if (cat.disabled) {
+              return (
+                <div
+                  key={cat.id}
+                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-medium text-slate-400 bg-slate-100/60 border border-slate-200/50 cursor-not-allowed select-none opacity-60 shrink-0"
+                  title={`${cat.label} booking integration is coming soon in a future release`}
+                  data-testid={`category-tab-${cat.id}-disabled`}
+                >
+                  <Icon className="w-3.5 h-3.5 text-slate-400" />
+                  <span>{cat.label}</span>
+                  <span className="text-[9px] font-semibold uppercase tracking-wider bg-slate-200 text-slate-600 px-1 py-0.2 rounded">
+                    Soon
+                  </span>
+                </div>
+              );
+            }
+
             return (
               <button
                 key={cat.id}
@@ -508,6 +629,7 @@ function BookingsContent() {
                     ? 'bg-orange-600 text-white shadow-2xs font-bold'
                     : 'bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-50 border border-slate-200'
                 }`}
+                data-testid={`category-tab-${cat.id}`}
               >
                 <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-white' : 'text-slate-500'}`} />
                 <span>{cat.label}</span>
@@ -530,6 +652,8 @@ function BookingsContent() {
                 if (end) setReturnDate(end);
               }}
               onApplyTripTravelers={(travelers) => setPassengers(travelers)}
+              suggestedOriginAirport={suggestedOriginAirport}
+              onApplySuggestedOriginAirport={(code) => setFlightOrigin(code)}
               suggestedAirport={suggestedAirport}
               onApplySuggestedAirport={(code) => setFlightDest(code)}
             />
@@ -545,7 +669,7 @@ function BookingsContent() {
               initialTripType={tripType === 'round' ? 'roundtrip' : 'oneway'}
               isLoading={isSearchingFlights}
               onSearch={handleSearchFlights}
-              onParamsChange={setCurrentLiveFlightParams}
+              onParamsChange={setCurrentFlightParams}
             />
 
             {/* Proposal Generation Progress */}
@@ -575,14 +699,108 @@ function BookingsContent() {
               </div>
             )}
 
-            {/* Active Proposal Review Modal */}
+            {/* Step 1: Attach this flight to Trip Modal */}
+            {pendingOfferForProposal && (
+              <div
+                className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in"
+                data-testid="attach-flight-modal"
+              >
+                <div className="w-full max-w-md bg-white rounded-3xl p-6 shadow-2xl border border-slate-200 space-y-4">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                    <div className="flex items-center gap-2 text-slate-900 font-serif-editorial font-bold text-base sm:text-lg">
+                      <Plane className="w-5 h-5 text-orange-500" />
+                      <span>Attach flight to Trip</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setPendingOfferForProposal(null)}
+                      className="p-1 rounded-full text-slate-400 hover:text-slate-600 cursor-pointer"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {/* Trip Context */}
+                  <div className="space-y-1.5 text-xs">
+                    <label className="font-semibold text-slate-700">Attach this flight to:</label>
+                    {activeTrips.length > 0 ? (
+                      <select
+                        value={selectedTripId}
+                        onChange={(e) => setSelectedTripId(e.target.value)}
+                        className="w-full text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500 cursor-pointer"
+                        data-testid="attach-trip-selector"
+                      >
+                        {activeTrips.map((t) => (
+                          <option key={t.id} value={t.id}>
+                            {t.title || t.destination} · {t.destination}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <p className="text-amber-800 bg-amber-50 p-2.5 rounded-xl border border-amber-200 text-[11px]">
+                        No active trips found. Please select or create a trip first to attach transport options.
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Flight Info Card */}
+                  <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-2 text-xs">
+                    <div className="font-semibold text-slate-800">
+                      Flight:
+                    </div>
+                    <div className="font-bold text-sm text-slate-900">
+                      {pendingOfferForProposal.airline} {pendingOfferForProposal.flight_number}
+                    </div>
+                    <div className="flex items-center justify-between text-slate-600 text-[11px]">
+                      <span>{pendingOfferForProposal.origin} → {pendingOfferForProposal.destination}</span>
+                      <span>{formatFriendlyDate(departureDate || pendingOfferForProposal.departure_time)}</span>
+                    </div>
+                    <div className="font-mono text-orange-600 font-bold text-sm pt-1 border-t border-slate-200">
+                      {formatCurrency(pendingOfferForProposal.price, pendingOfferForProposal.currency)} total
+                    </div>
+                  </div>
+
+                  {/* Catalog Status */}
+                  <div className="p-3 rounded-xl bg-slate-100/80 border border-slate-200/80 text-[11px] text-slate-600 space-y-0.5">
+                    <span className="font-semibold text-slate-700 block">Catalog status:</span>
+                    <span>Curated · Estimated availability</span>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex items-center justify-end gap-2.5 pt-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPendingOfferForProposal(null)}
+                      disabled={isSubmittingProposal}
+                      className="text-xs cursor-pointer"
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      onClick={handleCreateProposalFromOffer}
+                      isLoading={isSubmittingProposal}
+                      disabled={!selectedTripId && activeTrips.length === 0}
+                      className="bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs px-4 py-2 rounded-xl cursor-pointer shadow-sm"
+                      data-testid="create-trip-proposal-btn"
+                    >
+                      Create Trip Proposal →
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Step 2: Trip Proposal Review Modal */}
             {activeProposal && (
               <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in" data-testid="flight-proposal-modal">
                 <div className="w-full max-w-lg bg-white rounded-3xl p-6 shadow-2xl border border-slate-200 space-y-4">
                   <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                     <div className="flex items-center gap-2 text-slate-900 font-serif-editorial font-bold text-lg">
                       <Sparkles className="w-5 h-5 text-orange-500" />
-                      <span>Review Trip Proposal</span>
+                      <span>Trip Proposal</span>
                     </div>
                     <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
                       Parent v{activeProposal.parent_version}
@@ -590,13 +808,15 @@ function BookingsContent() {
                   </div>
 
                   <p className="text-xs text-slate-600">
-                    {activeProposal.summary || 'Attach selected flight offer to your active trip.'}
+                    This change will attach the selected transport option to your Trip. No provider booking will occur.
                   </p>
 
                   <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 space-y-2 text-xs">
                     <div className="flex justify-between font-semibold text-slate-800">
                       <span>{activeProposal.changes?.flight_offer?.airline} ({activeProposal.changes?.flight_offer?.flight_number})</span>
-                      <span className="font-mono text-orange-600 font-bold">₹{activeProposal.changes?.flight_offer?.price?.toLocaleString('en-IN')}</span>
+                      <span className="font-mono text-orange-600 font-bold">
+                        {formatCurrency(activeProposal.changes?.flight_offer?.price, activeProposal.changes?.flight_offer?.currency)}
+                      </span>
                     </div>
                     <div className="flex justify-between text-slate-500 text-[11px]">
                       <span>Route: {activeProposal.changes?.flight_offer?.origin} → {activeProposal.changes?.flight_offer?.destination}</span>
@@ -609,9 +829,9 @@ function BookingsContent() {
                   </div>
 
                   <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 text-blue-900 text-[11px] space-y-1">
-                    <p className="font-semibold">Architectural Trust Guarantee:</p>
+                    <p className="font-semibold">Trust Guarantee:</p>
                     <p className="text-blue-800">
-                      Accepting this proposal creates an append-only TripRevision (v{activeProposal.parent_version + 1}) and records transport references with honest CURATED provenance. No third-party charge is made.
+                      DashTiny attaches transport to your trip itinerary. To complete ticketing and secure seats, proceed to the provider.
                     </p>
                   </div>
 
@@ -631,6 +851,7 @@ function BookingsContent() {
                       onClick={handleAcceptProposal}
                       isLoading={isSubmittingProposal}
                       className="bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs px-4 py-2 rounded-xl cursor-pointer shadow-sm"
+                      data-testid="accept-proposal-btn"
                     >
                       Accept Proposal & Update Trip →
                     </Button>
@@ -646,9 +867,9 @@ function BookingsContent() {
               error={flightError}
               isStale={isFlightSearchStale}
               previousSearchParams={lastSearchedParams}
-              currentSearchParams={currentLiveFlightParams}
+              currentSearchParams={currentFlightParams}
               onRefreshSearch={() => lastSearchedParams && handleSearchFlights(lastSearchedParams)}
-              selectedOfferId={activeProposal?.changes?.flight_offer?.offer_id}
+              selectedOfferId={activeProposal?.changes?.flight_offer?.offer_id || pendingOfferForProposal?.offer_id}
               onSelectOffer={handleSelectFlightOffer}
               onRetrySearch={() => lastSearchedParams && handleSearchFlights(lastSearchedParams)}
             />

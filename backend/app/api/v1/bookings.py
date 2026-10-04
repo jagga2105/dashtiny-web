@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.db.database import get_db
-from app.models.models import Booking, User, UserProfile, Itinerary, SquadRoom, SquadMember, RewardTransaction
+from app.models.models import Booking, User, UserProfile, Itinerary, SquadRoom, SquadMember, RewardTransaction, Airport
 from app.api.deps import get_current_user
 
 from datetime import datetime, timezone, timedelta
@@ -67,15 +67,37 @@ def get_flight_search_request(
 
 @router.get("/search/flights", response_model=FlightSearchResponse)
 def search_flights_endpoint(
-    req: FlightSearchRequest = Depends(get_flight_search_request)
+    req: FlightSearchRequest = Depends(get_flight_search_request),
+    db: Session = Depends(get_db)
 ):
     """
     Search curated travel catalog flight offers normalized into FlightOffer schema.
     Returns current catalog pricing and estimated availability with explicit CURATED provenance.
     Live OTA provider integrations are deferred to future phases.
     Requires explicit search intent: origin and destination, validated departure dates.
-    Invalid input returns HTTP 422 Unprocessable Entity.
+    Validates airport existence against canonical reference dataset in database.
+    Invalid input or non-existent airport returns HTTP 422 Unprocessable Entity.
     """
+    origin_airport = db.query(Airport).filter(
+        Airport.iata_code == req.origin,
+        Airport.is_active == True
+    ).first()
+    if not origin_airport:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Origin airport with code '{req.origin}' does not exist in the airport directory."
+        )
+
+    dest_airport = db.query(Airport).filter(
+        Airport.iata_code == req.destination,
+        Airport.is_active == True
+    ).first()
+    if not dest_airport:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Destination airport with code '{req.destination}' does not exist in the airport directory."
+        )
+
     offers = _flight_provider.search_flights(
         origin=req.origin,
         destination=req.destination,
