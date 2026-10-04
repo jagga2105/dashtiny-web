@@ -657,3 +657,191 @@ def test_proposal_rejects_stale_search_context_mismatch(client, db_session, test
     assert "destination" in data["detail"]
 
 
+def test_proposal_verifies_canonical_offer_by_offer_id(client, db_session, test_user, flight_provider):
+    """
+    P0 L2.5 Test: Proposal generation verifies canonical offer by offer_id + search context
+    without needing to trust client-supplied metadata.
+    """
+    from datetime import date
+    from app.models.models import Itinerary, ItineraryDay
+    from app.services.trip_revision_service import record_initial_revision
+
+    trip = Itinerary(
+        title="Goa Trip Auth",
+        destination="Goa",
+        owner_id=test_user.id,
+        total_budget=40000.0,
+        currency="INR",
+        start_date=date(2026, 11, 20),
+        end_date=date(2026, 11, 25)
+    )
+    db_session.add(trip)
+    db_session.commit()
+
+    day1 = ItineraryDay(itinerary_id=trip.id, day_number=1, title="Day 1")
+    db_session.add(day1)
+    db_session.commit()
+
+    record_initial_revision(db_session, trip.id, test_user.id)
+    db_session.commit()
+
+    search_context = {
+        "origin": "DEL",
+        "destination": "GOI",
+        "departure_date": "2026-11-20",
+        "return_date": "2026-11-25",
+        "passengers": 1,
+        "cabin_class": "economy",
+        "trip_type": "roundtrip"
+    }
+
+    offers = flight_provider.search_flights(**search_context)
+    assert len(offers) > 0
+    valid_offer = offers[0]
+
+    # Send ONLY offer_id and search_context
+    res = client.post(
+        "/api/v1/ai/proposals",
+        json={
+            "trip_id": trip.id,
+            "proposal_type": "ATTACH_FLIGHT_OFFER",
+            "offer_id": valid_offer.offer_id,
+            "search_context": search_context
+        }
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert data["proposal_type"] == "ATTACH_FLIGHT_OFFER"
+    assert valid_offer.airline in data["summary"]
+    assert valid_offer.flight_number in data["summary"]
+
+
+def test_proposal_rejects_forged_offer_metadata(client, db_session, test_user, flight_provider):
+    """
+    P0 L2.5 Test: If client submits forged metadata (tampered price or airline),
+    backend detects discrepancy against canonical catalog and rejects with 409 Conflict.
+    """
+    from datetime import date
+    from app.models.models import Itinerary, ItineraryDay
+    from app.services.trip_revision_service import record_initial_revision
+
+    trip = Itinerary(
+        title="Goa Trip Forgery",
+        destination="Goa",
+        owner_id=test_user.id,
+        total_budget=40000.0,
+        currency="INR",
+        start_date=date(2026, 11, 20),
+        end_date=date(2026, 11, 25)
+    )
+    db_session.add(trip)
+    db_session.commit()
+
+    day1 = ItineraryDay(itinerary_id=trip.id, day_number=1, title="Day 1")
+    db_session.add(day1)
+    db_session.commit()
+
+    record_initial_revision(db_session, trip.id, test_user.id)
+    db_session.commit()
+
+    search_context = {
+        "origin": "DEL",
+        "destination": "GOI",
+        "departure_date": "2026-11-20",
+        "return_date": "2026-11-25",
+        "passengers": 1,
+        "cabin_class": "economy",
+        "trip_type": "roundtrip"
+    }
+
+    offers = flight_provider.search_flights(**search_context)
+    assert len(offers) > 0
+    valid_offer = offers[0].model_dump()
+
+    # Attempt 1: Forged Price (e.g. tamper ₹4500 to ₹100)
+    forged_price_offer = dict(valid_offer)
+    forged_price_offer["price"] = 100.0
+
+    res1 = client.post(
+        "/api/v1/ai/proposals",
+        json={
+            "trip_id": trip.id,
+            "proposal_type": "ATTACH_FLIGHT_OFFER",
+            "offer_id": valid_offer["offer_id"],
+            "offer": forged_price_offer,
+            "search_context": search_context
+        }
+    )
+    assert res1.status_code == 409
+    assert "price mismatch" in res1.json()["detail"].lower()
+
+    # Attempt 2: Forged Airline (e.g. tamper to FakeAir)
+    forged_airline_offer = dict(valid_offer)
+    forged_airline_offer["airline"] = "FakeAir International"
+
+    res2 = client.post(
+        "/api/v1/ai/proposals",
+        json={
+            "trip_id": trip.id,
+            "proposal_type": "ATTACH_FLIGHT_OFFER",
+            "offer_id": valid_offer["offer_id"],
+            "offer": forged_airline_offer,
+            "search_context": search_context
+        }
+    )
+    assert res2.status_code == 409
+    assert "airline mismatch" in res2.json()["detail"].lower()
+
+
+def test_proposal_rejects_unknown_offer_id(client, db_session, test_user):
+    """
+    P0 L2.5 Test: Requesting an offer_id not generated for the given search context
+    must be rejected with HTTP 409 Conflict.
+    """
+    from datetime import date
+    from app.models.models import Itinerary, ItineraryDay
+    from app.services.trip_revision_service import record_initial_revision
+
+    trip = Itinerary(
+        title="Goa Trip Unknown Offer",
+        destination="Goa",
+        owner_id=test_user.id,
+        total_budget=40000.0,
+        currency="INR",
+        start_date=date(2026, 11, 20),
+        end_date=date(2026, 11, 25)
+    )
+    db_session.add(trip)
+    db_session.commit()
+
+    day1 = ItineraryDay(itinerary_id=trip.id, day_number=1, title="Day 1")
+    db_session.add(day1)
+    db_session.commit()
+
+    record_initial_revision(db_session, trip.id, test_user.id)
+    db_session.commit()
+
+    search_context = {
+        "origin": "DEL",
+        "destination": "GOI",
+        "departure_date": "2026-11-20",
+        "return_date": "2026-11-25",
+        "passengers": 1,
+        "cabin_class": "economy",
+        "trip_type": "roundtrip"
+    }
+
+    res = client.post(
+        "/api/v1/ai/proposals",
+        json={
+            "trip_id": trip.id,
+            "proposal_type": "ATTACH_FLIGHT_OFFER",
+            "offer_id": "fl_completely_fabricated_id_99999",
+            "search_context": search_context
+        }
+    )
+    assert res.status_code == 409
+    assert "could not be verified against the canonical catalog" in res.json()["detail"]
+
+
+

@@ -176,6 +176,18 @@ export function FlightResults({
     });
   };
 
+  const handleScrollToOffer = (offerId?: string | null) => {
+    if (!offerId) return;
+    const el = document.querySelector(`[data-testid="flight-card-${offerId}"]`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.classList.add('ring-2', 'ring-orange-500');
+      setTimeout(() => {
+        el.classList.remove('ring-2', 'ring-orange-500');
+      }, 1500);
+    }
+  };
+
   // 1. Loading Skeleton UX (3 to 5 skeleton cards)
   if (isLoading) {
     return (
@@ -414,44 +426,92 @@ export function FlightResults({
         >
           {/* Cheapest Metric */}
           {decisionMetrics.lowestFare !== null && (
-            <div className="p-3.5 rounded-2xl bg-emerald-50/70 border border-emerald-200/80 space-y-0.5">
-              <span className="text-[10px] font-bold tracking-wider uppercase text-emerald-800">
-                CHEAPEST
-              </span>
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => handleScrollToOffer(decisionMetrics.cheapestOffer?.offer_id)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  handleScrollToOffer(decisionMetrics.cheapestOffer?.offer_id);
+                }
+              }}
+              aria-label="View cheapest flight option in catalog"
+              className="p-3.5 rounded-2xl bg-emerald-50/70 hover:bg-emerald-100/70 border border-emerald-200/80 space-y-1 cursor-pointer transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-2xs"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold tracking-wider uppercase text-emerald-800">
+                  CHEAPEST
+                </span>
+                <span className="text-[11px] font-semibold text-emerald-700">
+                  {formatFlightDuration(decisionMetrics.cheapestOffer?.duration_minutes)} · {decisionMetrics.cheapestOffer?.stops === 0 ? 'Direct' : `${decisionMetrics.cheapestOffer?.stops} stop`}
+                </span>
+              </div>
               <div className="text-lg font-bold font-serif-editorial text-emerald-950">
                 {formatCurrency(decisionMetrics.lowestFare, rawOffers[0]?.currency)}
               </div>
-              <p className="text-[10px] text-emerald-700">Lowest fare in this catalog</p>
+              <p className="text-[10px] text-emerald-700">Lowest fare · trade-off: longer transit or stop</p>
             </div>
           )}
 
           {/* Fastest Metric */}
           {decisionMetrics.fastestDuration !== null && (
-            <div className="p-3.5 rounded-2xl bg-blue-50/70 border border-blue-200/80 space-y-0.5">
-              <span className="text-[10px] font-bold tracking-wider uppercase text-blue-800">
-                FASTEST
-              </span>
-              <div className="text-lg font-bold font-serif-editorial text-blue-950">
-                {formatFlightDuration(decisionMetrics.fastestDuration)}
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => handleScrollToOffer(decisionMetrics.fastestOffer?.offer_id)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  handleScrollToOffer(decisionMetrics.fastestOffer?.offer_id);
+                }
+              }}
+              aria-label="View fastest flight option in catalog"
+              className="p-3.5 rounded-2xl bg-blue-50/70 hover:bg-blue-100/70 border border-blue-200/80 space-y-1 cursor-pointer transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-2xs"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold tracking-wider uppercase text-blue-800">
+                  FASTEST
+                </span>
+                <span className="text-[11px] font-semibold text-blue-700">
+                  {formatFlightDuration(decisionMetrics.fastestDuration)} · {decisionMetrics.fastestOffer?.stops === 0 ? 'Direct' : `${decisionMetrics.fastestOffer?.stops} stop`}
+                </span>
               </div>
-              <p className="text-[10px] text-blue-700">Shortest travel time in this catalog</p>
+              <div className="text-lg font-bold font-serif-editorial text-blue-950">
+                {formatCurrency(decisionMetrics.fastestOffer?.price, rawOffers[0]?.currency)}
+              </div>
+              <p className="text-[10px] text-blue-700">Shortest travel time · trade-off: higher fare</p>
             </div>
           )}
 
           {/* Balanced Option Metric */}
           {decisionMetrics.balancedFare !== null && decisionMetrics.balancedDuration !== null && (
-            <div className="p-3.5 rounded-2xl bg-orange-50/70 border border-orange-200/80 space-y-0.5">
-              <div className="flex items-center gap-1 text-[10px] font-bold tracking-wider uppercase text-orange-800">
-                <Sparkles className="w-3 h-3 text-orange-600" />
-                <span>BALANCED</span>
-              </div>
-              <div className="text-lg font-bold font-serif-editorial text-orange-950">
-                {formatCurrency(decisionMetrics.balancedFare, rawOffers[0]?.currency)}{' '}
-                <span className="text-xs font-normal text-orange-800">
-                  · {formatFlightDuration(decisionMetrics.balancedDuration)}
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => handleScrollToOffer(decisionMetrics.balancedOffer?.offer_id)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  handleScrollToOffer(decisionMetrics.balancedOffer?.offer_id);
+                }
+              }}
+              aria-label="View balanced flight option in catalog"
+              className="p-3.5 rounded-2xl bg-orange-50/70 hover:bg-orange-100/70 border border-orange-200/80 space-y-1 cursor-pointer transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-orange-500 shadow-2xs"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1 text-[10px] font-bold tracking-wider uppercase text-orange-800">
+                  <Sparkles className="w-3 h-3 text-orange-600" />
+                  <span>BALANCED</span>
+                </div>
+                <span className="text-[11px] font-semibold text-orange-700">
+                  {formatFlightDuration(decisionMetrics.balancedDuration)} · {decisionMetrics.balancedOffer?.stops === 0 ? 'Direct' : `${decisionMetrics.balancedOffer?.stops} stop`}
                 </span>
               </div>
-              <p className="text-[10px] text-orange-700">Balanced across fare, duration and stops</p>
+              <div className="text-lg font-bold font-serif-editorial text-orange-950">
+                {formatCurrency(decisionMetrics.balancedFare, rawOffers[0]?.currency)}
+              </div>
+              <p className="text-[10px] text-orange-700">Optimal combination of fare, direct route & timing</p>
             </div>
           )}
         </div>
@@ -579,7 +639,7 @@ export function FlightResults({
                   className="flex-1 px-4 py-2.5 text-xs font-bold text-white bg-orange-600 hover:bg-orange-700 rounded-xl shadow-2xs transition-colors cursor-pointer text-center"
                   data-testid="apply-mobile-filters-btn"
                 >
-                  Apply filters ({filteredOffers.length})
+                  Show {filteredOffers.length} {filteredOffers.length === 1 ? 'flight' : 'flights'}
                 </button>
               </div>
             </div>
@@ -588,6 +648,11 @@ export function FlightResults({
 
         {/* Right Column: Sort bar + Cards List or Empty Filter Notice */}
         <div className="space-y-4">
+          {/* Screen reader live announcements */}
+          <div className="sr-only" aria-live="polite" aria-atomic="true">
+            {filteredOffers.length} flights available for current search and filters.
+          </div>
+
           {/* Sorting Bar + Compare Trigger */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <FlightSort currentSort={currentSort} onSortChange={setCurrentSort} />
@@ -605,31 +670,70 @@ export function FlightResults({
             )}
           </div>
 
-          {/* Cards List or Empty State after filtering */}
+          {/* Cards List or Diagnostic Empty State after filtering */}
           {sortedOffers.length === 0 ? (
             <div
-              className="py-12 px-6 rounded-2xl bg-white border border-slate-200 text-center space-y-3 shadow-2xs"
+              className="py-12 px-6 rounded-2xl bg-white border border-slate-200 text-center space-y-4 shadow-2xs"
               data-testid="no-matching-flights"
             >
               <Plane className="w-8 h-8 text-slate-300 mx-auto" />
-              <h4 className="font-bold text-slate-800 text-sm">No matching flight options</h4>
-              <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                Try widening:
-                <br />
-                • Stops
-                <br />
-                • Departure time
-                <br />
-                • Maximum price
-              </p>
-              <button
-                type="button"
-                onClick={handleResetFilters}
-                className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-orange-600 bg-orange-50 hover:bg-orange-100 rounded-xl transition-colors cursor-pointer"
-              >
-                <RotateCcw className="w-3 h-3" />
-                <span>Reset All Filters</span>
-              </button>
+              <div className="space-y-1">
+                <h4 className="font-bold text-slate-800 text-sm">No matching flights</h4>
+                <p className="text-xs text-slate-500">
+                  Your filters removed all {rawOffers.length} options.
+                </p>
+              </div>
+
+              {/* Diagnostic actions that actually update state */}
+              <div className="pt-2 flex flex-wrap items-center justify-center gap-2 max-w-md mx-auto">
+                <span className="text-[11px] font-semibold text-slate-400 w-full block uppercase tracking-wider mb-1">
+                  Try adjusting:
+                </span>
+                {filters.stops.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setFilters((prev) => ({ ...prev, stops: [] }))}
+                    className="px-3 py-1.5 text-xs font-semibold text-orange-700 bg-orange-50 hover:bg-orange-100 border border-orange-200 rounded-xl transition-colors cursor-pointer"
+                  >
+                    Clear stops
+                  </button>
+                )}
+                {filters.maxPrice < maxPrice && (
+                  <button
+                    type="button"
+                    onClick={() => setFilters((prev) => ({ ...prev, maxPrice }))}
+                    className="px-3 py-1.5 text-xs font-semibold text-orange-700 bg-orange-50 hover:bg-orange-100 border border-orange-200 rounded-xl transition-colors cursor-pointer"
+                  >
+                    Increase price
+                  </button>
+                )}
+                {(filters.departureSlots.length > 0 || filters.arrivalSlots.length > 0) && (
+                  <button
+                    type="button"
+                    onClick={() => setFilters((prev) => ({ ...prev, departureSlots: [], arrivalSlots: [] }))}
+                    className="px-3 py-1.5 text-xs font-semibold text-orange-700 bg-orange-50 hover:bg-orange-100 border border-orange-200 rounded-xl transition-colors cursor-pointer"
+                  >
+                    Clear time slots
+                  </button>
+                )}
+                {filters.airlines.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setFilters((prev) => ({ ...prev, airlines: [] }))}
+                    className="px-3 py-1.5 text-xs font-semibold text-orange-700 bg-orange-50 hover:bg-orange-100 border border-orange-200 rounded-xl transition-colors cursor-pointer"
+                  >
+                    Clear airlines
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={handleResetFilters}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  <span>Reset all filters</span>
+                </button>
+              </div>
             </div>
           ) : (
             <div className="space-y-3.5" data-testid="flight-offer-list">
@@ -664,27 +768,31 @@ export function FlightResults({
         </div>
       </div>
 
-      {/* Floating Comparison Tray (Desktop/Mobile) */}
+      {/* Floating Comparison Tray (Desktop/Mobile) - lightweight temporary workspace */}
       {comparedOffers.length > 0 && !isComparisonOpen && (
         <aside
           aria-label="Flight comparison tray"
-          className="fixed bottom-24 md:bottom-6 right-6 z-40 flex items-center gap-3 p-3 bg-slate-900 text-white rounded-2xl shadow-xl border border-slate-700 animate-in slide-in-from-bottom-4 duration-200"
+          className="fixed bottom-[76px] md:bottom-6 right-4 sm:right-6 z-40 flex items-center gap-3 px-3.5 py-2.5 bg-slate-900/95 backdrop-blur-md text-white rounded-2xl shadow-2xl border border-slate-700/80 animate-in slide-in-from-bottom-4 duration-200"
           data-testid="floating-comparison-tray"
         >
-          <div className="flex items-center gap-2 pl-2">
-            <Scale className="w-4 h-4 text-orange-400" />
+          <div className="flex items-center gap-2 pl-1">
+            <Scale className="w-3.5 h-3.5 text-orange-400" />
             <span className="text-xs font-semibold">
-              {comparedOffers.length} flight{comparedOffers.length > 1 ? 's' : ''} in comparison
+              {comparedOffers.length} selected
+            </span>
+            <span className="sr-only">
+              {comparedOffers.length} {comparedOffers.length === 1 ? 'flight' : 'flights'} in comparison
             </span>
           </div>
 
           <div className="flex items-center gap-1.5">
             <button
               type="button"
+              data-testid="floating-compare-btn"
               onClick={() => setIsComparisonOpen(true)}
-              className="px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold rounded-xl cursor-pointer transition-colors shadow-2xs"
+              className="px-3.5 py-1.5 bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold rounded-xl cursor-pointer transition-colors shadow-2xs"
             >
-              Compare Now
+              Compare
             </button>
             <button
               type="button"

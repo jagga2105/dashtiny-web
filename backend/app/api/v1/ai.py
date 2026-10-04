@@ -40,8 +40,11 @@ from app.services.trip_revision_service import (
     validate_revision_parent,
     record_initial_revision
 )
+from app.services.providers.curated import CuratedFlightProvider
 
 router = APIRouter(prefix="/ai", tags=["DashTiny AI Action & Proposal Engine"])
+
+_flight_provider = CuratedFlightProvider()
 
 
 class AIProposalRequest(BaseModel):
@@ -143,26 +146,40 @@ def create_ai_proposal(
 
     # Check if flight offer proposal
     if request.proposal_type == "ATTACH_FLIGHT_OFFER" or request.offer:
-        offer = request.offer or {}
+        # P0 L2.5: Authoritative canonical offer reconstruction & verification.
+        # Frontend provides offer_id and search_context. Browser cannot invent arbitrary offer details.
+        target_offer_id = request.offer_id or (request.offer.get("offer_id") if request.offer else None)
+        if not target_offer_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="offer_id is required to attach a flight offer to a trip."
+            )
 
-        # P0: Verify offer search context matches current active search context (409 Conflict defense)
-        if request.search_context:
-            ctx = request.search_context
-            ctx_origin = (ctx.get("origin") or "").strip().upper()
-            ctx_dest = (ctx.get("destination") or "").strip().upper()
-            ctx_dep = (ctx.get("departure_date") or ctx.get("departureDate") or "").strip()
-            ctx_ret = (ctx.get("return_date") or ctx.get("returnDate") or "").strip()
-            ctx_cabin = (ctx.get("cabin_class") or ctx.get("cabinClass") or "").strip().lower()
-            ctx_pax = ctx.get("passengers")
-            ctx_trip_type = (ctx.get("trip_type") or ctx.get("tripType") or "").strip().lower()
+        # Determine effective search context
+        ctx = request.search_context or (request.offer if request.offer else {})
+        ctx_origin = (ctx.get("origin") or "").strip().upper()
+        ctx_dest = (ctx.get("destination") or "").strip().upper()
+        ctx_dep = (ctx.get("departure_date") or ctx.get("departureDate") or "").strip()
+        ctx_ret = (ctx.get("return_date") or ctx.get("returnDate") or "").strip() or None
+        ctx_cabin = (ctx.get("cabin_class") or ctx.get("cabinClass") or "economy").strip().lower()
+        ctx_pax = int(ctx.get("passengers") or 1)
+        ctx_trip_type = (ctx.get("trip_type") or ctx.get("tripType") or ("roundtrip" if ctx_ret else "oneway")).strip().lower()
 
-            offer_origin = (offer.get("origin") or "").strip().upper()
-            offer_dest = (offer.get("destination") or "").strip().upper()
-            offer_dep = (offer.get("departure_date") or "").strip()
-            offer_ret = (offer.get("return_date") or "").strip()
-            offer_cabin = (offer.get("cabin_class") or "").strip().lower()
-            offer_pax = offer.get("passengers")
-            offer_trip_type = (offer.get("trip_type") or "").strip().lower()
+        if not ctx_origin or not ctx_dest or not ctx_dep:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="A valid search context (origin, destination, departure_date) is required to verify flight offer."
+            )
+
+        # If both search_context and an offer payload were provided, verify search context agreement
+        if request.search_context and request.offer:
+            offer_origin = (request.offer.get("origin") or "").strip().upper()
+            offer_dest = (request.offer.get("destination") or "").strip().upper()
+            offer_dep = (request.offer.get("departure_date") or "").strip()
+            offer_ret = (request.offer.get("return_date") or "").strip()
+            offer_cabin = (request.offer.get("cabin_class") or "").strip().lower()
+            offer_pax = request.offer.get("passengers")
+            offer_trip_type = (request.offer.get("trip_type") or "").strip().lower()
 
             mismatches = []
             if ctx_origin and offer_origin and ctx_origin != offer_origin:
@@ -185,6 +202,48 @@ def create_ai_proposal(
                     status_code=status.HTTP_409_CONFLICT,
                     detail=f"Flight offer search context does not match active search context: {', '.join(mismatches)}. Please refresh your search."
                 )
+
+        # Query provider to reconstruct authoritative canonical offers for this search context
+        canonical_offers = _flight_provider.search_flights(
+            origin=ctx_origin,
+            destination=ctx_dest,
+            departure_date=ctx_dep,
+            return_date=ctx_ret if ctx_trip_type == "roundtrip" else None,
+            passengers=ctx_pax,
+            cabin_class=ctx_cabin,
+            trip_type=ctx_trip_type,
+            db=db
+        )
+        canonical_match = next((o for o in canonical_offers if o.offer_id == target_offer_id), None)
+        if not canonical_match:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Flight offer '{target_offer_id}' could not be verified against the canonical catalog for this search context. Offer is invalid or expired."
+            )
+
+        # Forgery validation against client-submitted offer payload
+        if request.offer:
+            client_price = request.offer.get("price")
+            if client_price is not None and abs(float(client_price) - float(canonical_match.price)) > 0.01:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"Forged flight offer metadata detected: price mismatch (submitted: {client_price}, canonical: {canonical_match.price})."
+                )
+            client_airline = request.offer.get("airline")
+            if client_airline and client_airline.strip().lower() != canonical_match.airline.strip().lower():
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"Forged flight offer metadata detected: airline mismatch (submitted: {client_airline}, canonical: {canonical_match.airline})."
+                )
+            client_fn = request.offer.get("flight_number")
+            if client_fn and client_fn.strip().lower() != canonical_match.flight_number.strip().lower():
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Forged flight offer metadata detected: flight number mismatch."
+                )
+
+        # Use canonical verified offer attributes exclusively
+        offer = canonical_match.model_dump() if hasattr(canonical_match, "model_dump") else canonical_match.dict()
 
         airline = offer.get("airline", "Selected Airline")
         flight_number = offer.get("flight_number", "FL-100")
@@ -269,6 +328,7 @@ def create_ai_proposal(
         return {
             "proposal_id": proposal.id,
             "trip_id": proposal.trip_id,
+            "proposal_type": "ATTACH_FLIGHT_OFFER",
             "summary": proposal.summary,
             "changes": proposal.changes,
             "before": proposal.before_state,

@@ -242,7 +242,7 @@ export function FlightSearchForm({
             type="button"
             onClick={handleSwap}
             aria-label="Swap origin and destination"
-            className="p-2.5 rounded-full border border-slate-200 hover:bg-orange-50 hover:border-orange-200 text-slate-600 hover:text-orange-600 transition-colors cursor-pointer"
+            className="p-2.5 rounded-full border border-slate-200 hover:bg-orange-50 hover:border-orange-200 text-slate-600 hover:text-orange-600 transition-all duration-200 hover:rotate-180 motion-reduce:transition-none motion-reduce:hover:rotate-0 cursor-pointer shadow-2xs"
             title="Swap departure and arrival airports"
           >
             <ArrowLeftRight className="w-4 h-4" />

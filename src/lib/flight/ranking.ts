@@ -1,4 +1,5 @@
 import { FlightOffer, FlightSortOption } from '@/types/flight';
+import { parseFlightTimeToMinutes } from './filtering';
 
 export interface FlightDecisionMetrics {
   cheapestOffer: FlightOffer | null;
@@ -70,6 +71,24 @@ export function computeFlightDecisionMetrics(
 }
 
 /**
+ * Calculates a monotonic sorting value (in minutes) for a flight departure.
+ * Combines structured departure date (if present) with parsed 12-hour/24-hour departure time.
+ * Reusable helper ensuring chronological earliest/latest sorting without string localeCompare.
+ */
+export function getFlightDepartureSortValue(offer: FlightOffer): number {
+  const timeMinutes = parseFlightTimeToMinutes(offer.departure_time) ?? 0;
+  if (offer.departure_date) {
+    const parts = offer.departure_date.split('-').map(Number);
+    if (parts.length === 3 && !isNaN(parts[0]) && !isNaN(parts[1]) && !isNaN(parts[2])) {
+      // Date in ms / 60000 = minutes from UTC epoch, plus time of day in minutes
+      const dateInMinutes = Math.floor(Date.UTC(parts[0], parts[1] - 1, parts[2]) / 60000);
+      return dateInMinutes + timeMinutes;
+    }
+  }
+  return timeMinutes;
+}
+
+/**
  * Deterministic sort pipeline for FlightOffer items
  */
 export function sortFlightOffers(
@@ -91,11 +110,11 @@ export function sortFlightOffers(
       break;
 
     case 'earliest':
-      list.sort((a, b) => a.departure_time.localeCompare(b.departure_time));
+      list.sort((a, b) => getFlightDepartureSortValue(a) - getFlightDepartureSortValue(b));
       break;
 
     case 'latest':
-      list.sort((a, b) => b.departure_time.localeCompare(a.departure_time));
+      list.sort((a, b) => getFlightDepartureSortValue(b) - getFlightDepartureSortValue(a));
       break;
 
     case 'balanced':

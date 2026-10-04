@@ -80,12 +80,19 @@ def generate_deterministic_offer_id(
 ) -> str:
     """
     Deterministic hashing of complete offer identity across search contexts.
-    Same exact search -> same offer_id
-    Different departure date -> different offer_id
-    Different return date -> different offer_id
-    Different cabin -> different offer_id
-    Different passengers -> different offer_id
-    Different trip type -> different offer_id
+    
+    CRITICAL ARCHITECTURAL SEMANTICS:
+    offer_id = deterministic quote identity (a specific quoted search result matching route,
+    dates, passenger count, cabin class, trip type, and inventory blueprint).
+    offer_id != permanent physical flight identity (physical aircraft, tail number, or route).
+    
+    Guarantees:
+    - Same exact search context -> same offer_id
+    - Different departure date -> different offer_id
+    - Different return date -> different offer_id
+    - Different cabin -> different offer_id
+    - Different passengers -> different offer_id
+    - Different trip type -> different offer_id
     """
     raw_seed = (
         f"{provider.strip()}|{airline.strip()}|{flight_number.strip()}|"

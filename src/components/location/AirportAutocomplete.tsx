@@ -261,6 +261,26 @@ export function AirportAutocomplete({
         )}
       </div>
 
+      {/* Confirmed Airport Selection Identity */}
+      {selectedAirport && !isOpen && (
+        <div
+          data-testid="airport-confirmed-selection"
+          className="flex items-center gap-2 px-2.5 py-1.5 bg-slate-50 border border-slate-200/90 rounded-xl transition-all duration-200 motion-reduce:transition-none"
+        >
+          <span className="font-mono font-bold text-[10px] text-orange-700 bg-orange-100/90 border border-orange-200/70 px-1.5 py-0.5 rounded tracking-wider shrink-0">
+            {selectedAirport.iata_code}
+          </span>
+          <div className="min-w-0 flex-1">
+            <span className="text-xs font-bold text-slate-900 truncate block">
+              {selectedAirport.city}
+            </span>
+            <span className="text-[10px] font-medium text-slate-500 truncate block">
+              {selectedAirport.name}
+            </span>
+          </div>
+        </div>
+      )}
+
       {helperText && !error && (
         <span className="text-[11px] text-slate-500">{helperText}</span>
       )}

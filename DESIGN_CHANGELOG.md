@@ -163,4 +163,27 @@ Every single data element presented in the DashTiny interface carries its proven
   - Sponsored promotional card carousels pretending to be flight search results.
   - Legacy mock user tokens and unverified endpoints.
 
+---
+
+## ✈️ DashTiny L2.5: Flight Correctness & Premium UX Finalization
+
+- **Correctness & Authoritative Hardening**:
+  - **12-Hour Time Parsing**: Implemented `parseFlightTimeToMinutes(time: string): number | null` handling AM/PM notation (`12:00 AM -> 0`, `01:00 AM -> 60`, `11:59 AM -> 719`, `12:00 PM -> 720`, `01:00 PM -> 780`, `11:59 PM -> 1439`) and 24-hour fallback. Standardized all time-slot filtering (`Early Morning: 00:00–05:59`, `Morning: 06:00–11:59`, `Afternoon: 12:00–17:59`, `Evening: 18:00–21:59`, `Night: 22:00–23:59`).
+  - **Earliest / Latest Sorting**: Implemented `getFlightDepartureSortValue(offer: FlightOffer): number` combining structured departure date and departure minutes. Eliminated string-based `localeCompare()`.
+  - **Authoritative Offer Verification**: Hardened `POST /api/v1/ai/proposals` attachment flow. Server reconstructs canonical offer from curated catalog using `offer_id` and `search_context`, verifying price, airline, and flight identity. Forged or mismatched client metadata is rejected with `HTTP 409 Conflict`.
+  - **Deterministic Offer ID Semantics**: Documented `offer_id` as deterministic quote identity representing a specific quoted search result, distinct from physical aircraft/flight schedule identity.
+- **Premium Editorial UI/UX Pass**:
+  - **Search Header Visual Density**: Clean visual hierarchy dividing primary fields (Where, When) from secondary chips (Cabin, Travelers, Trip Type).
+  - **Airport Selection UX**: Recognizable confirmed selection showing IATA code badge `[ DEL ]`, City name, and official airport title without heavy raw text.
+  - **Micro-interactions**: 150–200ms directional transitions on swap and filter buttons, respecting `prefers-reduced-motion`.
+  - **Quiet Trip Context**: Replaced bulky banner with compact editorial context (`Planning flights for DEL → GOI · Edit search`).
+  - **Decision Intelligence Summary**: Enhanced CHEAPEST, FASTEST, and BALANCED cards with explicit trade-offs and interactive click-to-scroll to corresponding card with brief pulse highlight.
+  - **Flight Card Hierarchy**: Prioritized departure/arrival schedule and price; subdued secondary baggage/cancellation metadata. Solid "Select flight" vs subtle outline "Continue to provider" CTAs.
+  - **Restrained Provenance**: Soft slate neutrals with interactive "Why?" tooltip explaining curated catalog vs live inventory.
+  - **Factual "Why this is notable"**: Replaced marketing copy with calm factual decision criteria (`Direct · 2h 45m · balanced fare` / `Lowest fare in this catalog`).
+  - **Mobile 360px Card & Filter Sheet**: Dedicated vertical layout for narrow mobile viewports, sticky mobile filter drawer action (`Reset | Show X flights`), and safe-area aware comparison tray (`bottom-[76px] md:bottom-6`).
+  - **Diagnostic Empty State**: Direct action buttons to clear specific active filters (stops, price, time, airlines).
+  - **Accessibility**: Added `aria-live="polite"` announcements for search and filter updates, keyboard navigation, and focus management.
+
+
 

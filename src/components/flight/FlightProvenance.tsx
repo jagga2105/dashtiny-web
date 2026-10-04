@@ -16,28 +16,44 @@ export function FlightProvenance({
   retrievedAt,
   className = '',
 }: FlightProvenanceProps) {
+  const [showExplanation, setShowExplanation] = React.useState(false);
+
   return (
     <div
-      className={`flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-3 rounded-xl bg-amber-50/70 border border-amber-200/80 text-amber-900 text-xs ${className}`}
+      className={`relative inline-flex flex-wrap items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200/90 text-slate-700 text-xs ${className}`}
       data-testid="flight-provenance-banner"
     >
-      <div className="flex items-center gap-2">
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 font-semibold text-[11px] tracking-wide uppercase">
-          <Sparkles className="w-3 h-3 text-amber-600" />
-          Curated Catalog
-        </span>
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white/80 text-amber-800 font-medium text-[11px] border border-amber-200/60">
-          <Clock className="w-3 h-3 text-amber-600" />
-          Estimated availability
-        </span>
+      <div className="flex items-center gap-1.5 text-xs font-medium text-slate-700">
+        <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+        <span>Curated catalog · estimated availability</span>
       </div>
 
-      <div className="flex items-center gap-1.5 text-amber-800/90 text-[11px]">
-        <Info className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-        <span>
-          These are curated catalog examples, not live airline inventory.
-        </span>
-      </div>
+      <button
+        type="button"
+        onClick={() => setShowExplanation((prev) => !prev)}
+        onMouseEnter={() => setShowExplanation(true)}
+        onMouseLeave={() => setShowExplanation(false)}
+        aria-expanded={showExplanation}
+        className="text-[11px] font-semibold text-orange-600 hover:text-orange-700 underline underline-offset-2 cursor-pointer ml-1"
+        data-testid="provenance-why-trigger"
+      >
+        Why?
+      </button>
+
+      {showExplanation && (
+        <div
+          role="tooltip"
+          className="absolute z-30 top-full left-0 mt-1.5 p-3 w-72 bg-white rounded-xl shadow-lg border border-slate-200 text-xs text-slate-600 space-y-1 animate-in fade-in duration-150"
+        >
+          <div className="flex items-center gap-1.5 font-bold text-slate-900">
+            <Info className="w-3.5 h-3.5 text-orange-500 shrink-0" />
+            <span>Curated Inventory</span>
+          </div>
+          <p className="text-[11px] text-slate-600 leading-relaxed">
+            These are curated travel catalog examples. They are not live airline inventory.
+          </p>
+        </div>
+      )}
     </div>
   );
 }

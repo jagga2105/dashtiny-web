@@ -457,6 +457,7 @@ export const apiService = {
       body: JSON.stringify({
         trip_id: tripId,
         proposal_type: 'ATTACH_FLIGHT_OFFER',
+        offer_id: offer.offer_id,
         offer,
         search_context: searchContext,
       }),

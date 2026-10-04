@@ -216,9 +216,14 @@ export function FlightOfferCard({
 
           {/* Factual Why This Fits Explanation */}
           {factualReason && (
-            <p className="text-[11px] text-orange-950/80 bg-orange-50/70 border border-orange-100/90 rounded-lg px-2.5 py-1.5 italic">
-              💡 {factualReason}
-            </p>
+            <div className="pt-1">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">
+                Why this is notable
+              </span>
+              <p className="text-xs font-medium text-slate-700">
+                {factualReason.replace(/^💡\s*/, '')}
+              </p>
+            </div>
           )}
         </div>
 

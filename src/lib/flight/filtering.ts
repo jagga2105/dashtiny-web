@@ -25,25 +25,70 @@ export const ARRIVAL_SLOTS: { id: TimeSlotId; label: string; desc: string }[] = 
 ];
 
 /**
- * Checks whether an HH:MM timestamp falls within a recognized time corridor
+ * Robustly parses a flight time string into minutes from midnight (0–1439).
+ * Supports 12-hour AM/PM format (e.g., "12:00 AM" -> 0, "01:15 PM" -> 795)
+ * as well as 24-hour format (e.g., "05:30" -> 330, "14:30" -> 870).
+ *
+ * Returns null if the string is empty or invalid.
+ */
+export function parseFlightTimeToMinutes(timeStr: string): number | null {
+  if (!timeStr || typeof timeStr !== 'string') return null;
+  const clean = timeStr.trim();
+
+  // 12-hour format: e.g. "12:00 AM", "01:15 PM", "8:40pm"
+  const match12 = clean.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (match12) {
+    let hour = parseInt(match12[1], 10);
+    const minute = parseInt(match12[2], 10);
+    const meridiem = match12[3].toUpperCase();
+
+    if (hour < 1 || hour > 12 || minute < 0 || minute > 59) return null;
+
+    if (meridiem === 'AM') {
+      if (hour === 12) hour = 0;
+    } else {
+      // PM
+      if (hour !== 12) hour += 12;
+    }
+    return hour * 60 + minute;
+  }
+
+  // 24-hour format fallback: e.g. "05:30", "14:30"
+  const match24 = clean.match(/^(\d{1,2}):(\d{2})$/);
+  if (match24) {
+    const hour = parseInt(match24[1], 10);
+    const minute = parseInt(match24[2], 10);
+    if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
+    return hour * 60 + minute;
+  }
+
+  return null;
+}
+
+/**
+ * Checks whether a timestamp falls within a recognized time corridor using minutes from midnight.
+ * Corridors:
+ * Early Morning: 00:00–05:59 (0–359 mins)
+ * Morning:       06:00–11:59 (360–719 mins)
+ * Afternoon:     12:00–17:59 (720–1079 mins)
+ * Evening:       18:00–21:59 (1080–1319 mins)
+ * Night:         22:00–23:59 (1320–1439 mins)
  */
 export function isTimeInSlot(timeStr: string, slotId: TimeSlotId): boolean {
-  if (!timeStr) return false;
-  const match = timeStr.match(/^(\d{1,2}):(\d{2})/);
-  if (!match) return false;
-  const hour = parseInt(match[1], 10);
+  const mins = parseFlightTimeToMinutes(timeStr);
+  if (mins === null) return false;
 
   switch (slotId) {
     case 'early_morning':
-      return hour < 6;
+      return mins >= 0 && mins < 360;
     case 'morning':
-      return hour >= 6 && hour < 12;
+      return mins >= 360 && mins < 720;
     case 'afternoon':
-      return hour >= 12 && hour < 18;
+      return mins >= 720 && mins < 1080;
     case 'evening':
-      return hour >= 18 && hour < 22;
+      return mins >= 1080 && mins < 1320;
     case 'night':
-      return hour >= 22;
+      return mins >= 1320 && mins <= 1439;
     default:
       return true;
   }
