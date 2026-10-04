@@ -18,15 +18,17 @@ Implements:
    and executes through the authoritative TripRevisionService.
 """
 import time
+from datetime import datetime, date
 from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
 from app.models.models import (
     Itinerary, ItineraryDay, ItineraryActivity, User,
-    AIRun, AIToolCall, SquadRoom, SquadMember, TripSnapshot, TripProposal, Booking
+    AIRun, AIToolCall, SquadRoom, SquadMember, TripSnapshot, TripProposal, Booking, Airport
 )
 from app.ai.tools.itinerary import apply_itinerary_action
 from app.ai.tools.weather import get_destination_weather
@@ -54,6 +56,8 @@ class AIProposalRequest(BaseModel):
     offer: Optional[Dict[str, Any]] = None
     offer_id: Optional[str] = None
     search_context: Optional[Dict[str, Any]] = None
+    explicit_origin_airport: Optional[str] = None
+    explicit_destination_airport: Optional[str] = None
 
 
 class AIQueryRequest(BaseModel):
@@ -106,37 +110,7 @@ def create_ai_proposal(
 
     verify_trip_access(trip, user, db)
 
-    # 1. Load canonical Trip state
-    before_days = serialize_trip_days(trip)
-
-    # 2. Run action tool to produce diff
-    action_result = apply_itinerary_action(request.instruction, before_days)
-
-    # 3. Verification tools: verify coordinates and weather advisory
-    spatial_verified = True
-    for d in action_result.get("updated_days", []):
-        for act in d.get("activities", []):
-            loc = act.get("location") or trip.destination
-            if act.get("lat") is None or act.get("lng") is None:
-                coords = get_coordinates(loc)
-                if coords.get("found"):
-                    act["lat"] = coords.get("lat")
-                    act["lng"] = coords.get("lng")
-                    if not act.get("provenance") or act.get("provenance") == "DETERMINISTIC":
-                        act["provenance"] = coords.get("provenance", "GEOCODED")
-                    act["location_source"] = "GEOCODED"
-                else:
-                    spatial_verified = False
-                    if not act.get("provenance"):
-                        act["provenance"] = "CURATED_UNRESOLVED"
-                    act["location_source"] = "UNRESOLVED"
-            else:
-                act.setdefault("location_source", "GEOCODED")
-
-    weather_profile = get_destination_weather(trip.destination)
-    weather_condition = weather_profile.get("condition") or "Weather unavailable"
-
-    # 4. Get current revision version for parent locking (every Trip starts at v1)
+    # 1. Get current revision version for parent locking (every Trip starts at v1)
     curr_version = get_current_version(db, trip.id)
     if curr_version == 0:
         raise HTTPException(
@@ -144,10 +118,10 @@ def create_ai_proposal(
             detail="Trip has not been initialized with baseline revision v1."
         )
 
-    # Check if flight offer proposal
+    # BRANCH 1: ATTACH_FLIGHT_OFFER
+    # Strictly isolated from generic itinerary AI, geocoding, and weather tools.
     if request.proposal_type == "ATTACH_FLIGHT_OFFER" or request.offer:
-        # P0 L2.5: Authoritative canonical offer reconstruction & verification.
-        # Frontend provides offer_id and search_context. Browser cannot invent arbitrary offer details.
+        # Step A: Validate Offer ID
         target_offer_id = request.offer_id or (request.offer.get("offer_id") if request.offer else None)
         if not target_offer_id:
             raise HTTPException(
@@ -155,7 +129,7 @@ def create_ai_proposal(
                 detail="offer_id is required to attach a flight offer to a trip."
             )
 
-        # Determine effective search context
+        # Step B: Determine effective search context
         ctx = request.search_context or (request.offer if request.offer else {})
         ctx_origin = (ctx.get("origin") or "").strip().upper()
         ctx_dest = (ctx.get("destination") or "").strip().upper()
@@ -171,7 +145,7 @@ def create_ai_proposal(
                 detail="A valid search context (origin, destination, departure_date) is required to verify flight offer."
             )
 
-        # If both search_context and an offer payload were provided, verify search context agreement
+        # Step C: If both search_context and an offer payload were provided, verify search context agreement
         if request.search_context and request.offer:
             offer_origin = (request.offer.get("origin") or "").strip().upper()
             offer_dest = (request.offer.get("destination") or "").strip().upper()
@@ -203,7 +177,155 @@ def create_ai_proposal(
                     detail=f"Flight offer search context does not match active search context: {', '.join(mismatches)}. Please refresh your search."
                 )
 
-        # Query provider to reconstruct authoritative canonical offers for this search context
+        # Step D: Validate Trip vs Flight Compatibility (P0 L2.6)
+        # 1. Trip Origin Validation
+        if trip.origin and trip.origin.strip():
+            city_airports = db.query(Airport).filter(
+                func.lower(Airport.city) == trip.origin.strip().lower(),
+                Airport.is_active == True
+            ).all()
+            if len(city_airports) > 1:
+                if not (request.explicit_origin_airport and request.explicit_origin_airport.strip().upper() == ctx_origin):
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail=f"Trip origin '{trip.origin}' is ambiguous between multiple airports ({', '.join(a.iata_code for a in city_airports)}). Select an airport from the airport directory."
+                    )
+            elif len(city_airports) == 1:
+                if city_airports[0].iata_code != ctx_origin:
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail=f"Trip origin mismatch: Trip origin is '{trip.origin}' ({city_airports[0].iata_code}), but flight departs from '{ctx_origin}'."
+                    )
+            else:
+                clean_trip_origin = trip.origin.strip().upper()
+                iata_match = db.query(Airport).filter(
+                    Airport.iata_code == clean_trip_origin,
+                    Airport.is_active == True
+                ).first()
+                if iata_match:
+                    if clean_trip_origin != ctx_origin:
+                        raise HTTPException(
+                            status_code=status.HTTP_409_CONFLICT,
+                            detail=f"Trip origin mismatch: Trip origin is '{trip.origin}', but flight departs from '{ctx_origin}'."
+                        )
+                else:
+                    name_matches = db.query(Airport).filter(
+                        func.lower(Airport.name).like(f"%{trip.origin.strip().lower()}%"),
+                        Airport.is_active == True
+                    ).all()
+                    if len(name_matches) > 1:
+                        if not (request.explicit_origin_airport and request.explicit_origin_airport.strip().upper() == ctx_origin):
+                            raise HTTPException(
+                                status_code=status.HTTP_409_CONFLICT,
+                                detail=f"Trip origin '{trip.origin}' is ambiguous between multiple airports ({', '.join(a.iata_code for a in name_matches)}). Select an airport from the airport directory."
+                            )
+                    elif len(name_matches) == 1:
+                        if name_matches[0].iata_code != ctx_origin:
+                            raise HTTPException(
+                                status_code=status.HTTP_409_CONFLICT,
+                                detail=f"Trip origin mismatch: Trip origin is '{trip.origin}' ({name_matches[0].iata_code}), but flight departs from '{ctx_origin}'."
+                            )
+                    else:
+                        if clean_trip_origin != ctx_origin:
+                            raise HTTPException(
+                                status_code=status.HTTP_409_CONFLICT,
+                                detail=f"Trip origin mismatch: Trip origin '{trip.origin}' does not match flight origin '{ctx_origin}'."
+                            )
+
+        # 2. Trip Destination Validation
+        city_airports = db.query(Airport).filter(
+            func.lower(Airport.city) == trip.destination.strip().lower(),
+            Airport.is_active == True
+        ).all()
+        if len(city_airports) > 1:
+            if not (request.explicit_destination_airport and request.explicit_destination_airport.strip().upper() == ctx_dest):
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"Trip destination '{trip.destination}' is ambiguous between multiple airports ({', '.join(a.iata_code for a in city_airports)}). Select an airport from the airport directory."
+                )
+        elif len(city_airports) == 1:
+            if city_airports[0].iata_code != ctx_dest:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"Trip destination mismatch: Trip destination is '{trip.destination}' ({city_airports[0].iata_code}), but flight arrives at '{ctx_dest}'."
+                )
+        else:
+            clean_trip_dest = (trip.destination or "").strip().upper()
+            iata_match = db.query(Airport).filter(
+                Airport.iata_code == clean_trip_dest,
+                Airport.is_active == True
+            ).first()
+            if iata_match:
+                if clean_trip_dest != ctx_dest:
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail=f"Trip destination mismatch: Trip destination is '{trip.destination}', but flight arrives at '{ctx_dest}'."
+                    )
+            else:
+                name_matches = db.query(Airport).filter(
+                    func.lower(Airport.name).like(f"%{trip.destination.strip().lower()}%"),
+                    Airport.is_active == True
+                ).all()
+                if len(name_matches) > 1:
+                    if not (request.explicit_destination_airport and request.explicit_destination_airport.strip().upper() == ctx_dest):
+                        raise HTTPException(
+                            status_code=status.HTTP_409_CONFLICT,
+                            detail=f"Trip destination '{trip.destination}' is ambiguous between multiple airports ({', '.join(a.iata_code for a in name_matches)}). Select an airport from the airport directory."
+                        )
+                elif len(name_matches) == 1:
+                    if name_matches[0].iata_code != ctx_dest:
+                        raise HTTPException(
+                            status_code=status.HTTP_409_CONFLICT,
+                            detail=f"Trip destination mismatch: Trip destination is '{trip.destination}' ({name_matches[0].iata_code}), but flight arrives at '{ctx_dest}'."
+                        )
+                else:
+                    if clean_trip_dest != ctx_dest:
+                        raise HTTPException(
+                            status_code=status.HTTP_409_CONFLICT,
+                            detail=f"Trip destination mismatch: Trip destination '{trip.destination}' does not match flight destination '{ctx_dest}'."
+                        )
+
+        # 3. Trip Dates vs Flight Dates Validation
+        try:
+            flight_dep_date = datetime.strptime(ctx_dep, "%Y-%m-%d").date()
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid departure_date format. Must be YYYY-MM-DD."
+            )
+
+        if trip.start_date:
+            if flight_dep_date < trip.start_date:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"Flight departure date ({flight_dep_date}) is outside Trip dates ({trip.start_date} to {trip.end_date}). Departure is before trip start date."
+                )
+            if trip.end_date and flight_dep_date > trip.end_date:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"Flight departure date ({flight_dep_date}) is outside Trip dates ({trip.start_date} to {trip.end_date}). Departure is after trip end date."
+                )
+
+        if ctx_trip_type == "roundtrip" and ctx_ret:
+            try:
+                flight_ret_date = datetime.strptime(ctx_ret, "%Y-%m-%d").date()
+            except ValueError:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Invalid return_date format. Must be YYYY-MM-DD."
+                )
+            if trip.end_date and flight_ret_date > trip.end_date:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"Flight return date ({flight_ret_date}) is outside Trip dates ({trip.start_date} to {trip.end_date}). Return is after trip end date."
+                )
+            if trip.start_date and flight_ret_date < trip.start_date:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"Flight return date ({flight_ret_date}) is outside Trip dates ({trip.start_date} to {trip.end_date}). Return is before trip start date."
+                )
+
+        # Step E: Query provider to reconstruct authoritative canonical offers for this search context
         canonical_offers = _flight_provider.search_flights(
             origin=ctx_origin,
             destination=ctx_dest,
@@ -221,7 +343,7 @@ def create_ai_proposal(
                 detail=f"Flight offer '{target_offer_id}' could not be verified against the canonical catalog for this search context. Offer is invalid or expired."
             )
 
-        # Forgery validation against client-submitted offer payload
+        # Step F: Forgery validation against client-submitted offer payload
         if request.offer:
             client_price = request.offer.get("price")
             if client_price is not None and abs(float(client_price) - float(canonical_match.price)) > 0.01:
@@ -242,7 +364,7 @@ def create_ai_proposal(
                     detail="Forged flight offer metadata detected: flight number mismatch."
                 )
 
-        # Use canonical verified offer attributes exclusively
+        # Step G: Use canonical verified offer attributes exclusively
         offer = canonical_match.model_dump() if hasattr(canonical_match, "model_dump") else canonical_match.dict()
 
         airline = offer.get("airline", "Selected Airline")
@@ -264,6 +386,7 @@ def create_ai_proposal(
             "why_recommended": offer.get("why_recommended", "Traveler selected curated flight offer")
         }]
 
+        before_days = serialize_trip_days(trip)
         updated_days = []
         for idx, day in enumerate(before_days):
             day_copy = dict(day)
@@ -277,20 +400,31 @@ def create_ai_proposal(
                     "provenance": "CURATED",
                     "cost_estimate": price,
                     "why_recommended": offer.get("why_recommended", "Selected transportation for trip"),
-                    "location_source": "VERIFIED_AIRPORT",
+                    "location_source": "AIRPORT_DIRECTORY",
                     "transit_mode": "flight"
                 }
                 acts.insert(0, transit_act)
             if offer.get("trip_type") == "roundtrip" and idx == len(before_days) - 1 and len(before_days) > 1:
+                # P0 L2.6: Real canonical inbound segment data
+                inbound = offer.get("inbound") or {}
+                ret_dep_time = inbound.get("departure_time") or "06:00 PM"
+                ret_fn = inbound.get("flight_number") or f"{flight_number}-R"
+                ret_airline = inbound.get("airline") or airline
+                ret_orig = inbound.get("origin") or dest
+                ret_dest = inbound.get("destination") or origin
+                
+                ret_orig_city = offer.get('destination_airport', {}).get('city', ret_orig)
+                ret_dest_city = offer.get('origin_airport', {}).get('city', ret_dest)
+
                 return_act = {
-                    "time": "06:00 PM",
-                    "description": f"Return Flight {airline}: {dest} → {origin}",
+                    "time": ret_dep_time,
+                    "description": f"Return · {ret_airline} {ret_fn}\n{ret_orig_city} ({ret_orig}) → {ret_dest_city} ({ret_dest})",
                     "location": f"{offer.get('destination_airport', {}).get('name', dest)} Airport",
                     "place_type": "TR",
                     "provenance": "CURATED",
                     "cost_estimate": 0,
-                    "why_recommended": "Return flight segment",
-                    "location_source": "VERIFIED_AIRPORT",
+                    "why_recommended": f"Canonical return flight segment: {ret_airline} {ret_fn}",
+                    "location_source": "AIRPORT_DIRECTORY",
                     "transit_mode": "flight"
                 }
                 acts.append(return_act)
@@ -309,7 +443,9 @@ def create_ai_proposal(
             verification={
                 "spatial_bounds": "VERIFIED",
                 "airport_codes": f"{origin} - {dest}",
-                "route_feasible": True
+                "route_feasible": True,
+                "flight_verified": True,
+                "canonical_offer_id": target_offer_id
             },
             provenance={
                 "tier": "CURATED",
@@ -327,15 +463,53 @@ def create_ai_proposal(
 
         return {
             "proposal_id": proposal.id,
+            "id": proposal.id,
             "trip_id": proposal.trip_id,
+            "parent_version": proposal.parent_version,
             "proposal_type": "ATTACH_FLIGHT_OFFER",
             "summary": proposal.summary,
-            "changes": proposal.changes,
+            "changes": {
+                "flight_offer": offer,
+                "action": "attach_flight",
+                "summary": summary
+            },
             "before": proposal.before_state,
             "after": {"days": proposal.after_state},
             "verification": proposal.verification,
-            "provenance": proposal.provenance
+            "provenance": proposal.provenance,
+            "status": proposal.status
         }
+
+    # BRANCH 2: ITINERARY_DIFF (Generic AI / Action Engine)
+    # 1. Load canonical Trip state
+    before_days = serialize_trip_days(trip)
+
+    # 2. Run action tool to produce diff
+    action_result = apply_itinerary_action(request.instruction, before_days)
+
+    # 3. Verification tools: verify coordinates and weather advisory
+    spatial_verified = True
+    for d in action_result.get("updated_days", []):
+        for act in d.get("activities", []):
+            loc = act.get("location") or trip.destination
+            if act.get("lat") is None or act.get("lng") is None:
+                coords = get_coordinates(loc)
+                if coords.get("found"):
+                    act["lat"] = coords.get("lat")
+                    act["lng"] = coords.get("lng")
+                    if not act.get("provenance") or act.get("provenance") == "DETERMINISTIC":
+                        act["provenance"] = coords.get("provenance", "GEOCODED")
+                    act["location_source"] = "GEOCODED"
+                else:
+                    spatial_verified = False
+                    if not act.get("provenance"):
+                        act["provenance"] = "CURATED_UNRESOLVED"
+                    act["location_source"] = "UNRESOLVED"
+            else:
+                act.setdefault("location_source", "GEOCODED")
+
+    weather_profile = get_destination_weather(trip.destination)
+    weather_condition = weather_profile.get("condition") or "Weather unavailable"
 
     # 5. Persist TripProposal record (TRIP IS NOT MUTATED)
     proposal = TripProposal(

@@ -295,7 +295,7 @@ export function AirportAutocomplete({
           {isLoading && results.length === 0 && (
             <div className="p-4 text-center text-xs text-slate-500 flex items-center justify-center gap-2" data-testid="airport-loading-state">
               <Loader2 className="w-4 h-4 animate-spin text-orange-500" />
-              <span>Searching verified airports…</span>
+              <span>Searching airport directory…</span>
             </div>
           )}
 

@@ -115,6 +115,14 @@ export function AttachFlightModal({
           <span>Curated · Estimated availability</span>
         </div>
 
+        {/* Non-Booking Trust Notice */}
+        <div className="p-3 rounded-2xl bg-amber-50/80 border border-amber-200/80 text-[11px] text-amber-900 space-y-1">
+          <p className="font-semibold">Selecting a flight does not book it.</p>
+          <p className="text-amber-800 leading-relaxed">
+            It adds the flight to your Trip after you approve the Trip change. No booking has been made by DashTiny.
+          </p>
+        </div>
+
         {/* Actions */}
         <div className="flex items-center justify-end gap-2.5 pt-2">
           <Button

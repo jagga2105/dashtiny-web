@@ -103,12 +103,12 @@ export function FlightSearchForm({
     const cleanDest = (destination || '').trim().toUpperCase();
 
     if (!cleanOrigin) {
-      setValidationError('Please select a verified origin airport from the typeahead dropdown.');
+      setValidationError('Select an airport from the airport directory.');
       return;
     }
 
     if (!cleanDest) {
-      setValidationError('Please select a verified destination airport from the typeahead dropdown.');
+      setValidationError('Select an airport from the airport directory.');
       return;
     }
 
@@ -365,7 +365,11 @@ export function FlightSearchForm({
 
       {/* Validation Error Message */}
       {validationError && (
-        <div className="flex items-center gap-2 p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-medium">
+        <div
+          role="alert"
+          data-testid="flight-search-validation-error"
+          className="flex items-center gap-2 p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-medium"
+        >
           <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
           <span>{validationError}</span>
         </div>

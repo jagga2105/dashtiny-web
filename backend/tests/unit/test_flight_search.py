@@ -668,7 +668,8 @@ def test_proposal_verifies_canonical_offer_by_offer_id(client, db_session, test_
 
     trip = Itinerary(
         title="Goa Trip Auth",
-        destination="Goa",
+        destination="GOI",
+        origin="DEL",
         owner_id=test_user.id,
         total_budget=40000.0,
         currency="INR",
@@ -727,7 +728,8 @@ def test_proposal_rejects_forged_offer_metadata(client, db_session, test_user, f
 
     trip = Itinerary(
         title="Goa Trip Forgery",
-        destination="Goa",
+        destination="GOI",
+        origin="DEL",
         owner_id=test_user.id,
         total_budget=40000.0,
         currency="INR",
@@ -804,7 +806,8 @@ def test_proposal_rejects_unknown_offer_id(client, db_session, test_user):
 
     trip = Itinerary(
         title="Goa Trip Unknown Offer",
-        destination="Goa",
+        destination="GOI",
+        origin="DEL",
         owner_id=test_user.id,
         total_budget=40000.0,
         currency="INR",
@@ -842,6 +845,418 @@ def test_proposal_rejects_unknown_offer_id(client, db_session, test_user):
     )
     assert res.status_code == 409
     assert "could not be verified against the canonical catalog" in res.json()["detail"]
+
+
+# ============================================================================
+# DashTiny L2.6 — Trip-Flight Compatibility & Integrity Unit Tests
+# ============================================================================
+
+def test_matching_trip_and_flight_proposal_succeeds(client, db_session, test_user, flight_provider):
+    """P2 L2.6 Test: matching Trip + flight → proposal succeeds"""
+    from datetime import date
+    from app.models.models import Itinerary, ItineraryDay
+    from app.services.trip_revision_service import record_initial_revision
+
+    trip = Itinerary(
+        title="Delhi to Mumbai Trip",
+        destination="BOM",
+        origin="DEL",
+        owner_id=test_user.id,
+        start_date=date(2026, 11, 20),
+        end_date=date(2026, 11, 25)
+    )
+    db_session.add(trip)
+    db_session.commit()
+    day1 = ItineraryDay(itinerary_id=trip.id, day_number=1, title="Day 1")
+    day2 = ItineraryDay(itinerary_id=trip.id, day_number=2, title="Day 2")
+    db_session.add_all([day1, day2])
+    db_session.commit()
+    record_initial_revision(db_session, trip.id, test_user.id)
+    db_session.commit()
+
+    search_context = {
+        "origin": "DEL",
+        "destination": "BOM",
+        "departure_date": "2026-11-20",
+        "return_date": "2026-11-25",
+        "passengers": 1,
+        "cabin_class": "economy",
+        "trip_type": "roundtrip"
+    }
+    offers = flight_provider.search_flights(**search_context)
+    offer = offers[0]
+
+    res = client.post(
+        "/api/v1/ai/proposals",
+        json={
+            "trip_id": trip.id,
+            "proposal_type": "ATTACH_FLIGHT_OFFER",
+            "offer_id": offer.offer_id,
+            "search_context": search_context
+        }
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert data["proposal_type"] == "ATTACH_FLIGHT_OFFER"
+    assert data["summary"].startswith(f"Attach {offer.airline}")
+
+
+def test_destination_mismatch_raises_409(client, db_session, test_user, flight_provider):
+    """P2 L2.6 Test: destination mismatch → 409"""
+    from datetime import date
+    from app.models.models import Itinerary, ItineraryDay
+    from app.services.trip_revision_service import record_initial_revision
+
+    trip = Itinerary(
+        title="Trip to Bangalore",
+        destination="BLR",
+        origin="DEL",
+        owner_id=test_user.id,
+        start_date=date(2026, 11, 20),
+        end_date=date(2026, 11, 25)
+    )
+    db_session.add(trip)
+    db_session.commit()
+    day1 = ItineraryDay(itinerary_id=trip.id, day_number=1, title="Day 1")
+    db_session.add(day1)
+    db_session.commit()
+    record_initial_revision(db_session, trip.id, test_user.id)
+    db_session.commit()
+
+    search_context = {
+        "origin": "DEL",
+        "destination": "BOM",  # Mismatch: flight is BOM, trip destination is BLR
+        "departure_date": "2026-11-20",
+        "passengers": 1,
+        "cabin_class": "economy",
+        "trip_type": "oneway"
+    }
+    offers = flight_provider.search_flights(**search_context)
+
+    res = client.post(
+        "/api/v1/ai/proposals",
+        json={
+            "trip_id": trip.id,
+            "proposal_type": "ATTACH_FLIGHT_OFFER",
+            "offer_id": offers[0].offer_id,
+            "search_context": search_context
+        }
+    )
+    assert res.status_code == 409
+    assert "Trip destination mismatch" in res.json()["detail"]
+
+
+def test_origin_mismatch_raises_409(client, db_session, test_user, flight_provider):
+    """P2 L2.6 Test: origin mismatch → 409"""
+    from datetime import date
+    from app.models.models import Itinerary, ItineraryDay
+    from app.services.trip_revision_service import record_initial_revision
+
+    trip = Itinerary(
+        title="Trip from Mumbai",
+        destination="GOI",
+        origin="BOM",  # Trip origin is BOM
+        owner_id=test_user.id,
+        start_date=date(2026, 11, 20),
+        end_date=date(2026, 11, 25)
+    )
+    db_session.add(trip)
+    db_session.commit()
+    day1 = ItineraryDay(itinerary_id=trip.id, day_number=1, title="Day 1")
+    db_session.add(day1)
+    db_session.commit()
+    record_initial_revision(db_session, trip.id, test_user.id)
+    db_session.commit()
+
+    search_context = {
+        "origin": "DEL",  # Flight origin is DEL
+        "destination": "GOI",
+        "departure_date": "2026-11-20",
+        "passengers": 1,
+        "cabin_class": "economy",
+        "trip_type": "oneway"
+    }
+    offers = flight_provider.search_flights(**search_context)
+
+    res = client.post(
+        "/api/v1/ai/proposals",
+        json={
+            "trip_id": trip.id,
+            "proposal_type": "ATTACH_FLIGHT_OFFER",
+            "offer_id": offers[0].offer_id,
+            "search_context": search_context
+        }
+    )
+    assert res.status_code == 409
+    assert "Trip origin mismatch" in res.json()["detail"]
+
+
+def test_departure_outside_trip_dates_raises_409(client, db_session, test_user, flight_provider):
+    """P2 L2.6 Test: departure outside Trip → 409"""
+    from datetime import date
+    from app.models.models import Itinerary, ItineraryDay
+    from app.services.trip_revision_service import record_initial_revision
+
+    trip = Itinerary(
+        title="Goa Trip Dates",
+        destination="GOI",
+        origin="DEL",
+        owner_id=test_user.id,
+        start_date=date(2026, 11, 20),
+        end_date=date(2026, 11, 25)
+    )
+    db_session.add(trip)
+    db_session.commit()
+    day1 = ItineraryDay(itinerary_id=trip.id, day_number=1, title="Day 1")
+    db_session.add(day1)
+    db_session.commit()
+    record_initial_revision(db_session, trip.id, test_user.id)
+    db_session.commit()
+
+    # Flight departs on 2026-11-19 (before Trip start_date 2026-11-20)
+    search_context = {
+        "origin": "DEL",
+        "destination": "GOI",
+        "departure_date": "2026-11-19",
+        "passengers": 1,
+        "cabin_class": "economy",
+        "trip_type": "oneway"
+    }
+    offers = flight_provider.search_flights(**search_context)
+
+    res = client.post(
+        "/api/v1/ai/proposals",
+        json={
+            "trip_id": trip.id,
+            "proposal_type": "ATTACH_FLIGHT_OFFER",
+            "offer_id": offers[0].offer_id,
+            "search_context": search_context
+        }
+    )
+    assert res.status_code == 409
+    assert "outside Trip dates" in res.json()["detail"]
+
+
+def test_return_outside_trip_dates_raises_409(client, db_session, test_user, flight_provider):
+    """P2 L2.6 Test: return outside Trip → 409"""
+    from datetime import date
+    from app.models.models import Itinerary, ItineraryDay
+    from app.services.trip_revision_service import record_initial_revision
+
+    trip = Itinerary(
+        title="Goa Trip Return Date",
+        destination="GOI",
+        origin="DEL",
+        owner_id=test_user.id,
+        start_date=date(2026, 11, 20),
+        end_date=date(2026, 11, 25)
+    )
+    db_session.add(trip)
+    db_session.commit()
+    day1 = ItineraryDay(itinerary_id=trip.id, day_number=1, title="Day 1")
+    db_session.add(day1)
+    db_session.commit()
+    record_initial_revision(db_session, trip.id, test_user.id)
+    db_session.commit()
+
+    # Flight returns on 2026-11-26 (after Trip end_date 2026-11-25)
+    search_context = {
+        "origin": "DEL",
+        "destination": "GOI",
+        "departure_date": "2026-11-20",
+        "return_date": "2026-11-26",
+        "passengers": 1,
+        "cabin_class": "economy",
+        "trip_type": "roundtrip"
+    }
+    offers = flight_provider.search_flights(**search_context)
+
+    res = client.post(
+        "/api/v1/ai/proposals",
+        json={
+            "trip_id": trip.id,
+            "proposal_type": "ATTACH_FLIGHT_OFFER",
+            "offer_id": offers[0].offer_id,
+            "search_context": search_context
+        }
+    )
+    assert res.status_code == 409
+    assert "outside Trip dates" in res.json()["detail"]
+
+
+def test_ambiguous_trip_destination_requires_explicit_airport(client, db_session, test_user, flight_provider):
+    """
+    P2 L2.6 Test: ambiguous Trip destination → requires explicit airport (409).
+    Trip destination is "Goa", which has multiple airports (GOI, GOX) in the directory.
+    Attaching without explicit airport selection must be rejected.
+    Attaching with explicit_destination_airport succeeds.
+    """
+    from datetime import date
+    from app.models.models import Itinerary, ItineraryDay
+    from app.services.trip_revision_service import record_initial_revision
+
+    trip = Itinerary(
+        title="Trip to Goa Ambiguous",
+        destination="Goa",  # Ambiguous city with GOI and GOX
+        origin="DEL",
+        owner_id=test_user.id,
+        start_date=date(2026, 11, 20),
+        end_date=date(2026, 11, 25)
+    )
+    db_session.add(trip)
+    db_session.commit()
+    day1 = ItineraryDay(itinerary_id=trip.id, day_number=1, title="Day 1")
+    db_session.add(day1)
+    db_session.commit()
+    record_initial_revision(db_session, trip.id, test_user.id)
+    db_session.commit()
+
+    search_context = {
+        "origin": "DEL",
+        "destination": "GOI",
+        "departure_date": "2026-11-20",
+        "passengers": 1,
+        "cabin_class": "economy",
+        "trip_type": "oneway"
+    }
+    offers = flight_provider.search_flights(**search_context)
+    offer = offers[0]
+
+    # Attempt 1: Without explicit airport selection → 409
+    res1 = client.post(
+        "/api/v1/ai/proposals",
+        json={
+            "trip_id": trip.id,
+            "proposal_type": "ATTACH_FLIGHT_OFFER",
+            "offer_id": offer.offer_id,
+            "search_context": search_context
+        }
+    )
+    assert res1.status_code == 409
+    assert "ambiguous between multiple airports" in res1.json()["detail"]
+
+    # Attempt 2: With explicit destination airport selection → 200
+    res2 = client.post(
+        "/api/v1/ai/proposals",
+        json={
+            "trip_id": trip.id,
+            "proposal_type": "ATTACH_FLIGHT_OFFER",
+            "offer_id": offer.offer_id,
+            "search_context": search_context,
+            "explicit_destination_airport": "GOI"
+        }
+    )
+    assert res2.status_code == 200
+    assert res2.json()["proposal_type"] == "ATTACH_FLIGHT_OFFER"
+
+
+def test_roundtrip_uses_actual_inbound_segment(client, db_session, test_user, flight_provider):
+    """P2 L2.6 Test: roundtrip → actual inbound segment in proposal after_state"""
+    from datetime import date
+    from app.models.models import Itinerary, ItineraryDay
+    from app.services.trip_revision_service import record_initial_revision
+
+    trip = Itinerary(
+        title="Delhi to Mumbai Roundtrip",
+        destination="BOM",
+        origin="DEL",
+        owner_id=test_user.id,
+        start_date=date(2026, 11, 20),
+        end_date=date(2026, 11, 25)
+    )
+    db_session.add(trip)
+    db_session.commit()
+    day1 = ItineraryDay(itinerary_id=trip.id, day_number=1, title="Day 1")
+    day2 = ItineraryDay(itinerary_id=trip.id, day_number=2, title="Day 2")
+    db_session.add_all([day1, day2])
+    db_session.commit()
+    record_initial_revision(db_session, trip.id, test_user.id)
+    db_session.commit()
+
+    search_context = {
+        "origin": "DEL",
+        "destination": "BOM",
+        "departure_date": "2026-11-20",
+        "return_date": "2026-11-25",
+        "passengers": 1,
+        "cabin_class": "economy",
+        "trip_type": "roundtrip"
+    }
+    offers = flight_provider.search_flights(**search_context)
+    offer = offers[0]
+    assert offer.inbound is not None
+
+    res = client.post(
+        "/api/v1/ai/proposals",
+        json={
+            "trip_id": trip.id,
+            "proposal_type": "ATTACH_FLIGHT_OFFER",
+            "offer_id": offer.offer_id,
+            "search_context": search_context
+        }
+    )
+    assert res.status_code == 200
+    data = res.json()
+    after_days = data["after"]["days"]
+    last_day_acts = after_days[-1]["activities"]
+    return_act = next((a for a in last_day_acts if a["transit_mode"] == "flight"), None)
+    assert return_act is not None
+    assert return_act["time"] == offer.inbound.departure_time
+    assert offer.airline in return_act["description"]
+    assert "Return ·" in return_act["description"]
+    assert return_act["location_source"] == "AIRPORT_DIRECTORY"
+
+
+def test_oneway_has_no_inbound_activity(client, db_session, test_user, flight_provider):
+    """P2 L2.6 Test: oneway → no inbound activity on last day"""
+    from datetime import date
+    from app.models.models import Itinerary, ItineraryDay
+    from app.services.trip_revision_service import record_initial_revision
+
+    trip = Itinerary(
+        title="Delhi to Mumbai Oneway",
+        destination="BOM",
+        origin="DEL",
+        owner_id=test_user.id,
+        start_date=date(2026, 11, 20),
+        end_date=date(2026, 11, 25)
+    )
+    db_session.add(trip)
+    db_session.commit()
+    day1 = ItineraryDay(itinerary_id=trip.id, day_number=1, title="Day 1")
+    day2 = ItineraryDay(itinerary_id=trip.id, day_number=2, title="Day 2")
+    db_session.add_all([day1, day2])
+    db_session.commit()
+    record_initial_revision(db_session, trip.id, test_user.id)
+    db_session.commit()
+
+    search_context = {
+        "origin": "DEL",
+        "destination": "BOM",
+        "departure_date": "2026-11-20",
+        "passengers": 1,
+        "cabin_class": "economy",
+        "trip_type": "oneway"
+    }
+    offers = flight_provider.search_flights(**search_context)
+    offer = offers[0]
+    assert offer.inbound is None
+
+    res = client.post(
+        "/api/v1/ai/proposals",
+        json={
+            "trip_id": trip.id,
+            "proposal_type": "ATTACH_FLIGHT_OFFER",
+            "offer_id": offer.offer_id,
+            "search_context": search_context
+        }
+    )
+    assert res.status_code == 200
+    data = res.json()
+    after_days = data["after"]["days"]
+    last_day_acts = after_days[-1]["activities"]
+    return_flight_acts = [a for a in last_day_acts if a.get("transit_mode") == "flight"]
+    assert len(return_flight_acts) == 0
 
 
 

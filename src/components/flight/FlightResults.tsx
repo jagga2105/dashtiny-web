@@ -436,12 +436,12 @@ export function FlightResults({
                   handleScrollToOffer(decisionMetrics.cheapestOffer?.offer_id);
                 }
               }}
-              aria-label="View cheapest flight option in catalog"
+              aria-label="View cheapest flight option in current results"
               className="p-3.5 rounded-2xl bg-emerald-50/70 hover:bg-emerald-100/70 border border-emerald-200/80 space-y-1 cursor-pointer transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-2xs"
             >
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-bold tracking-wider uppercase text-emerald-800">
-                  CHEAPEST
+                  CHEAPEST IN CURRENT RESULTS
                 </span>
                 <span className="text-[11px] font-semibold text-emerald-700">
                   {formatFlightDuration(decisionMetrics.cheapestOffer?.duration_minutes)} · {decisionMetrics.cheapestOffer?.stops === 0 ? 'Direct' : `${decisionMetrics.cheapestOffer?.stops} stop`}
@@ -450,7 +450,7 @@ export function FlightResults({
               <div className="text-lg font-bold font-serif-editorial text-emerald-950">
                 {formatCurrency(decisionMetrics.lowestFare, rawOffers[0]?.currency)}
               </div>
-              <p className="text-[10px] text-emerald-700">Lowest fare · trade-off: longer transit or stop</p>
+              <p className="text-[10px] text-emerald-700">Lowest fare in current results · trade-off: longer transit or stop</p>
             </div>
           )}
 
@@ -466,12 +466,12 @@ export function FlightResults({
                   handleScrollToOffer(decisionMetrics.fastestOffer?.offer_id);
                 }
               }}
-              aria-label="View fastest flight option in catalog"
+              aria-label="View fastest flight option in current results"
               className="p-3.5 rounded-2xl bg-blue-50/70 hover:bg-blue-100/70 border border-blue-200/80 space-y-1 cursor-pointer transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-2xs"
             >
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-bold tracking-wider uppercase text-blue-800">
-                  FASTEST
+                  FASTEST IN CURRENT RESULTS
                 </span>
                 <span className="text-[11px] font-semibold text-blue-700">
                   {formatFlightDuration(decisionMetrics.fastestDuration)} · {decisionMetrics.fastestOffer?.stops === 0 ? 'Direct' : `${decisionMetrics.fastestOffer?.stops} stop`}
@@ -480,7 +480,7 @@ export function FlightResults({
               <div className="text-lg font-bold font-serif-editorial text-blue-950">
                 {formatCurrency(decisionMetrics.fastestOffer?.price, rawOffers[0]?.currency)}
               </div>
-              <p className="text-[10px] text-blue-700">Shortest travel time · trade-off: higher fare</p>
+              <p className="text-[10px] text-blue-700">Shortest travel time in current results · trade-off: higher fare</p>
             </div>
           )}
 
@@ -496,13 +496,14 @@ export function FlightResults({
                   handleScrollToOffer(decisionMetrics.balancedOffer?.offer_id);
                 }
               }}
-              aria-label="View balanced flight option in catalog"
+              aria-label="View DashTiny balanced option in current results"
+              title="DashTiny balances fare, travel duration and stops. It is a deterministic comparison heuristic, not an objective best-flight claim."
               className="p-3.5 rounded-2xl bg-orange-50/70 hover:bg-orange-100/70 border border-orange-200/80 space-y-1 cursor-pointer transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-orange-500 shadow-2xs"
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1 text-[10px] font-bold tracking-wider uppercase text-orange-800">
                   <Sparkles className="w-3 h-3 text-orange-600" />
-                  <span>BALANCED</span>
+                  <span>BALANCED IN CURRENT RESULTS</span>
                 </div>
                 <span className="text-[11px] font-semibold text-orange-700">
                   {formatFlightDuration(decisionMetrics.balancedDuration)} · {decisionMetrics.balancedOffer?.stops === 0 ? 'Direct' : `${decisionMetrics.balancedOffer?.stops} stop`}
@@ -511,7 +512,7 @@ export function FlightResults({
               <div className="text-lg font-bold font-serif-editorial text-orange-950">
                 {formatCurrency(decisionMetrics.balancedFare, rawOffers[0]?.currency)}
               </div>
-              <p className="text-[10px] text-orange-700">Optimal combination of fare, direct route & timing</p>
+              <p className="text-[10px] text-orange-700">DashTiny balanced option · Balanced fare, duration & stops</p>
             </div>
           )}
         </div>
@@ -543,7 +544,7 @@ export function FlightResults({
               data-testid="mobile-sort-select"
               aria-label="Sort flight options"
             >
-              <option value="balanced">Sort: Balanced</option>
+              <option value="balanced">Sort: DashTiny balanced option</option>
               <option value="cheapest">Sort: Cheapest</option>
               <option value="fastest">Sort: Fastest</option>
               <option value="earliest">Sort: Earliest</option>

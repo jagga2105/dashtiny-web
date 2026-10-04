@@ -44,6 +44,8 @@ class FlightSegment(BaseModel):
     duration_minutes: int
     stops: int = 0
     stop_details: List[Dict[str, Any]] = Field(default_factory=list)
+    flight_number: Optional[str] = None
+    airline: Optional[str] = None
 
     def __getitem__(self, item: str):
         if hasattr(self, item):

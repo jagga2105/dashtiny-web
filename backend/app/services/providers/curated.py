@@ -333,7 +333,9 @@ class CuratedFlightProvider(FlightProvider):
                 arrival_time=arr_time,
                 duration_minutes=dur_mins,
                 stops=b["stops"],
-                stop_details=stop_details
+                stop_details=stop_details,
+                flight_number=b["flight_number"],
+                airline=b["airline"]
             )
 
             inbound_segment = None
@@ -351,6 +353,12 @@ class CuratedFlightProvider(FlightProvider):
                         "city": ret_hub_info.get("city", ret_layover_hub) if ret_hub_info else ret_layover_hub,
                         "duration_minutes": b["layover"]
                     }]
+                
+                # Canonical inbound return flight identity
+                fn_digits = ''.join(c for c in b["flight_number"] if c.isdigit())
+                fn_prefix = ''.join(c for c in b["flight_number"] if not c.isdigit())
+                ret_flight_num = f"{fn_prefix}{int(fn_digits) + 1}" if fn_digits else f"{b['flight_number']}-R"
+
                 inbound_segment = FlightSegment(
                     origin=dest_clean,
                     destination=origin_clean,
@@ -360,7 +368,9 @@ class CuratedFlightProvider(FlightProvider):
                     arrival_time=ret_arr_time,
                     duration_minutes=ret_dur_mins,
                     stops=b["stops"],
-                    stop_details=ret_stop_details
+                    stop_details=ret_stop_details,
+                    flight_number=ret_flight_num,
+                    airline=b["airline"]
                 )
 
             offers.append(FlightOffer(

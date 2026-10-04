@@ -113,10 +113,10 @@ export function TripProposalModal({
           </div>
         </div>
 
-        <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 text-blue-900 text-[11px] space-y-1">
-          <p className="font-semibold">Trust Guarantee:</p>
-          <p className="text-blue-800">
-            DashTiny attaches transport to your trip itinerary. To complete ticketing and secure seats, proceed to the provider.
+        <div className="p-3.5 rounded-2xl bg-amber-50/80 border border-amber-200/80 text-amber-900 text-[11px] space-y-1">
+          <p className="font-semibold">Selecting a flight does not book it.</p>
+          <p className="text-amber-800 leading-relaxed">
+            It adds the flight to your Trip after you approve the Trip change. No booking has been made by DashTiny. To complete ticketing and secure seats, proceed to the provider.
           </p>
         </div>
 

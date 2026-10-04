@@ -48,9 +48,12 @@ export function FlightOfferCard({
   // Enforce single primary winner label hierarchy:
   // Balanced option > Lowest fare > Fastest
   const primaryBadge = isBalanced ? (
-    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-orange-100 text-orange-800 text-[10px] font-bold tracking-wide uppercase">
+    <span
+      className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-orange-100 text-orange-800 text-[10px] font-bold tracking-wide uppercase"
+      title="DashTiny balances fare, travel duration and stops. It is a deterministic comparison heuristic, not an objective best-flight claim."
+    >
       <Sparkles className="w-3 h-3 text-orange-600" />
-      Balanced option
+      DashTiny balanced option
     </span>
   ) : isCheapest ? (
     <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold tracking-wide uppercase">
@@ -200,18 +203,20 @@ export function FlightOfferCard({
 
           {/* Perks & Inclusions */}
           <div className="flex flex-wrap items-center gap-3 pt-2 text-[11px] text-slate-600">
-            {offer.baggage ? (
-              <span className="inline-flex items-center gap-1">
-                <Luggage className="w-3.5 h-3.5 text-slate-400" />
-                {offer.baggage}
-              </span>
-            ) : null}
-            {offer.cancellation ? (
-              <span className="inline-flex items-center gap-1">
-                <ShieldCheck className="w-3.5 h-3.5 text-slate-400" />
-                {offer.cancellation}
-              </span>
-            ) : null}
+            <span
+              className="inline-flex items-center gap-1"
+              title={offer.baggage ? 'Baggage allowance' : 'Baggage information not provided'}
+            >
+              <Luggage className="w-3.5 h-3.5 text-slate-400" />
+              <span>{offer.baggage || 'Baggage: Not provided'}</span>
+            </span>
+            <span
+              className="inline-flex items-center gap-1"
+              title={offer.cancellation ? 'Cancellation policy' : 'Cancellation policy not provided'}
+            >
+              <ShieldCheck className="w-3.5 h-3.5 text-slate-400" />
+              <span>{offer.cancellation || 'Cancellation: Not provided'}</span>
+            </span>
           </div>
 
           {/* Factual Why This Fits Explanation */}

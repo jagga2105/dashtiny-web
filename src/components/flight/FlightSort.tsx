@@ -11,7 +11,12 @@ interface FlightSortProps {
 }
 
 const SORT_OPTIONS: { id: FlightSortOption; label: string; tooltip: string; icon: any }[] = [
-  { id: 'balanced', label: 'Balanced Option', tooltip: 'Direct flight under 3h with balanced price and timing', icon: Compass },
+  {
+    id: 'balanced',
+    label: 'DashTiny balanced option',
+    tooltip: 'DashTiny balances fare, travel duration and stops. It is a deterministic comparison heuristic, not an objective best-flight claim.',
+    icon: Compass,
+  },
   { id: 'cheapest', label: 'Cheapest', tooltip: 'Lowest total fare', icon: DollarSign },
   { id: 'fastest', label: 'Fastest', tooltip: 'Shortest total flight duration', icon: Zap },
   { id: 'earliest', label: 'Earliest', tooltip: 'Earliest departure time', icon: Clock },
