@@ -185,7 +185,7 @@ export function FlightResults({
             <div className="w-5 h-5 rounded-full border-2 border-orange-500 border-t-transparent animate-spin shrink-0" />
             <div>
               <p className="text-xs font-bold text-slate-800">
-                Searching curated airline corridors...
+                Comparing current catalog options…
               </p>
               <p className="text-[11px] text-slate-500">
                 Fetching reference catalog schedules across IndiGo, Air India, Akasa Air, and SpiceJet
@@ -257,7 +257,9 @@ export function FlightResults({
               We couldn&apos;t load flight options.
             </h3>
             <p className="text-xs text-rose-800">
-              {error}
+              {error?.includes('Traceback') || error?.includes('Internal Server') || error?.includes('OperationalError')
+                ? 'Please check your airport selection and travel dates, then try again.'
+                : error}
             </p>
           </div>
         </div>
@@ -267,7 +269,7 @@ export function FlightResults({
             onClick={onRetrySearch}
             className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl transition-colors cursor-pointer shadow-2xs"
           >
-            Retry
+            Try again
           </button>
         )}
       </div>
@@ -653,6 +655,7 @@ export function FlightResults({
                     isCheapest={isCheapest}
                     isFastest={isFastest}
                     whyThisFits={factualReason}
+                    isStale={isStale}
                   />
                 );
               })}
@@ -665,7 +668,7 @@ export function FlightResults({
       {comparedOffers.length > 0 && !isComparisonOpen && (
         <aside
           aria-label="Flight comparison tray"
-          className="fixed bottom-6 right-6 z-40 flex items-center gap-3 p-3 bg-slate-900 text-white rounded-2xl shadow-xl border border-slate-700 animate-in slide-in-from-bottom-4 duration-200"
+          className="fixed bottom-24 md:bottom-6 right-6 z-40 flex items-center gap-3 p-3 bg-slate-900 text-white rounded-2xl shadow-xl border border-slate-700 animate-in slide-in-from-bottom-4 duration-200"
           data-testid="floating-comparison-tray"
         >
           <div className="flex items-center gap-2 pl-2">

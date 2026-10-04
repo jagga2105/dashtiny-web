@@ -32,7 +32,8 @@ class FlightProvider(ABC):
         return_date: Optional[str] = None,
         passengers: int = 1,
         cabin_class: str = "economy",
-        trip_type: str = "roundtrip"
+        trip_type: str = "roundtrip",
+        db: Optional[Any] = None
     ) -> List[FlightOffer]:
         pass
 

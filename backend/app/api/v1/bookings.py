@@ -105,7 +105,8 @@ def search_flights_endpoint(
         return_date=req.return_date,
         passengers=req.passengers,
         cabin_class=req.cabin_class,
-        trip_type=req.trip_type
+        trip_type=req.trip_type,
+        db=db
     )
 
     now_utc = datetime.now(timezone.utc)

@@ -41,7 +41,7 @@ export function FlightSearchForm({
   const [originAirport, setOriginAirport] = useState<AirportLocation | null>(null);
   const [destination, setDestination] = useState(initialDestination);
   const [destinationAirport, setDestinationAirport] = useState<AirportLocation | null>(null);
-  const [departureDate, setDepartureDate] = useState(initialDepartureDate || todayStr);
+  const [departureDate, setDepartureDate] = useState(initialDepartureDate || '');
   const [returnDate, setReturnDate] = useState(initialReturnDate || '');
   const [passengers, setPassengers] = useState(initialPassengers || 1);
   const [cabinClass, setCabinClass] = useState(initialCabinClass || 'economy');
@@ -207,6 +207,11 @@ export function FlightSearchForm({
             <option value="business">Business</option>
             <option value="first">First Class</option>
           </select>
+
+          <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-700">
+            <Users className="w-3.5 h-3.5 text-slate-400" />
+            <span>{passengers} {passengers === 1 ? 'traveler' : 'travelers'}</span>
+          </div>
         </div>
       </div>
 

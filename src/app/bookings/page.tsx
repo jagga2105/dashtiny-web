@@ -268,6 +268,20 @@ function BookingsContent() {
   };
 
   const handleSelectFlightOffer = (offer: FlightOffer) => {
+    if (isFlightSearchStale) {
+      setBookingError('Search parameters have changed. Please update your results before selecting a flight.');
+      return;
+    }
+    if (
+      currentFlightParams &&
+      (offer.origin !== currentFlightParams.origin ||
+        offer.destination !== currentFlightParams.destination ||
+        offer.departure_date !== currentFlightParams.departureDate ||
+        (offer.trip_type === 'roundtrip' && offer.return_date !== currentFlightParams.returnDate))
+    ) {
+      setBookingError('Selected flight does not match active search parameters. Please update your results.');
+      return;
+    }
     if (!selectedTripId && activeTrips.length > 0) {
       setSelectedTripId(activeTrips[0].id);
     }
@@ -276,6 +290,10 @@ function BookingsContent() {
 
   const handleCreateProposalFromOffer = async () => {
     if (!pendingOfferForProposal) return;
+    if (isFlightSearchStale) {
+      setBookingError('Search parameters have changed. Please update your results before creating a proposal.');
+      return;
+    }
     const targetTripId = selectedTripId || (activeTrips.length > 0 ? activeTrips[0].id : null);
     if (!targetTripId) {
       setBookingError('Please link an active trip from the context selector to attach this flight offer.');
@@ -284,7 +302,11 @@ function BookingsContent() {
     setIsSubmittingProposal(true);
     setBookingError(null);
     try {
-      const proposal = await apiService.createFlightOfferProposal(targetTripId, pendingOfferForProposal);
+      const proposal = await apiService.createFlightOfferProposal(
+        targetTripId,
+        pendingOfferForProposal,
+        currentFlightParams || lastSearchedParams || undefined
+      );
       setActiveProposal(proposal);
       setPendingOfferForProposal(null);
     } catch (err: any) {

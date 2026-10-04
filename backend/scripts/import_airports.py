@@ -123,6 +123,7 @@ CANONICAL_COORDINATES: Dict[str, Tuple[float, float, str, str]] = {
     "MLE": (4.1918, 73.5291, "Indian/Maldives", "Velana (Malé) International Airport"),
     "CMB": (7.1808, 79.8841, "Asia/Colombo", "Bandaranaike International Airport"),
     "KTM": (27.6966, 85.3591, "Asia/Kathmandu", "Tribhuvan International Airport"),
+    "GOA": (44.4133, 8.8375, "Europe/Rome", "Genoa Cristoforo Colombo Airport"),
 }
 
 # Curated reference metadata for key international destinations
@@ -151,6 +152,7 @@ INTERNATIONAL_METADATA: Dict[str, Tuple[str, str, str, str]] = {
     "MLE": ("Velana (Malé) International Airport", "Malé", "Maldives", "MV"),
     "CMB": ("Bandaranaike International Airport", "Colombo", "Sri Lanka", "LK"),
     "KTM": ("Tribhuvan International Airport", "Kathmandu", "Nepal", "NP"),
+    "GOA": ("Genoa Cristoforo Colombo Airport", "Genoa", "Italy", "IT"),
 }
 
 # Curated city overrides for primary traveler recognition

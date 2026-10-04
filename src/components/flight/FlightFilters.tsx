@@ -73,12 +73,14 @@ export function FlightFilters({
     onChange({ ...filters, arrivalSlots: Array.from(current) });
   };
 
-  const isFiltered =
-    filters.stops.length > 0 ||
-    filters.airlines.length > 0 ||
-    filters.departureSlots.length > 0 ||
-    (filters.arrivalSlots && filters.arrivalSlots.length > 0) ||
-    filters.maxPrice < maxPrice;
+  const activeCount =
+    filters.stops.length +
+    filters.airlines.length +
+    filters.departureSlots.length +
+    (filters.arrivalSlots && filters.arrivalSlots.length > 0 ? filters.arrivalSlots.length : 0) +
+    (filters.maxPrice < maxPrice ? 1 : 0);
+
+  const isFiltered = activeCount > 0;
 
   return (
     <aside
@@ -90,8 +92,13 @@ export function FlightFilters({
         <div className="flex items-center gap-1.5 font-bold text-slate-900">
           <Filter className="w-4 h-4 text-orange-500" />
           <span>Filters</span>
-          <span className="text-[11px] font-normal text-slate-500 ml-1">
-            ({filteredCount} of {totalCount})
+          {activeCount > 0 && (
+            <span className="text-[10px] font-bold text-orange-700 bg-orange-100 px-1.5 py-0.5 rounded-full">
+              {activeCount} {activeCount === 1 ? 'filter' : 'filters'}
+            </span>
+          )}
+          <span className="text-[11px] font-medium text-slate-500 ml-1">
+            {totalCount !== filteredCount ? `${totalCount} → ${filteredCount} flights` : `${totalCount} flights`}
           </span>
         </div>
         {isFiltered && (
@@ -102,7 +109,7 @@ export function FlightFilters({
             data-testid="reset-filters-btn"
           >
             <RotateCcw className="w-3 h-3" />
-            Reset
+            Clear all
           </button>
         )}
       </div>

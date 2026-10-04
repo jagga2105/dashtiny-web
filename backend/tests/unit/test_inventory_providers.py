@@ -13,7 +13,9 @@ def test_curated_flight_provider_schema_and_provenance():
     provider = CuratedFlightProvider()
     offers = provider.search_flights(
         origin="DEL",
-        destination="GOA",
+        destination="GOI",
+        departure_date="2026-11-20",
+        return_date="2026-11-25",
         passengers=2,
         cabin_class="economy",
         trip_type="roundtrip"

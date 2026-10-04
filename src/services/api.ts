@@ -451,13 +451,14 @@ export const apiService = {
     });
   },
 
-  async createFlightOfferProposal(tripId: string, offer: FlightOffer) {
+  async createFlightOfferProposal(tripId: string, offer: FlightOffer, searchContext?: any) {
     return request<any>('/ai/proposals', {
       method: 'POST',
       body: JSON.stringify({
         trip_id: tripId,
         proposal_type: 'ATTACH_FLIGHT_OFFER',
         offer,
+        search_context: searchContext,
       }),
     });
   },

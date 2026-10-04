@@ -27,6 +27,7 @@ interface FlightOfferCardProps {
   isCheapest?: boolean;
   isFastest?: boolean;
   whyThisFits?: string | null;
+  isStale?: boolean;
   className?: string;
 }
 
@@ -41,6 +42,7 @@ export function FlightOfferCard({
   isCheapest = false,
   isFastest = false,
   whyThisFits,
+  isStale = false,
   className = '',
 }: FlightOfferCardProps) {
   // Enforce single primary winner label hierarchy:
@@ -65,7 +67,9 @@ export function FlightOfferCard({
   return (
     <div
       className={`p-5 rounded-2xl bg-white border transition-all duration-200 relative ${
-        isSelected
+        isStale
+          ? 'border-slate-200/70 bg-slate-50/40 opacity-80'
+          : isSelected
           ? 'border-orange-500 ring-2 ring-orange-500/20 shadow-md'
           : 'border-slate-200/90 shadow-2xs hover:border-slate-300 hover:shadow-sm'
       } ${className}`}
@@ -75,10 +79,6 @@ export function FlightOfferCard({
       <div className="flex flex-wrap items-center justify-between gap-2 mb-3.5">
         <div className="flex flex-wrap items-center gap-1.5">
           {primaryBadge}
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[10px] font-medium border border-slate-200">
-            <CheckCircle2 className="w-3 h-3 text-slate-500" />
-            Curated catalog
-          </span>
         </div>
 
         {/* Compare Checkbox / Toggle Button */}
@@ -86,14 +86,18 @@ export function FlightOfferCard({
           <button
             type="button"
             onClick={() => onToggleCompare(offer)}
-            disabled={!isCompared && !canCompare}
-            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-              isCompared
-                ? 'bg-orange-100 text-orange-800 border border-orange-300'
-                : 'bg-slate-100/80 text-slate-600 hover:text-slate-900 hover:bg-slate-200/70 border border-slate-200/60 disabled:opacity-40'
+            disabled={isStale || (!isCompared && !canCompare)}
+            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${
+              isStale
+                ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed opacity-50'
+                : isCompared
+                ? 'bg-orange-100 text-orange-800 border border-orange-300 cursor-pointer'
+                : 'bg-slate-100/80 text-slate-600 hover:text-slate-900 hover:bg-slate-200/70 border border-slate-200/60 disabled:opacity-40 cursor-pointer'
             }`}
             data-testid={`compare-checkbox-${offer.offer_id}`}
             aria-pressed={isCompared}
+            aria-disabled={isStale}
+            title={isStale ? 'Search parameters changed. Update results to compare.' : undefined}
           >
             <Scale className="w-3 h-3" />
             <span className="text-[11px]">{isCompared ? 'Comparing' : 'Compare'}</span>
@@ -220,7 +224,7 @@ export function FlightOfferCard({
 
         {/* Right: Pricing & CTAs */}
         <div className="flex flex-col md:items-end justify-between border-t md:border-t-0 md:border-l border-slate-100 pt-4 md:pt-0 md:pl-6 space-y-3">
-          <div className="md:text-right">
+          <div className="md:text-right space-y-0.5">
             <span className="text-[11px] text-slate-500 font-medium">Total fare:</span>
             <div className="text-xl sm:text-2xl font-bold font-serif-editorial text-slate-900">
               {formatCurrency(offer.price, offer.currency)}
@@ -230,6 +234,10 @@ export function FlightOfferCard({
                 {formatCurrency(offer.per_passenger_price, offer.currency)} / person
               </p>
             )}
+            <div className="flex items-center md:justify-end gap-1 text-[10px] text-slate-500 pt-0.5">
+              <Clock className="w-3 h-3 text-slate-400 shrink-0" />
+              <span>Curated catalog · Estimated fare/schedule</span>
+            </div>
           </div>
 
           <div className="flex flex-col sm:flex-row md:flex-col gap-2 w-full md:w-auto">
@@ -237,8 +245,15 @@ export function FlightOfferCard({
             <button
               type="button"
               onClick={() => onSelectOffer(offer)}
-              className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-semibold text-xs transition-all shadow-2xs hover:shadow cursor-pointer"
+              disabled={isStale}
+              className={`inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl font-semibold text-xs transition-all shadow-2xs ${
+                isStale
+                  ? 'bg-slate-200 text-slate-400 border border-slate-300/60 cursor-not-allowed opacity-60'
+                  : 'bg-orange-600 hover:bg-orange-700 text-white hover:shadow cursor-pointer'
+              }`}
               data-testid={`select-flight-${offer.offer_id}`}
+              aria-disabled={isStale}
+              title={isStale ? 'Search parameters changed. Update results before selecting.' : undefined}
             >
               <Check className="w-3.5 h-3.5" />
               <span>Select Flight</span>
@@ -246,17 +261,29 @@ export function FlightOfferCard({
 
             {/* Transparent External Link: Continue to Provider */}
             {offer.deep_link ? (
-              <a
-                href={offer.deep_link}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center justify-center gap-1 px-3 py-1.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-colors cursor-pointer"
-                title={`Visit official ${offer.airline} portal`}
-                data-testid={`deep-link-${offer.offer_id}`}
-              >
-                <span>Continue to provider</span>
-                <ExternalLink className="w-3 h-3 text-slate-400" />
-              </a>
+              isStale ? (
+                <span
+                  className="inline-flex items-center justify-center gap-1 px-3 py-1.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-400 text-xs font-semibold cursor-not-allowed opacity-50 select-none"
+                  title="Search parameters changed. Update results to continue to provider."
+                  data-testid={`deep-link-${offer.offer_id}-disabled`}
+                  aria-disabled="true"
+                >
+                  <span>Continue to provider</span>
+                  <ExternalLink className="w-3 h-3 text-slate-300" />
+                </span>
+              ) : (
+                <a
+                  href={offer.deep_link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center justify-center gap-1 px-3 py-1.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-colors cursor-pointer"
+                  title={`Visit official ${offer.airline} portal`}
+                  data-testid={`deep-link-${offer.offer_id}`}
+                >
+                  <span>Continue to provider</span>
+                  <ExternalLink className="w-3 h-3 text-slate-400" />
+                </a>
+              )
             ) : null}
           </div>
         </div>

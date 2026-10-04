@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Info, Sparkles, CheckCircle2 } from 'lucide-react';
+import { Info, Sparkles, Clock } from 'lucide-react';
 
 interface FlightProvenanceProps {
   provenance?: string;
@@ -27,7 +27,7 @@ export function FlightProvenance({
           Curated Catalog
         </span>
         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white/80 text-amber-800 font-medium text-[11px] border border-amber-200/60">
-          <CheckCircle2 className="w-3 h-3 text-amber-600" />
+          <Clock className="w-3 h-3 text-amber-600" />
           Estimated availability
         </span>
       </div>

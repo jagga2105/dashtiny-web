@@ -122,6 +122,15 @@ vi.mock('@/services/api', () => ({
 describe('DashTiny L2.3 — Trust, Precision & UX Polish Vitest Suite', () => {
   beforeEach(() => {
     vi.mocked(apiService.searchFlights).mockResolvedValue({
+      search: {
+        origin: 'DEL',
+        destination: 'BOM',
+        departure_date: '2026-10-20',
+        return_date: null,
+        passengers: 1,
+        cabin_class: 'economy',
+        trip_type: 'oneway',
+      },
       offers: [
         createMockFlightOffer({
           offer_id: 'fl_offer_6e_501',
@@ -143,14 +152,6 @@ describe('DashTiny L2.3 — Trust, Precision & UX Polish Vitest Suite', () => {
           availability_state: 'ESTIMATED',
         }),
       ],
-      total_count: 1,
-      currency: 'INR',
-      origin: 'DEL',
-      destination: 'BOM',
-      departure_date: '2026-10-20',
-      travelers: 1,
-      cabin_class: 'economy',
-      search_id: 'search-101',
       retrieved_at: '2026-10-04T00:00:00Z',
       expires_at: '2026-10-04T02:00:00Z',
       provenance: 'CURATED',

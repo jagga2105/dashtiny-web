@@ -258,7 +258,7 @@ describe('DashTiny L2 — Flight Search Frontend Components', () => {
         />
       );
       expect(screen.getByTestId('flight-search-loading')).toBeTruthy();
-      expect(screen.getByText(/searching curated airline corridors/i)).toBeTruthy();
+      expect(screen.getByText(/comparing current catalog options/i)).toBeTruthy();
     });
 
     it('renders error notice when error prop is provided', () => {
@@ -460,7 +460,7 @@ describe('DashTiny L2 — Flight Search Frontend Components', () => {
     });
   });
 
-  describe('7. Stale Search Detection', () => {
+  describe('7. Stale Search Detection & Action Blocking (L2.4 P0)', () => {
     it('shows stale search notice banner when isStale is true and supports refreshing', () => {
       const handleRefresh = vi.fn();
       render(
@@ -479,6 +479,47 @@ describe('DashTiny L2 — Flight Search Frontend Components', () => {
       const refreshBtn = screen.getByTestId('refresh-search-btn');
       fireEvent.click(refreshBtn);
       expect(handleRefresh).toHaveBeenCalledTimes(1);
+    });
+
+    it('blocks actions when isStale is true: Select disabled, Compare disabled, Continue disabled', () => {
+      render(
+        <FlightResults
+          searchResponse={MOCK_SEARCH_RESPONSE}
+          isLoading={false}
+          isStale={true}
+          onRefreshSearch={vi.fn()}
+          onSelectOffer={vi.fn()}
+        />
+      );
+
+      // Select buttons are disabled
+      const selectBtn = screen.getByTestId('select-flight-fl_offer_6e_501');
+      expect((selectBtn as HTMLButtonElement).disabled).toBe(true);
+
+      // Compare buttons are disabled
+      const compareBtn = screen.getByTestId('compare-checkbox-fl_offer_6e_501');
+      expect((compareBtn as HTMLButtonElement).disabled).toBe(true);
+
+      // Continue to provider is non-actionable
+      const disabledLink = screen.getByTestId('deep-link-fl_offer_6e_501-disabled');
+      expect(disabledLink).toBeTruthy();
+      expect(disabledLink.getAttribute('aria-disabled')).toBe('true');
+    });
+  });
+
+  describe('8. FlightSearchForm Departure Date Defaults (L2.4 P1)', () => {
+    it('defaults departure date to empty when no trip context date is provided', () => {
+      render(<FlightSearchForm onSearch={vi.fn()} />);
+      const dateInput = screen.getByTestId('flight-departure-date-input') as HTMLInputElement;
+      expect(dateInput.value).toBe('');
+      // min attribute is preserved to prevent past dates
+      expect(dateInput.getAttribute('min')).toBeTruthy();
+    });
+
+    it('pre-fills departure date when trip context date is provided', () => {
+      render(<FlightSearchForm initialDepartureDate="2026-11-20" onSearch={vi.fn()} />);
+      const dateInput = screen.getByTestId('flight-departure-date-input') as HTMLInputElement;
+      expect(dateInput.value).toBe('2026-11-20');
     });
   });
 });

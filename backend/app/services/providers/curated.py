@@ -8,42 +8,6 @@ from app.db.database import SessionLocal
 from app.models.models import Airport
 
 
-# Reference metadata for top commercial hubs for instant, zero-latency resolution
-KNOWN_AIRPORT_REFS: Dict[str, Dict[str, str]] = {
-    "DEL": {"code": "DEL", "name": "Indira Gandhi International Airport", "city": "New Delhi", "country": "India"},
-    "BOM": {"code": "BOM", "name": "Chhatrapati Shivaji Maharaj International Airport", "city": "Mumbai", "country": "India"},
-    "BLR": {"code": "BLR", "name": "Kempegowda International Airport", "city": "Bengaluru", "country": "India"},
-    "GOI": {"code": "GOI", "name": "Dabolim Airport", "city": "Goa", "country": "India"},
-    "GOA": {"code": "GOI", "name": "Dabolim Airport", "city": "Goa", "country": "India"},
-    "GOX": {"code": "GOX", "name": "Manohar International Airport (Mopa)", "city": "Goa", "country": "India"},
-    "HYD": {"code": "HYD", "name": "Rajiv Gandhi International Airport", "city": "Hyderabad", "country": "India"},
-    "MAA": {"code": "MAA", "name": "Chennai International Airport", "city": "Chennai", "country": "India"},
-    "CCU": {"code": "CCU", "name": "Netaji Subhash Chandra Bose International Airport", "city": "Kolkata", "country": "India"},
-    "COK": {"code": "COK", "name": "Cochin International Airport", "city": "Kochi", "country": "India"},
-    "AMD": {"code": "AMD", "name": "Sardar Vallabhbhai Patel International Airport", "city": "Ahmedabad", "country": "India"},
-    "PNQ": {"code": "PNQ", "name": "Pune International Airport", "city": "Pune", "country": "India"},
-    "JAI": {"code": "JAI", "name": "Jaipur International Airport", "city": "Jaipur", "country": "India"},
-    "IXC": {"code": "IXC", "name": "Shaheed Bhagat Singh International Airport", "city": "Chandigarh", "country": "India"},
-    "SXR": {"code": "SXR", "name": "Sheikh ul-Alam International Airport", "city": "Srinagar", "country": "India"},
-    "LKO": {"code": "LKO", "name": "Chaudhary Charan Singh International Airport", "city": "Lucknow", "country": "India"},
-    "TRV": {"code": "TRV", "name": "Thiruvananthapuram International Airport", "city": "Thiruvananthapuram", "country": "India"},
-    "GAU": {"code": "GAU", "name": "Lokpriya Gopinath Bordoloi International Airport", "city": "Guwahati", "country": "India"},
-    "PAT": {"code": "PAT", "name": "Jay Prakash Narayan Airport", "city": "Patna", "country": "India"},
-    "BBI": {"code": "BBI", "name": "Biju Patnaik International Airport", "city": "Bhubaneswar", "country": "India"},
-    "VNS": {"code": "VNS", "name": "Lal Bahadur Shastri International Airport", "city": "Varanasi", "country": "India"},
-    "IXR": {"code": "IXR", "name": "Birsa Munda Airport", "city": "Ranchi", "country": "India"},
-    "IDR": {"code": "IDR", "name": "Devi Ahilya Bai Holkar Airport", "city": "Indore", "country": "India"},
-    "NAG": {"code": "NAG", "name": "Dr. Babasaheb Ambedkar International Airport", "city": "Nagpur", "country": "India"},
-    "ATQ": {"code": "ATQ", "name": "Sri Guru Ram Dass Jee International Airport", "city": "Amritsar", "country": "India"},
-    "UDR": {"code": "UDR", "name": "Maharana Pratap Airport", "city": "Udaipur", "country": "India"},
-    "DXB": {"code": "DXB", "name": "Dubai International Airport", "city": "Dubai", "country": "United Arab Emirates"},
-    "SIN": {"code": "SIN", "name": "Singapore Changi Airport", "city": "Singapore", "country": "Singapore"},
-    "BKK": {"code": "BKK", "name": "Suvarnabhumi Airport", "city": "Bangkok", "country": "Thailand"},
-    "LHR": {"code": "LHR", "name": "Heathrow Airport", "city": "London", "country": "United Kingdom"},
-    "JFK": {"code": "JFK", "name": "John F. Kennedy International Airport", "city": "New York", "country": "United States"}
-}
-
-
 # Estimated standard non-stop duration in minutes between major corridors
 CORRIDOR_DURATIONS: Dict[str, int] = {
     "DEL_BOM": 130, "BOM_DEL": 125,
@@ -70,13 +34,20 @@ CORRIDOR_DURATIONS: Dict[str, int] = {
 }
 
 
-def _resolve_airport_ref(iata: str) -> Optional[Dict[str, str]]:
-    clean = iata.upper().strip()
-    if clean in KNOWN_AIRPORT_REFS:
-        return KNOWN_AIRPORT_REFS[clean]
+def _resolve_airport_ref(iata: str, db: Optional[Any] = None) -> Optional[Dict[str, str]]:
+    """
+    Resolves airport authority strictly from canonical PostgreSQL Airport domain.
+    Never uses hardcoded aliases or secondary runtime registries.
+    """
+    clean = iata.upper().strip() if iata else ""
+    if not clean:
+        return None
 
-    # Query PostgreSQL airports table if not in memory dictionary
-    db = SessionLocal()
+    close_db = False
+    if db is None:
+        db = SessionLocal()
+        close_db = True
+
     try:
         airport = db.query(Airport).filter(Airport.iata_code == clean).first()
         if airport:
@@ -86,12 +57,45 @@ def _resolve_airport_ref(iata: str) -> Optional[Dict[str, str]]:
                 "city": airport.city,
                 "country": airport.country or "India"
             }
+        return None
     except Exception:
-        pass
+        return None
     finally:
-        db.close()
+        if close_db and db:
+            db.close()
 
-    return None
+
+def generate_deterministic_offer_id(
+    provider: str,
+    airline: str,
+    flight_number: str,
+    origin: str,
+    destination: str,
+    departure_date: str,
+    return_date: Optional[str],
+    cabin_class: str,
+    passengers: int,
+    trip_type: str,
+    blueprint_suffix: str
+) -> str:
+    """
+    Deterministic hashing of complete offer identity across search contexts.
+    Same exact search -> same offer_id
+    Different departure date -> different offer_id
+    Different return date -> different offer_id
+    Different cabin -> different offer_id
+    Different passengers -> different offer_id
+    Different trip type -> different offer_id
+    """
+    raw_seed = (
+        f"{provider.strip()}|{airline.strip()}|{flight_number.strip()}|"
+        f"{origin.strip().upper()}|{destination.strip().upper()}|"
+        f"{departure_date.strip()}|{(return_date or '').strip()}|"
+        f"{cabin_class.strip().lower()}|{passengers}|{trip_type.strip().lower()}|"
+        f"{blueprint_suffix.strip()}"
+    )
+    digest = hashlib.sha256(raw_seed.encode("utf-8")).hexdigest()[:16]
+    return f"fl_{digest}"
 
 
 def _format_time_with_duration(base_time_str: str, duration_mins: int) -> str:
@@ -100,8 +104,8 @@ def _format_time_with_duration(base_time_str: str, duration_mins: int) -> str:
         t = datetime.strptime(base_time_str, "%I:%M %p")
         arr = t + timedelta(minutes=duration_mins)
         return arr.strftime("%I:%M %p")
-    except Exception:
-        return "11:30 AM"
+    except Exception as e:
+        raise ValueError(f"Invalid departure time format: '{base_time_str}'") from e
 
 
 def _stable_hash_int(seed: str, modulo: int) -> int:
@@ -116,8 +120,8 @@ def _calculate_arrival_date(dep_date_str: str, dep_time_str: str, duration_mins:
         dt = datetime.strptime(f"{dep_date_str} {dep_time_str}", "%Y-%m-%d %I:%M %p")
         arr_dt = dt + timedelta(minutes=duration_mins)
         return arr_dt.strftime("%Y-%m-%d")
-    except Exception:
-        return dep_date_str
+    except Exception as e:
+        raise ValueError(f"Invalid departure date/time format: '{dep_date_str} {dep_time_str}'") from e
 
 
 class CuratedFlightProvider(FlightProvider):
@@ -136,18 +140,19 @@ class CuratedFlightProvider(FlightProvider):
         return_date: Optional[str] = None,
         passengers: int = 1,
         cabin_class: str = "economy",
-        trip_type: str = "roundtrip"
+        trip_type: str = "roundtrip",
+        db: Optional[Any] = None
     ) -> List[FlightOffer]:
         origin_clean = origin.upper().strip() if origin else ""
         dest_clean = destination.upper().strip() if destination else ""
         if not origin_clean or not dest_clean or origin_clean == dest_clean:
             return []
 
-        # Resolve airport information using L1 Location database & reference dictionary
-        origin_info = _resolve_airport_ref(origin_clean)
-        dest_info = _resolve_airport_ref(dest_clean)
+        # Resolve airport information strictly using canonical PostgreSQL Airport domain
+        origin_info = _resolve_airport_ref(origin_clean, db)
+        dest_info = _resolve_airport_ref(dest_clean, db)
 
-        # If airport is not recognized in DashTiny location repository, return empty results
+        # If airport is not recognized in canonical database, return empty results
         if not origin_info or not dest_info:
             return []
 
@@ -156,6 +161,16 @@ class CuratedFlightProvider(FlightProvider):
         if cabin == "premium":
             cabin = "premium_economy"
         is_roundtrip = (trip_type or "roundtrip").lower() == "roundtrip"
+
+        # Search request validation owns required values; provider must never invent dates
+        if not departure_date:
+            return []
+
+        if is_roundtrip and not return_date:
+            return []
+
+        effective_dep_date = departure_date
+        effective_return_date = return_date if is_roundtrip else None
 
         cabin_multiplier = {
             "economy": 1.0,
@@ -269,15 +284,6 @@ class CuratedFlightProvider(FlightProvider):
             }
         ]
 
-        effective_dep_date = departure_date or datetime.now(timezone.utc).strftime("%Y-%m-%d")
-        effective_return_date = return_date
-        if is_roundtrip and not effective_return_date:
-            try:
-                dep_dt = datetime.strptime(effective_dep_date, "%Y-%m-%d")
-                effective_return_date = (dep_dt + timedelta(days=5)).strftime("%Y-%m-%d")
-            except Exception:
-                effective_return_date = (datetime.now(timezone.utc) + timedelta(days=5)).strftime("%Y-%m-%d")
-
         offers: List[FlightOffer] = []
         for b in catalog_blueprints:
             dur_mins = base_duration + (b["layover"] if b["stops"] > 0 else 0)
@@ -286,14 +292,28 @@ class CuratedFlightProvider(FlightProvider):
             
             calculated_total = float(round(b["base_fare"] * cabin_multiplier * trip_multiplier * num_pax))
             per_pax = float(round(calculated_total / num_pax))
-            offer_id = f"fl_{origin_clean}_{dest_clean}_{b['suffix']}"
+            
+            offer_id = generate_deterministic_offer_id(
+                provider=b["provider"],
+                airline=b["airline"],
+                flight_number=b["flight_number"],
+                origin=origin_clean,
+                destination=dest_clean,
+                departure_date=effective_dep_date,
+                return_date=effective_return_date,
+                cabin_class=cabin,
+                passengers=num_pax,
+                trip_type="roundtrip" if is_roundtrip else "oneway",
+                blueprint_suffix=b["suffix"]
+            )
 
             stop_details = []
             if b["stops"] > 0:
                 layover_hub = "HYD" if "HYD" not in (origin_clean, dest_clean) else "BOM"
+                hub_info = _resolve_airport_ref(layover_hub, db)
                 stop_details = [{
                     "airport": layover_hub,
-                    "city": KNOWN_AIRPORT_REFS.get(layover_hub, {}).get("city", layover_hub),
+                    "city": hub_info.get("city", layover_hub) if hub_info else layover_hub,
                     "duration_minutes": b["layover"]
                 }]
 
@@ -318,9 +338,10 @@ class CuratedFlightProvider(FlightProvider):
                 ret_stop_details = []
                 if b["stops"] > 0:
                     ret_layover_hub = "HYD" if "HYD" not in (origin_clean, dest_clean) else "BOM"
+                    ret_hub_info = _resolve_airport_ref(ret_layover_hub, db)
                     ret_stop_details = [{
                         "airport": ret_layover_hub,
-                        "city": KNOWN_AIRPORT_REFS.get(ret_layover_hub, {}).get("city", ret_layover_hub),
+                        "city": ret_hub_info.get("city", ret_layover_hub) if ret_hub_info else ret_layover_hub,
                         "duration_minutes": b["layover"]
                     }]
                 inbound_segment = FlightSegment(

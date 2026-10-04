@@ -50,6 +50,7 @@ class AIProposalRequest(BaseModel):
     proposal_type: Optional[str] = "ITINERARY_DIFF"  # ITINERARY_DIFF or ATTACH_FLIGHT_OFFER
     offer: Optional[Dict[str, Any]] = None
     offer_id: Optional[str] = None
+    search_context: Optional[Dict[str, Any]] = None
 
 
 class AIQueryRequest(BaseModel):
@@ -143,6 +144,48 @@ def create_ai_proposal(
     # Check if flight offer proposal
     if request.proposal_type == "ATTACH_FLIGHT_OFFER" or request.offer:
         offer = request.offer or {}
+
+        # P0: Verify offer search context matches current active search context (409 Conflict defense)
+        if request.search_context:
+            ctx = request.search_context
+            ctx_origin = (ctx.get("origin") or "").strip().upper()
+            ctx_dest = (ctx.get("destination") or "").strip().upper()
+            ctx_dep = (ctx.get("departure_date") or ctx.get("departureDate") or "").strip()
+            ctx_ret = (ctx.get("return_date") or ctx.get("returnDate") or "").strip()
+            ctx_cabin = (ctx.get("cabin_class") or ctx.get("cabinClass") or "").strip().lower()
+            ctx_pax = ctx.get("passengers")
+            ctx_trip_type = (ctx.get("trip_type") or ctx.get("tripType") or "").strip().lower()
+
+            offer_origin = (offer.get("origin") or "").strip().upper()
+            offer_dest = (offer.get("destination") or "").strip().upper()
+            offer_dep = (offer.get("departure_date") or "").strip()
+            offer_ret = (offer.get("return_date") or "").strip()
+            offer_cabin = (offer.get("cabin_class") or "").strip().lower()
+            offer_pax = offer.get("passengers")
+            offer_trip_type = (offer.get("trip_type") or "").strip().lower()
+
+            mismatches = []
+            if ctx_origin and offer_origin and ctx_origin != offer_origin:
+                mismatches.append(f"origin ({offer_origin} vs {ctx_origin})")
+            if ctx_dest and offer_dest and ctx_dest != offer_dest:
+                mismatches.append(f"destination ({offer_dest} vs {ctx_dest})")
+            if ctx_dep and offer_dep and ctx_dep != offer_dep:
+                mismatches.append(f"departure date ({offer_dep} vs {ctx_dep})")
+            if ctx_trip_type == "roundtrip" and ctx_ret and offer_ret and ctx_ret != offer_ret:
+                mismatches.append(f"return date ({offer_ret} vs {ctx_ret})")
+            if ctx_cabin and offer_cabin and ctx_cabin != offer_cabin:
+                mismatches.append(f"cabin ({offer_cabin} vs {ctx_cabin})")
+            if ctx_pax is not None and offer_pax is not None and int(ctx_pax) != int(offer_pax):
+                mismatches.append(f"passengers ({offer_pax} vs {ctx_pax})")
+            if ctx_trip_type and offer_trip_type and ctx_trip_type != offer_trip_type:
+                mismatches.append(f"trip type ({offer_trip_type} vs {ctx_trip_type})")
+
+            if mismatches:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"Flight offer search context does not match active search context: {', '.join(mismatches)}. Please refresh your search."
+                )
+
         airline = offer.get("airline", "Selected Airline")
         flight_number = offer.get("flight_number", "FL-100")
         origin = offer.get("origin", "")
