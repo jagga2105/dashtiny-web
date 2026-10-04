@@ -2,22 +2,46 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import Image from 'next/image';
-import { MapPin, Map, Award, BrainCircuit, Upload, Sparkles, CheckCircle2, Luggage, ArrowRight, AlertTriangle, AlertCircle, RefreshCw, Check, Loader2 } from 'lucide-react';
+import {
+  MapPin,
+  Sparkles,
+  CheckCircle2,
+  Luggage,
+  ArrowRight,
+  AlertTriangle,
+  RefreshCw,
+  Check,
+  Loader2,
+  Compass,
+  Sliders,
+  Wallet,
+  Clock,
+  ShieldCheck,
+} from 'lucide-react';
 import { TopNavbar } from '@/components/layout/TopNavbar';
 import { BottomNav } from '@/components/layout/BottomNav';
 import { DAInaChatWidget } from '@/components/layout/DAInaChatWidget';
-import { AITripArchitectModal } from '@/components/planner/AITripArchitectModal';
-import { BudgetManagerWidget } from '@/components/ui/BudgetManagerWidget';
-import { PersonaSelector, PersonaType } from '@/components/ui/PersonaSelector';
-import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { usePlannerStore } from '@/store/usePlannerStore';
-import { useAuthStore } from '@/store/useAuthStore';
 import { apiService, AirportLocation } from '@/services/api';
-import { AirportAutocomplete } from '@/components/location/AirportAutocomplete';
-import { parseTravelPrompt } from '@/lib/dainaIntentParser';
 import { Trip } from '@/types/trip';
+import {
+  StructuredPlannerForm,
+  StructuredPlannerFormValues,
+} from '@/components/planner/StructuredPlannerForm';
+import {
+  ItineraryProposalReview,
+  UnifiedProposalData,
+} from '@/components/planner/ItineraryProposalReview';
+
+const PIPELINE_STAGES = [
+  'Understanding your trip & preferences...',
+  'Planning neighborhoods & geographic clusters...',
+  'Building daily schedule & executable time slots...',
+  'Checking travel times & transit feasibility...',
+  'Balancing budget & cost guardrails...',
+  'Preparing your itinerary proposal...',
+];
 
 function PlannerContent() {
   const router = useRouter();
@@ -33,863 +57,333 @@ function PlannerContent() {
   const paramAuthor = searchParams.get('author') || '';
   const isAdapting = Boolean(sourceTripId || searchParams.get('adapt') === 'true');
 
-  const { currentItinerary, setCurrentItinerary, addItinerary } = usePlannerStore();
-  const { isAuthenticated } = useAuthStore();
-  const [selectedPersona, setSelectedPersona] = useState<PersonaType>('solo');
-  const [customTravelers, setCustomTravelers] = useState<number | null>(null);
-  const [isEditingTravelers, setIsEditingTravelers] = useState(false);
-  const [selectedOriginAirport, setSelectedOriginAirport] = useState<AirportLocation | null>(null);
-  const [isEditingOrigin, setIsEditingOrigin] = useState(false);
-  const [showMapView, setShowMapView] = useState(false);
-  const [showArchitect, setShowArchitect] = useState(false);
-  const [promptText, setPromptText] = useState(initialQuery);
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
+  const { setCurrentItinerary, addItinerary } = usePlannerStore();
+
+  // Active Proposal State (Held before database commitment)
+  const [activeProposal, setActiveProposal] = useState<UnifiedProposalData | null>(null);
+  const [isGeneratingProposal, setIsGeneratingProposal] = useState<boolean>(false);
+  const [generationStageIndex, setGenerationStageIndex] = useState<number>(0);
+  const [isAcceptingProposal, setIsAcceptingProposal] = useState<boolean>(false);
+  const [isEditingProposal, setIsEditingProposal] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Form Initial Values
+  const [formInitialValues, setFormInitialValues] = useState<Partial<StructuredPlannerFormValues>>({
+    destination: paramDestination,
+    daysCount: paramDuration ? parseInt(paramDuration, 10) : 4,
+    budget: paramBudget ? parseInt(paramBudget, 10) : 50000,
+    interests: paramInterests ? paramInterests.split(',') : ['food', 'beaches'],
+    rawPrompt: initialQuery,
+  });
+
+  // Source Trip Adaptation Highlights
   const [sourceTripData, setSourceTripData] = useState<any>(null);
+  const [sourceHighlights, setSourceHighlights] = useState<any[]>([]);
   const [isLoadingSourceTrip, setIsLoadingSourceTrip] = useState(false);
   const [sourceTripError, setSourceTripError] = useState<string | null>(null);
-  const [sourceTripReloadKey, setSourceTripReloadKey] = useState(0);
-  const isExplicitDemo = searchParams.get('demo') === 'true' || sourceTripId === 'trip_1' || sourceTripId === 'trip_2';
-  const [expandedDays, setExpandedDays] = useState<Record<number, boolean>>({ 1: true });
-  const [showUnderstandingDetails, setShowUnderstandingDetails] = useState(false);
 
-  // Fallback stops only when source trip ID is not provided or network is offline
-  const getFallbackHighlights = (dest: string, sourceId: string) => {
-    const d = (dest || '').toLowerCase();
-    if (sourceId === 'trip_1' || d.includes('kyoto') || d.includes('japan')) {
-      return [
-        { id: 'h1', day: 1, title: 'Check-in at Machiya Townhouse & Gion Evening Stroll', tag: 'Culture & Arrival', location: 'Gion, Kyoto', keep: true },
-        { id: 'h2', day: 2, title: 'Early Fushimi Inari (Zero Crowds) & Tofuku-ji Zen Gardens', tag: 'Iconic & Sacred', location: 'Southern Kyoto', keep: true },
-        { id: 'h3', day: 3, title: 'Nishiki Market Food Crawl & Philosopher’s Path Walk', tag: 'Gastronomy & Stroll', location: 'Central Kyoto', keep: true },
-        { id: 'h4', day: 4, title: 'Arashiyama Bamboo Grove & Tenryu-ji Temple Morning', tag: 'Nature & Heritage', location: 'Arashiyama', keep: true },
-        { id: 'h5', day: 5, title: 'Day Excursion to Uji: Byodoin Phoenix Hall & Matcha Tasting', tag: 'Artisanal Excursion', location: 'Uji', keep: true },
-        { id: 'h6', day: 6, title: 'Kiyomizu-dera Panoramic Terrace & Pottery Lane Departure', tag: 'Scenic & Farewell', location: 'Higashiyama', keep: true },
-      ];
+  // Animate generation pipeline stages
+  useEffect(() => {
+    let interval: any = null;
+    if (isGeneratingProposal) {
+      setGenerationStageIndex(0);
+      interval = setInterval(() => {
+        setGenerationStageIndex((prev) => (prev < PIPELINE_STAGES.length - 1 ? prev + 1 : prev));
+      }, 700);
     }
-    if (sourceId === 'trip_2' || d.includes('goa')) {
-      return [
-        { id: 'h1', day: 1, title: 'Check-in at Cliffside Sanctuary & Palolem Sunset Walk', tag: 'Relaxed Arrival', location: 'Palolem Beach', keep: true },
-        { id: 'h2', day: 2, title: 'Agonda Beach Kayaking & Authentic Goan Seafood Thali', tag: 'Coastal & Dining', location: 'Agonda', keep: true },
-        { id: 'h3', day: 3, title: 'Cabo de Rama Historic Fort & Cliff Cafe Golden Hour', tag: 'Scenic Heritage', location: 'Cabo de Rama', keep: true },
-        { id: 'h4', day: 4, title: 'Galgibaga Turtle Sanctuary & Old Bakery Breakfast', tag: 'Slow Travel', location: 'South Goa', keep: true },
-      ];
-    }
-    return [
-      { id: 'h1', day: 1, title: `Arrival, Check-in & Scenic Neighborhood Walk in ${dest || 'Destination'}`, tag: 'Arrival', location: dest || 'Local center', keep: true },
-      { id: 'h2', day: 2, title: `Iconic Landmark Tour & Verified Local Gastronomy in ${dest || 'Destination'}`, tag: 'Highlights', location: dest || 'Old town', keep: true },
-      { id: 'h3', day: 3, title: `Cultural Immersion & Hidden Local Sanctuary in ${dest || 'Destination'}`, tag: 'Discovery', location: dest || 'Artisan quarter', keep: true },
-      { id: 'h4', day: 4, title: `Golden Hour Scenic Spot & Farewell Dining Experience`, tag: 'Departure', location: dest || 'Panoramic viewpoint', keep: true },
-    ];
-  };
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [isGeneratingProposal]);
 
-  const [sourceHighlights, setSourceHighlights] = useState<any[]>([]);
-
-  // Load real public trip itinerary snapshot from server
+  // Load real public trip itinerary snapshot for adaptation if requested
   useEffect(() => {
     async function loadSourceTrip() {
-      if (!isAdapting) return;
+      if (!isAdapting || !sourceTripId) return;
       setSourceTripError(null);
-      if (sourceTripId) {
-        setIsLoadingSourceTrip(true);
-        try {
-          const snapshot = await apiService.getPublicTrip(sourceTripId);
-          if (snapshot && Array.isArray(snapshot.stops) && snapshot.stops.length > 0) {
-            setSourceTripData(snapshot);
-            setSourceHighlights(snapshot.stops.map((s: any) => ({
+      setIsLoadingSourceTrip(true);
+      try {
+        const snapshot = await apiService.getPublicTrip(sourceTripId);
+        if (snapshot && Array.isArray(snapshot.stops) && snapshot.stops.length > 0) {
+          setSourceTripData(snapshot);
+          setSourceHighlights(
+            snapshot.stops.map((s: any) => ({
               id: s.id,
               day: s.day,
               title: s.title,
               tag: s.tag,
               location: s.location,
               keep: true,
-            })));
-            return;
-          }
-        } catch (err: any) {
-          console.warn('Could not load public trip snapshot:', err);
-          if (!isExplicitDemo) {
-            setSourceTripError("Original itinerary couldn't be loaded. The trip might be private, unpublished, or the server was unreachable.");
-            setSourceHighlights([]);
-            setSourceTripData(null);
-            return;
-          }
-        } finally {
-          setIsLoadingSourceTrip(false);
+            }))
+          );
         }
-      }
-      if (isExplicitDemo) {
-        setSourceHighlights(getFallbackHighlights(paramDestination, sourceTripId));
+      } catch (err: any) {
+        console.warn('Could not load public trip snapshot:', err);
+        setSourceTripError("Original itinerary couldn't be loaded.");
+      } finally {
+        setIsLoadingSourceTrip(false);
       }
     }
     loadSourceTrip();
-  }, [isAdapting, sourceTripId, paramDestination, isExplicitDemo, sourceTripReloadKey]);
+  }, [isAdapting, sourceTripId]);
 
-  const toggleHighlight = (id: string) => {
-    setSourceHighlights((prev) =>
-      prev.map((h) => (h.id === id ? { ...h, keep: !h.keep } : h))
-    );
-  };
-
-  // Initialize or fetch requested itinerary from PostgreSQL
+  // Direct load if tripId is provided in URL
   useEffect(() => {
-    async function loadLatest() {
-      if (paramTripId) {
-        try {
-          const tripDetails = await apiService.getTripDetails(paramTripId);
-          if (tripDetails && tripDetails.id) {
-            setCurrentItinerary({
-              id: tripDetails.id,
-              title: tripDetails.title,
-              destination: tripDetails.destination,
-              origin: tripDetails.origin,
-              startDate: tripDetails.startDate,
-              endDate: tripDetails.endDate,
-              travellers: tripDetails.travellers ?? 1,
-              budget: tripDetails.budget ?? 0,
-              currency: tripDetails.currency || 'INR',
-              persona: tripDetails.persona,
-              vibe: tripDetails.vibe,
-              days: tripDetails.days || [],
-              bookings: tripDetails.bookings || [],
-              squad: tripDetails.squad || null,
-              snapshots: tripDetails.snapshots || [],
-            });
-            const daysCount = tripDetails.days?.length || 4;
-            setPromptText(`Plan a ${daysCount}-day trip to ${tripDetails.destination}`);
-            if (tripDetails.persona) {
-              setSelectedPersona(tripDetails.persona as PersonaType);
-            }
-            if (tripDetails.travellers != null) {
-              setCustomTravelers(tripDetails.travellers);
-            }
-            return;
-          }
-        } catch (err) {
-          console.warn('Could not load canonical trip from tripId:', err);
-          // Try local Zustand store fallback
-          const storeItinerary = usePlannerStore.getState().itineraries.find((it) => it.id === paramTripId);
-          if (storeItinerary) {
-            setCurrentItinerary(storeItinerary);
-            setPromptText(`Plan a trip to ${storeItinerary.destination}`);
-            return;
-          }
+    async function loadTripDetails() {
+      if (!paramTripId) return;
+      try {
+        const details = await apiService.getTripDetails(paramTripId);
+        if (details && details.id) {
+          router.push(`/trips?tripId=${details.id}`);
         }
-      }
-
-      if (initialQuery) {
-        setPromptText(initialQuery);
-      } else if (paramDestination) {
-        setPromptText(`Plan a trip to ${paramDestination}${paramDuration ? ` for ${paramDuration} days` : ''}${paramBudget ? ` with budget ₹${parseInt(paramBudget, 10).toLocaleString('en-IN')}` : ''}`);
+      } catch (err) {
+        console.warn('Could not load trip from paramTripId:', err);
       }
     }
-    loadLatest();
-  }, [paramTripId, initialQuery, paramDestination, paramDuration, paramBudget]);
+    loadTripDetails();
+  }, [paramTripId, router]);
 
-  const handleBuildPlan = async (queryText?: string) => {
-    const textToUse = queryText || promptText;
-    if (!textToUse.trim() && !paramDestination) return;
-
-    setIsGenerating(true);
-    setSaveSuccessMsg(null);
+  // 1. Generate Structured Itinerary Proposal (Does NOT mutate DB)
+  const handleGenerateProposal = async (values: StructuredPlannerFormValues) => {
+    setIsGeneratingProposal(true);
     setErrorMsg(null);
 
-    // Natural language request parsing fallback to structured URL params
-    const parsed = parseTravelPrompt(textToUse);
-    const dest = parsed.destination || paramDestination;
-    
-    // Explicit Destination Enforcement — No silent Kyoto default
-    if (!dest) {
-      setErrorMsg("Please specify a destination (e.g. Kyoto, Goa, Manali, Paris) so DAIna can tailor your itinerary.");
-      setIsGenerating(false);
-      return;
-    }
-
-    const days = parsed.days_count || (paramDuration ? parseInt(paramDuration, 10) : 4);
-    const budgetVal = parsed.budget || (paramBudget ? parseInt(paramBudget, 10) : 0);
-    const vibeVal = parsed.vibe || paramVibe || 'culture';
-    const interestsVal = parsed.interests && parsed.interests.length > 0 ? parsed.interests : (paramInterests ? paramInterests.split(',') : ['culture', 'sightseeing']);
-    const effectiveTravellers = customTravelers !== null ? customTravelers : (parsed.travellers || 2);
-
-    // Synchronize persona: if prompt specifies companions or persona, prioritize it and sync UI
-    const hasExplicitPersonaInPrompt = /(solo|alone|partner|couple|romantic|wife|husband|girlfriend|boyfriend|family|kids|children|parents|squad|friends|gang|buddies|nomad|workation)/i.test(textToUse);
-    const effectivePersona = hasExplicitPersonaInPrompt ? parsed.persona : (selectedPersona || parsed.persona);
-    if (hasExplicitPersonaInPrompt && parsed.persona) {
-      setSelectedPersona(parsed.persona as PersonaType);
-    }
-
-    // Adapt source itinerary stops into DAIna generation prompt
-    const keptHighlights = sourceHighlights.filter((h) => h.keep).map((h) => h.title);
-    const authorName = sourceTripData?.author || paramAuthor || 'community';
-    const budgetNotice = budgetVal === 0 ? "You didn't specify a budget. Create a comfortable mid-range plan and estimate the cost." : '';
-    const finalPrompt = (isAdapting && keptHighlights.length > 0)
-      ? `${textToUse || `Trip to ${dest}`}. Adapting ${authorName}'s source itinerary. Keep core stops: ${keptHighlights.join('; ')}. Personalize pacing, stays, and budget for ${effectivePersona}. ${budgetNotice}`
-      : `${textToUse || `Trip to ${dest}`}. ${budgetNotice}`;
-
     try {
-      const res = await apiService.generateItinerary({
-        destination: dest,
-        origin: selectedOriginAirport ? selectedOriginAirport.iata_code : parsed.origin,
-        start_date: parsed.start_date,
-        end_date: parsed.end_date,
-        days_count: days,
-        travellers: effectiveTravellers,
-        budget: budgetVal,
-        currency: parsed.currency || 'INR',
-        persona: effectivePersona,
-        vibe: vibeVal,
-        interests: interestsVal,
-        raw_prompt: finalPrompt,
-        prompt: finalPrompt,
-      });
+      const payload: any = {
+        destination: values.destination,
+        days_count: values.daysCount,
+        origin: values.originAirport?.iata_code || values.origin || undefined,
+        travelers: values.travelers,
+        budget: values.budget,
+        currency: values.currency || 'INR',
+        pace: values.pace || 'balanced',
+        interests: values.interests || ['food', 'beaches'],
+        wake_up_preference: values.wakeUpPreference || 'balanced',
+        accommodation_preference: values.accommodationPreference || 'comfort',
+        food_preferences: values.foodPreferences || ['any'],
+        raw_prompt: values.rawPrompt,
+        vibe: values.pace === 'relaxed' ? 'Leisure' : values.pace === 'packed' ? 'Adventure' : 'Balanced',
+      };
 
-      if (res && res.id) {
-        const formatted: Trip = {
-          id: res.id,
-          title: res.title,
-          destination: res.destination,
-          origin: res.origin,
-          startDate: res.startDate,
-          endDate: res.endDate,
-          travellers: res.travellers ?? effectiveTravellers,
-          budget: res.budget ?? budgetVal,
-          currency: res.currency || 'INR',
-          persona: res.persona || effectivePersona,
-          vibe: res.vibe || vibeVal,
-          days: res.days || [],
-          bookings: res.bookings || [],
-          squad: res.squad || null,
-          snapshots: res.snapshots || [],
-        };
-        addItinerary(formatted);
-        setCurrentItinerary(formatted);
-        setSaveSuccessMsg(`✦ Your trip is ready! Room Code: ${res.squad_room_code}`);
+      // If adapting, append kept highlights
+      const keptHighlights = sourceHighlights.filter((h) => h.keep).map((h) => h.title);
+      if (isAdapting && keptHighlights.length > 0) {
+        payload.planning_notes = [`Adapted from community trip with ${keptHighlights.length} preserved stops`];
+      }
+
+      const proposal = await apiService.createItineraryProposal(payload);
+
+      if (proposal && proposal.proposal_id) {
+        setActiveProposal(proposal as UnifiedProposalData);
+        // Scroll smoothly to top
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      } else {
+        throw new Error('No proposal received from planner engine.');
       }
     } catch (err: any) {
-      console.error('Failed to generate itinerary:', err);
+      console.error('Failed to generate proposal:', err);
       setErrorMsg(
-        err.status === 0
-          ? 'Unable to connect to DashTiny services. Please check if the backend server is running and retry.'
-          : 'DAIna is temporarily unavailable. Please retry in a moment.'
+        err.message || 'Unable to generate itinerary proposal. Please verify the destination and retry.'
       );
     } finally {
-      setIsGenerating(false);
+      setIsGeneratingProposal(false);
     }
   };
 
-  const activeItinerary = currentItinerary;
+  // 2. Authoritative Acceptance: Commits to PostgreSQL atomically & records Revision v1
+  const handleAcceptProposal = async () => {
+    if (!activeProposal) return;
+    setIsAcceptingProposal(true);
+    setErrorMsg(null);
 
-  // Live parsed intent from user prompt
-  const parsedIntent = promptText.trim() ? parseTravelPrompt(promptText) : null;
-  const effectiveTravelers = customTravelers !== null ? customTravelers : (parsedIntent?.travellers || 2);
+    try {
+      const committedTrip = await apiService.acceptItineraryProposal(activeProposal.proposal_id);
+
+      if (committedTrip && committedTrip.id) {
+        const formatted: Trip = {
+          id: committedTrip.id,
+          title: committedTrip.title,
+          destination: committedTrip.destination,
+          origin: committedTrip.origin,
+          startDate: committedTrip.startDate,
+          endDate: committedTrip.endDate,
+          travellers: committedTrip.travellers ?? activeProposal.travelers,
+          budget: committedTrip.budget ?? activeProposal.estimated_budget,
+          currency: committedTrip.currency || 'INR',
+          persona: committedTrip.persona || activeProposal.persona,
+          vibe: committedTrip.vibe || activeProposal.vibe,
+          days: committedTrip.days || [],
+          bookings: [],
+          squad: {
+            id: 'sq_initial',
+            itineraryId: committedTrip.id,
+            roomCode: committedTrip.squad_room_code,
+            members: [],
+          },
+          snapshots: [],
+        };
+
+        addItinerary(formatted);
+        setCurrentItinerary(formatted);
+
+        // Direct navigation to Trip Workspace cockpit
+        router.push(`/trips?tripId=${committedTrip.id}`);
+      } else {
+        throw new Error('Could not commit itinerary proposal to trip database.');
+      }
+    } catch (err: any) {
+      console.error('Failed to accept proposal:', err);
+      setErrorMsg(
+        err.message || 'Failed to accept itinerary proposal. Please check connection and retry.'
+      );
+    } finally {
+      setIsAcceptingProposal(false);
+    }
+  };
+
+  // 3. Discard Proposal (Non-mutating reject)
+  const handleRejectProposal = async () => {
+    if (!activeProposal) return;
+    try {
+      await apiService.rejectItineraryProposal(activeProposal.proposal_id);
+    } catch (err) {
+      console.warn('Reject cleanup warning:', err);
+    }
+    setActiveProposal(null);
+  };
+
+  // 4. Propose Partial Edit (AI generates diff proposal, still non-mutating)
+  const handlePartialEditProposal = async (instruction: string, targetDay?: number) => {
+    if (!activeProposal) return;
+    setIsEditingProposal(true);
+    setErrorMsg(null);
+
+    try {
+      const editedProposal = await apiService.editItineraryProposal(
+        activeProposal.proposal_id,
+        instruction,
+        targetDay
+      );
+      if (editedProposal && editedProposal.proposal_id) {
+        setActiveProposal(editedProposal as UnifiedProposalData);
+      }
+    } catch (err: any) {
+      console.error('Failed to apply partial edit:', err);
+      setErrorMsg(err.message || 'Could not refine itinerary. Please retry with a different prompt.');
+    } finally {
+      setIsEditingProposal(false);
+    }
+  };
 
   return (
     <div className="min-h-screen pb-24 md:pb-12 flex flex-col bg-[#FAFAF9] text-slate-900 font-sans selection:bg-orange-500 selection:text-white">
       <TopNavbar />
 
       <main className="flex-1 max-w-4xl w-full mx-auto px-4 sm:px-6 md:px-8 py-8 sm:py-12 space-y-8">
-        {/* Page Title — Clean and direct */}
-        <div className="space-y-1 text-center sm:text-left">
-          <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-orange-50 text-orange-700 text-xs font-semibold border border-orange-200">
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>{isAdapting ? 'Adapt Community Itinerary' : 'AI Travel Planner'}</span>
-          </div>
-          <h1 className="text-3xl sm:text-4xl font-serif-editorial font-bold text-slate-900 tracking-tight">
-            {isAdapting ? 'Adapt this itinerary' : 'Plan a trip'}
-          </h1>
-          <p className="text-slate-600 text-sm">
-            {isAdapting
-              ? (paramAuthor
-                  ? `Adapting ${paramDestination || 'this'} itinerary from ${paramAuthor} with your preferred pace and budget.`
-                  : `Adapting ${paramDestination || 'this'} itinerary with personalized pacing and curated recommendations.`)
-              : "Tell DAIna what you're looking for. We'll build a personalized day-by-day plan with stays, dining, and activities."}
-          </p>
-        </div>
-
         {/* Error Alert Banner */}
         {errorMsg && (
-          <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-900 text-xs font-semibold flex items-center justify-between gap-3 animate-in fade-in">
+          <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-900 text-xs font-semibold flex items-center justify-between gap-3 animate-in fade-in">
             <div className="flex items-center gap-2">
               <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
               <span>{errorMsg}</span>
             </div>
             <button
-              onClick={() => handleBuildPlan()}
-              className="px-3 py-1 rounded-lg bg-rose-600 text-white font-medium hover:bg-rose-700 flex items-center gap-1 text-xs shrink-0 cursor-pointer"
+              type="button"
+              onClick={() => setErrorMsg(null)}
+              className="px-3 py-1 rounded-lg bg-rose-600 text-white font-medium hover:bg-rose-700 text-xs cursor-pointer"
             >
-              <RefreshCw className="w-3 h-3" />
-              <span>Retry</span>
+              Dismiss
             </button>
           </div>
         )}
 
-        {/* Success Alert Banner */}
-        {saveSuccessMsg && (
-          <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-semibold flex items-center justify-between shadow-2xs">
-            <div className="flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-              <span>Itinerary created and saved automatically!</span>
-            </div>
-            <button
-              onClick={() => router.push(activeItinerary?.id ? `/trips?tripId=${activeItinerary.id}` : '/trips')}
-              className="px-3.5 py-1.5 rounded-lg bg-emerald-600 text-white font-semibold hover:bg-emerald-700 flex items-center gap-1.5 text-xs cursor-pointer"
-            >
-              <span>Open your trip →</span>
-            </button>
-          </div>
-        )}
-
-        {/* Community Source Trip Loading State */}
+        {/* Community Source Trip Loading or Error */}
         {isAdapting && isLoadingSourceTrip && (
           <div className="p-6 rounded-2xl bg-white border border-slate-200 text-center space-y-2 text-xs text-slate-500 animate-pulse">
             <Loader2 className="w-5 h-5 animate-spin mx-auto text-orange-500" />
-            <p>Loading original trip itinerary from community snapshot...</p>
+            <p>Loading community trip stops to adapt...</p>
           </div>
         )}
 
-        {/* Community Source Trip Loading Error */}
         {isAdapting && sourceTripError && (
-          <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs font-semibold flex items-center justify-between gap-3 animate-in fade-in">
-            <div className="flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-              <span>{sourceTripError}</span>
-            </div>
-            <button
-              onClick={() => setSourceTripReloadKey((k) => k + 1)}
-              className="px-3 py-1 rounded-lg bg-amber-600 text-white font-medium hover:bg-amber-700 flex items-center gap-1 text-xs shrink-0 cursor-pointer"
-            >
-              <RefreshCw className="w-3 h-3" />
-              <span>Retry</span>
-            </button>
+          <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs font-semibold flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+            <span>{sourceTripError}</span>
           </div>
         )}
 
-        {/* Community Source Itinerary Preview & Adaptation Card */}
-        {isAdapting && sourceHighlights.length > 0 && (
-          <section className="p-6 rounded-2xl bg-white border border-orange-200/90 shadow-sm space-y-4 animate-in fade-in">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
-              <div className="space-y-0.5">
-                <div className="flex items-center gap-2">
-                  <span className="px-2 py-0.5 rounded-full bg-orange-100 text-orange-800 text-[10px] font-bold uppercase tracking-wider">
-                    {sourceTripData?.author || paramAuthor ? `From ${sourceTripData?.author || paramAuthor}'s trip` : 'Original itinerary'}
-                  </span>
-                  <span className="text-xs text-slate-500 font-medium">
-                    {sourceTripData?.title || (paramDestination ? `${paramDestination} Journey` : 'Community Journey')}
-                  </span>
-                </div>
-                <h3 className="text-base font-serif-editorial font-bold text-slate-900">
-                  Preview &amp; Select Stops to Adapt
-                </h3>
-              </div>
-              <span className="text-xs font-semibold text-orange-600 bg-orange-50 px-2.5 py-1 rounded-lg border border-orange-200 shrink-0">
-                {sourceHighlights.filter((h) => h.keep).length} of {sourceHighlights.length} stops kept
-              </span>
-            </div>
-
-            <p className="text-xs text-slate-600">
-              Keep the highlights you love from this {sourceTripData?.destination || paramDestination || 'getaway'}, remove stops you don&apos;t want, and DAIna will optimize the schedule and help you find suitable travel options:
-            </p>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
-              {sourceHighlights.map((hl) => (
-                <button
-                  type="button"
-                  key={hl.id}
-                  role="checkbox"
-                  aria-checked={hl.keep}
-                  onClick={() => toggleHighlight(hl.id)}
-                  className={`text-left p-3 rounded-xl border text-xs cursor-pointer transition-all flex items-start justify-between gap-2.5 ${
-                    hl.keep
-                      ? 'bg-orange-50/40 border-orange-200 text-slate-900 shadow-2xs hover:border-orange-300'
-                      : 'bg-slate-50 border-slate-200 text-slate-400 line-through opacity-75 hover:bg-slate-100/60'
-                  }`}
-                >
-                  <div className="flex items-start gap-2.5">
-                    <div className={`mt-0.5 w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${
-                      hl.keep ? 'bg-orange-600 border-orange-600 text-white' : 'border-slate-300 bg-white'
-                    }`}>
-                      {hl.keep && <Check className="w-3 h-3 stroke-[3]" />}
-                    </div>
-                    <div className="space-y-0.5">
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-mono font-bold text-[10px] text-orange-600">Day {hl.day}</span>
-                        <span className="text-[10px] font-medium px-1.5 py-0.2 rounded bg-white border border-slate-200 text-slate-500">
-                          {hl.tag}
-                        </span>
-                        {hl.location && (
-                          <span className="text-[10px] text-slate-400">· {hl.location}</span>
-                        )}
-                      </div>
-                      <p className={`font-semibold ${hl.keep ? 'text-slate-800' : 'text-slate-400'}`}>
-                        {hl.title}
-                      </p>
-                    </div>
-                  </div>
-                  <span
-                    className={`px-2 py-0.5 rounded text-[10px] font-bold shrink-0 ${
-                      hl.keep ? 'bg-orange-500 text-white' : 'bg-slate-200 text-slate-600'
-                    }`}
-                  >
-                    {hl.keep ? 'Keep' : 'Omitted'}
-                  </span>
-                </button>
-              ))}
-            </div>
-
-            {/* Clear Mental Model: Keep Selected vs Rebuild Omitted */}
-            <div className="p-3 rounded-xl bg-orange-50/70 border border-orange-200/80 flex items-center justify-between gap-3 text-xs">
-              <div className="space-y-0.5">
-                <p className="font-semibold text-orange-950">
-                  DAIna will keep these {sourceHighlights.filter((h) => h.keep).length} stops and rebuild the rest around your preferences.
-                </p>
-                <p className="text-[11px] text-orange-800">
-                  {sourceHighlights.length - sourceHighlights.filter((h) => h.keep).length > 0
-                    ? `${sourceHighlights.length - sourceHighlights.filter((h) => h.keep).length} omitted stops will be replaced with fresh recommendations matching your budget and pace.`
-                    : 'All original stops selected. DAIna will optimize the schedule and verify local transit.'}
-                </p>
-              </div>
-            </div>
-
-            <div className="pt-2 flex items-center justify-between text-xs border-t border-slate-100">
-              <button
-                type="button"
-                onClick={() =>
-                  setSourceHighlights((prev) =>
-                    prev.map((h) => ({ ...h, keep: !prev.every((p) => p.keep) }))
-                  )
-                }
-                className="text-slate-500 hover:text-slate-800 font-medium underline cursor-pointer text-xs"
-              >
-                {sourceHighlights.every((h) => h.keep) ? 'Deselect all' : 'Select all stops'}
-              </button>
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={() => handleBuildPlan()}
-                isLoading={isGenerating}
-                className="bg-orange-600 hover:bg-orange-700 text-white text-xs px-4 py-1.5 rounded-xl cursor-pointer"
-              >
-                <Sparkles className="w-3.5 h-3.5 mr-1" />
-                Adapt with DAIna ({sourceHighlights.filter((h) => h.keep).length} stops)
-              </Button>
-            </div>
-          </section>
-        )}
-
-        {/* Primary Conversational Input Card */}
-        <section className="p-6 rounded-2xl bg-white border border-slate-200 shadow-sm space-y-4">
-          <div className="flex items-center justify-between">
-            <label htmlFor="trip-prompt" className="text-xs font-bold uppercase tracking-wider text-slate-700">
-              {isAdapting ? 'Customize your adapted itinerary' : 'Tell DAIna about your trip'}
-            </label>
-            <span className="text-[11px] text-slate-500 font-medium">
-              {activeItinerary ? 'Trip saved automatically' : 'Nothing to set up — just describe your trip'}
-            </span>
-          </div>
-
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              handleBuildPlan();
-            }}
-            className="space-y-4"
-          >
-            <textarea
-              id="trip-prompt"
-              rows={3}
-              value={promptText}
-              onChange={(e) => setPromptText(e.target.value)}
-              placeholder="e.g. I want to spend 7 days in Japan with my partner. Budget ₹1.5L. We love food, photography and quiet places. Leaving from Delhi."
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3.5 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-orange-500 focus:bg-white font-medium resize-none transition-colors"
-            />
-
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowArchitect(true)}
-                  className="text-xs text-slate-600 hover:text-slate-900 font-medium underline underline-offset-2 cursor-pointer"
-                >
-                  Help me refine details
-                </button>
-              </div>
-
-              <Button
-                type="submit"
-                variant="primary"
-                size="md"
-                isLoading={isGenerating}
-                disabled={!promptText.trim() && !paramDestination}
-                className="bg-orange-500 hover:bg-orange-600 text-white font-semibold px-6 py-2.5 rounded-xl transition-colors cursor-pointer text-xs"
-              >
-                <Sparkles className="w-4 h-4 mr-1.5" />
-                {isGenerating ? 'Working out the best option…' : (isAdapting ? 'Adapt & create trip' : 'Create my trip')}
-              </Button>
-            </div>
-          </form>
-
-          {/* Conversational Ambiguity State — DAIna asks one focused question */}
-          {promptText.trim().length > 3 && (!parsedIntent || !parsedIntent.destination) && !paramDestination && (
-            <div className="mt-4 p-4 rounded-xl bg-amber-50/80 border border-amber-200 space-y-3 animate-in fade-in">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-amber-950 flex items-center gap-1.5">
-                  <Sparkles className="w-3.5 h-3.5 text-amber-600" />
-                  I can help with that. Where would you like to go?
+        {/* View Mode 1: Active Trip Proposal Review */}
+        {activeProposal ? (
+          <ItineraryProposalReview
+            proposal={activeProposal}
+            onAccept={handleAcceptProposal}
+            onReject={handleRejectProposal}
+            onPartialEdit={handlePartialEditProposal}
+            onBackToEdit={() => setActiveProposal(null)}
+            isAccepting={isAcceptingProposal}
+            isEditing={isEditingProposal}
+          />
+        ) : (
+          /* View Mode 2: Progressive Structured Planner Input */
+          <div className="space-y-8">
+            {/* Header: Inspiration and Purpose */}
+            <div className="space-y-1.5 text-center sm:text-left">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-orange-50 text-orange-700 text-xs font-bold border border-orange-200/80 shadow-2xs">
+                <Sparkles className="w-3.5 h-3.5 text-orange-600" />
+                <span>
+                  {isAdapting ? 'Adapt Community Getaway' : 'Intelligent Itinerary Architect'}
                 </span>
-                <span className="text-[11px] text-amber-800 font-medium">Pick a destination to proceed</span>
               </div>
-              <p className="text-xs text-amber-900">
-                Tell me your preferred destination, or tap one of these spots matching your vibe:
+              <h1 className="text-3xl sm:text-4xl font-serif-editorial font-bold text-slate-900 tracking-tight">
+                {isAdapting ? 'Customize & Adapt Getaway' : 'Plan your getaway'}
+              </h1>
+              <p className="text-slate-600 text-sm max-w-2xl leading-relaxed">
+                Describe your trip naturally or refine your exact dates, budget, and travel pace.
+                DAIna will assemble a structured day-by-day plan with neighborhood clustering, travel buffers, and budget guardrails.
               </p>
-              <div className="flex flex-wrap items-center gap-2 pt-1">
-                {(parsedIntent?.vibe === 'coastal' || /beach|sea|coast|sand/i.test(promptText)
-                  ? [
-                      { name: 'South Goa', vibe: 'Quiet beaches & cliffside cafes' },
-                      { name: 'Gokarna', vibe: 'Serene coves & temples' },
-                      { name: 'Andaman (Havelock)', vibe: 'Turquoise waters & coral reef' },
-                      { name: 'Bali', vibe: 'Tropical villas & surf' },
-                    ]
-                  : /mountain|hill|trek|snow|cold/i.test(promptText)
-                  ? [
-                      { name: 'Manali', vibe: 'Pine chalets & Solang pass' },
-                      { name: 'Dharamshala', vibe: 'Tea gardens & monastery peace' },
-                      { name: 'Gulmarg', vibe: 'Alpine meadows & cable cars' },
-                    ]
-                  : [
-                      { name: 'Kyoto, Japan', vibe: 'Historic temples & matcha culture' },
-                      { name: 'Udaipur, Rajasthan', vibe: 'Lakeside palaces & heritage' },
-                      { name: 'South Goa', vibe: 'Relaxed coastal escape' },
-                      { name: 'Coorg', vibe: 'Coffee plantations & mist' },
-                    ]
-                ).map((item) => (
-                  <button
-                    key={item.name}
-                    type="button"
-                    onClick={() => {
-                      const newPrompt = promptText.trim() ? `${promptText.trim()} to ${item.name}` : `Trip to ${item.name}`;
-                      setPromptText(newPrompt);
-                    }}
-                    className="px-3 py-1.5 rounded-lg bg-white border border-amber-200 hover:border-amber-400 text-xs font-semibold text-slate-800 shadow-2xs hover:bg-amber-100/50 transition-colors flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <MapPin className="w-3 h-3 text-orange-500" />
-                    <span>{item.name}</span>
-                    <span className="text-[10px] text-slate-400 font-normal">({item.vibe})</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Conversational Confirmation Card with Clean Traveler Summary */}
-          {parsedIntent && (parsedIntent.destination || paramDestination) && (
-            <div className="mt-4 p-4 rounded-xl bg-orange-50/70 border border-orange-200 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-orange-950 flex items-center gap-1.5">
-                  <Sparkles className="w-3.5 h-3.5 text-orange-600" />
-                  Here&apos;s what I understood
-                </span>
-                <span className="text-[11px] text-orange-800 font-medium">Ready to create</span>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-800">
-                <span className="px-2.5 py-1 rounded-lg bg-white border border-orange-200/80 shadow-2xs">
-                  📍 {parsedIntent.destination || paramDestination}
-                </span>
-                <span className="px-2.5 py-1 rounded-lg bg-white border border-orange-200/80 shadow-2xs">
-                  ⏱️ {parsedIntent.days_count 
-                    ? `${parsedIntent.days_count} Days` 
-                    : (paramDuration ? `${paramDuration} Days` : '4 Days (default recommendation)')}
-                </span>
-                <div className="relative inline-flex items-center">
-                  <span className="px-2.5 py-1 rounded-lg bg-white border border-orange-200/80 shadow-2xs flex items-center gap-1.5">
-                    <span>
-                      👥 {effectiveTravelers} {effectiveTravelers === 1 ? 'traveler' : 'travelers'}
-                      {customTravelers === null && parsedIntent.companionsSource !== 'prompt' ? ' · inferred' : ''}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setIsEditingTravelers(!isEditingTravelers)}
-                      className="text-[10px] text-orange-600 hover:text-orange-800 font-semibold underline ml-1 cursor-pointer"
-                    >
-                      {isEditingTravelers ? 'Done' : '[ Change ]'}
-                    </button>
-                  </span>
-                  {isEditingTravelers && (
-                    <div className="absolute top-full left-0 mt-2 z-30 p-3 bg-white border border-slate-200 rounded-xl shadow-xl w-64 space-y-3">
-                      <div className="text-[11px] font-bold text-slate-800">Who is traveling?</div>
-                      <div className="grid grid-cols-2 gap-1.5">
-                        {[
-                          { label: 'Solo', count: 1, persona: 'solo' },
-                          { label: 'Couple', count: 2, persona: 'couple' },
-                          { label: 'Family', count: 4, persona: 'family' },
-                          { label: 'Friends', count: 4, persona: 'squad' },
-                        ].map((type) => (
-                          <button
-                            key={type.label}
-                            type="button"
-                            onClick={() => {
-                              setCustomTravelers(type.count);
-                              setSelectedPersona(type.persona as PersonaType);
-                            }}
-                            className={`px-2 py-1 text-[11px] rounded-lg border text-left cursor-pointer transition-colors ${
-                              effectiveTravelers === type.count
-                                ? 'bg-orange-50 border-orange-300 text-orange-800 font-semibold'
-                                : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
-                            }`}
-                          >
-                            {type.label}
-                          </button>
-                        ))}
-                      </div>
-                      <div className="flex items-center justify-between pt-1 border-t border-slate-100">
-                        <span className="text-[11px] font-medium text-slate-600">Travelers</span>
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => setCustomTravelers(Math.max(1, effectiveTravelers - 1))}
-                            className="w-6 h-6 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center font-bold text-xs cursor-pointer"
-                          >
-                            −
-                          </button>
-                          <span className="font-mono text-xs font-bold text-slate-900 w-4 text-center">
-                            {effectiveTravelers}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => setCustomTravelers(effectiveTravelers + 1)}
-                            className="w-6 h-6 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center font-bold text-xs cursor-pointer"
-                          >
-                            +
-                          </button>
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setIsEditingTravelers(false)}
-                        className="w-full py-1 text-center text-[10px] font-semibold text-white bg-orange-600 hover:bg-orange-700 rounded-lg cursor-pointer"
-                      >
-                        Done
-                      </button>
-                    </div>
-                  )}
-                </div>
-                <span className="px-2.5 py-1 rounded-lg bg-white border border-orange-200/80 shadow-2xs">
-                  💰 {(parsedIntent.budget > 0 || (paramBudget && parseInt(paramBudget, 10) > 0))
-                    ? `₹${(parsedIntent.budget || parseInt(paramBudget || '0', 10)).toLocaleString('en-IN')}`
-                    : 'Budget: Not specified'}
-                </span>
-                <div className="relative inline-flex items-center">
-                  <span className="px-2.5 py-1 rounded-lg bg-white border border-orange-200/80 shadow-2xs flex items-center gap-1.5">
-                    <span>
-                      🛫 From {selectedOriginAirport ? `${selectedOriginAirport.city} (${selectedOriginAirport.iata_code})` : (parsedIntent.origin || 'Add Departure Airport')}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setIsEditingOrigin(!isEditingOrigin)}
-                      className="text-[10px] text-orange-600 hover:text-orange-800 font-semibold underline ml-1 cursor-pointer"
-                    >
-                      {isEditingOrigin ? 'Done' : (selectedOriginAirport || parsedIntent.origin ? '[ Change ]' : '[ Set ]')}
-                    </button>
-                  </span>
-                  {isEditingOrigin && (
-                    <div className="absolute top-full left-0 mt-2 z-30 p-3 bg-white border border-slate-200 rounded-xl shadow-xl w-72 sm:w-80 space-y-2">
-                      <div className="text-[11px] font-bold text-slate-800">Select Departure Airport</div>
-                      <AirportAutocomplete
-                        placeholder="Search departure airport or city…"
-                        value={selectedOriginAirport}
-                        onSelect={(ap) => {
-                          setSelectedOriginAirport(ap);
-                          setIsEditingOrigin(false);
-                        }}
-                      />
-                      <div className="flex justify-end">
-                        <button
-                          type="button"
-                          onClick={() => setIsEditingOrigin(false)}
-                          className="px-2.5 py-1 text-[10px] font-semibold text-white bg-orange-600 hover:bg-orange-700 rounded-lg cursor-pointer"
-                        >
-                          Done
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-                <span className="px-2.5 py-1 rounded-lg bg-white border border-orange-200/80 shadow-2xs">
-                  ✨ {parsedIntent.vibe || paramVibe || 'Leisure & Scenic (default style)'}
-                </span>
-              </div>
-
-              {/* Expandable Explanation for Traveler Understanding */}
-              <div className="flex items-center justify-between pt-2 border-t border-orange-200/60 text-xs">
-                <button
-                  type="button"
-                  onClick={() => setShowUnderstandingDetails(!showUnderstandingDetails)}
-                  className="text-[11px] text-orange-800 hover:text-orange-950 font-medium underline cursor-pointer"
-                >
-                  {showUnderstandingDetails ? 'Hide details' : 'ⓘ How DAIna understood your request'}
-                </button>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowArchitect(true)}
-                    className="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 cursor-pointer"
-                  >
-                    Edit details
-                  </button>
-                  <Button
-                    type="button"
-                    variant="primary"
-                    size="sm"
-                    onClick={() => handleBuildPlan()}
-                    isLoading={isGenerating}
-                    className="bg-orange-600 hover:bg-orange-700 text-white font-semibold text-xs px-4 py-1.5 cursor-pointer shadow-xs"
-                  >
-                    <Sparkles className="w-3.5 h-3.5 mr-1" />
-                    {isAdapting ? 'Adapt & create trip →' : 'Create my trip →'}
-                  </Button>
-                </div>
-              </div>
-
-              {showUnderstandingDetails && (
-                <div className="p-3 rounded-lg bg-white/90 border border-orange-200 text-[11px] text-slate-700 space-y-1.5 animate-in fade-in">
-                  <p>• <strong>Trip Duration:</strong> {parsedIntent.days_count ? `${parsedIntent.days_count} days (explicit in request)` : (paramDuration ? `${paramDuration} days` : '4 days (default recommendation — duration not specified)')}</p>
-                  <p>• <strong>Travelers:</strong> {effectiveTravelers} ({customTravelers !== null ? 'customized inline by you' : (parsedIntent.companionsSource === 'prompt' ? 'explicitly stated in your request' : 'inferred default recommendation for a pair/couple')})</p>
-                  <p>• <strong>Budget:</strong> {parsedIntent.budget > 0 ? `₹${parsedIntent.budget.toLocaleString('en-IN')} (explicitly provided)` : 'Not specified — DAIna will create a comfortable mid-range plan and estimate the cost.'}</p>
-                  <p>• <strong>Trip Style &amp; Pacing:</strong> {parsedIntent.vibe || 'Leisure & Scenic'} ({parsedIntent.vibe ? 'customized based on your prompt' : 'default recommendation'})</p>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Calm, Human Loading Indicator Sequence */}
-          {isGenerating && (
-            <div className="p-6 rounded-xl bg-slate-50 border border-slate-200 text-center space-y-3 animate-in fade-in">
-              <div className="w-8 h-8 rounded-full border-2 border-orange-500 border-t-transparent animate-spin mx-auto" />
-              <div className="space-y-1">
-                <p className="text-sm font-semibold text-slate-900">Working out the best option…</p>
-                <p className="text-xs text-slate-500">Checking your budget and route.</p>
-              </div>
-            </div>
-          )}
-        </section>
-
-        {/* Quick Inspiration Prompts */}
-        <section className="space-y-3">
-          <span className="text-xs font-semibold text-slate-500 block">
-            Or try an example getaway prompt:
-          </span>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-            {[
-              'I want a 7-day Japan trip under ₹1.5 lakh with my partner, quiet places and food',
-              '4-day Manali cedarwood chalet escape under ₹40,000 for solo explorer',
-              '3-day weekend escape to Coorg from Bengaluru with squad under ₹40k',
-              '5-day Andaman white sands & scuba under ₹75,000',
-            ].map((samplePrompt, idx) => (
-              <button
-                key={idx}
-                type="button"
-                onClick={() => {
-                  setPromptText(samplePrompt);
-                  document.getElementById('trip-prompt')?.focus();
-                }}
-                className="text-xs font-medium text-slate-700 hover:text-orange-600 bg-white hover:bg-orange-50/40 border border-slate-200 rounded-xl p-3 text-left transition-colors cursor-pointer shadow-2xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500"
-              >
-                ✦ {samplePrompt}
-              </button>
-            ))}
-          </div>
-        </section>
-
-        {/* Active Generated Itinerary Preview */}
-        {activeItinerary && (
-          <section className="space-y-6 pt-6 border-t border-slate-200">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div>
-                <span className="text-xs uppercase font-bold text-orange-600 tracking-wider">
-                  Generated Itinerary
-                </span>
-                <h2 className="text-2xl font-serif-editorial font-bold text-slate-900">
-                  {activeItinerary.title}
-                </h2>
-                <p className="text-xs text-slate-500 font-medium">
-                  {activeItinerary.destination} · {activeItinerary.days.length} days · ₹{activeItinerary.budget.toLocaleString('en-IN')} estimated
-                </p>
-              </div>
-
-              <Button
-                variant="primary"
-                size="md"
-                className="bg-orange-500 hover:bg-orange-600 text-white font-semibold text-xs px-5 py-2.5 rounded-xl shrink-0 cursor-pointer shadow-xs"
-                onClick={() => router.push(activeItinerary?.id ? `/trips?tripId=${activeItinerary.id}` : '/trips')}
-              >
-                <Luggage className="w-4 h-4 mr-1.5" />
-                Open your trip →
-              </Button>
             </div>
 
-            <div className="space-y-4">
-              {activeItinerary.days.map((day: any) => {
-                const isExpanded = expandedDays[day.dayNumber] ?? (day.dayNumber === 1);
-                return (
-                  <div key={day.dayNumber} className="rounded-2xl bg-white border border-slate-200 overflow-hidden shadow-2xs">
+            {/* Pipeline Generation Progress Banner */}
+            {isGeneratingProposal && (
+              <div className="p-8 rounded-3xl bg-linear-to-b from-orange-500/10 via-amber-500/5 to-white border border-orange-200 text-center space-y-4 shadow-sm animate-in fade-in">
+                <div className="w-10 h-10 rounded-full border-3 border-orange-500 border-t-transparent animate-spin mx-auto" />
+                <div className="space-y-1">
+                  <h3 className="text-base font-bold text-slate-900 font-serif-editorial">
+                    {PIPELINE_STAGES[generationStageIndex]}
+                  </h3>
+                  <p className="text-xs text-slate-500 font-medium">
+                    Assembling multi-day schedule, neighborhood routes, transit buffers, and cost estimates.
+                  </p>
+                </div>
+                <div className="flex items-center justify-center gap-1.5 pt-2">
+                  {PIPELINE_STAGES.map((_, idx) => (
                     <div
-                      onClick={() => setExpandedDays((prev) => ({ ...prev, [day.dayNumber]: !isExpanded }))}
-                      className="p-5 flex items-center justify-between cursor-pointer hover:bg-slate-50/70 transition-colors"
-                    >
-                      <div className="space-y-0.5">
-                        <span className="text-[11px] font-bold text-orange-600 uppercase tracking-wider">Day {day.dayNumber}</span>
-                        <h3 className="text-lg font-semibold text-slate-900">{day.title}</h3>
-                        <p className="text-xs text-slate-500 font-medium">
-                          {day.weather || 'Pleasant 🌤️'} · {day.activities?.length || 0} stops planned
-                        </p>
-                      </div>
-                      <span className="px-3 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold shrink-0">
-                        {isExpanded ? 'Collapse' : 'Expand day'}
-                      </span>
-                    </div>
+                      key={idx}
+                      className={`h-1.5 rounded-full transition-all duration-300 ${
+                        idx === generationStageIndex
+                          ? 'w-8 bg-orange-600'
+                          : idx < generationStageIndex
+                          ? 'w-3 bg-orange-300'
+                          : 'w-2 bg-slate-200'
+                      }`}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
 
-                    {isExpanded && (
-                      <div className="p-5 pt-0 space-y-2.5 border-t border-slate-100">
-                        {day.activities?.map((act: any, aIdx: number) => {
-                          const tagLabel = act.placeType === 'H' ? 'Hotel' : act.placeType === 'R' ? 'Dining' : 'Activity';
-                          return (
-                            <div key={aIdx} className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 flex items-start justify-between gap-3 text-xs">
-                              <div className="space-y-0.5">
-                                <span className="font-mono text-[11px] font-semibold text-orange-600">{act.time}</span>
-                                <p className="font-semibold text-slate-900">{act.description}</p>
-                                <p className="text-[11px] text-slate-500">{act.location}</p>
-                              </div>
-                              <span className="px-2 py-0.5 rounded-md bg-white border border-slate-200 text-slate-700 text-[10px] font-medium shrink-0">
-                                {tagLabel}
-                              </span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </section>
+            {/* Dual Input Form: Natural Language + Progressive Preferences */}
+            {!isGeneratingProposal && (
+              <StructuredPlannerForm
+                initialValues={formInitialValues}
+                onSubmitProposal={handleGenerateProposal}
+                isGenerating={isGeneratingProposal}
+                generationStepText={PIPELINE_STAGES[generationStageIndex]}
+              />
+            )}
+          </div>
         )}
       </main>
-
-      <AITripArchitectModal
-        isOpen={showArchitect}
-        onClose={() => setShowArchitect(false)}
-        destination={activeItinerary ? activeItinerary.destination : (promptText || 'Your Destination')}
-        onComplete={(answers) => {
-          const parts = [];
-          if (answers.travelers) parts.push(`${answers.travelers}`);
-          if (answers.food) parts.push(`food: ${answers.food}`);
-          if (answers.walking) parts.push(`pace: ${answers.walking}`);
-          if (answers.budget) parts.push(`budget: ${answers.budget}`);
-          const prompt = parts.length > 0 ? parts.join(', ') : 'Refined getaway plan';
-          handleBuildPlan(prompt);
-        }}
-      />
 
       <DAInaChatWidget />
       <BottomNav />
@@ -899,7 +393,13 @@ function PlannerContent() {
 
 export default function PlannerPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen flex items-center justify-center font-bold">Loading Getaway Planner...</div>}>
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center font-bold text-slate-700">
+          Loading Getaway Planner...
+        </div>
+      }
+    >
       <PlannerContent />
     </Suspense>
   );

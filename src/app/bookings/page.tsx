@@ -83,6 +83,7 @@ function BookingsContent() {
   const [activeProposal, setActiveProposal] = useState<any | null>(null);
   const [isSubmittingProposal, setIsSubmittingProposal] = useState(false);
   const [proposalSuccess, setProposalSuccess] = useState<string | null>(null);
+  const [isNotifiedComingSoon, setIsNotifiedComingSoon] = useState(false);
 
   // Stale search tracking
   const [lastSearchedHotelKey, setLastSearchedHotelKey] = useState<string>('');
@@ -483,6 +484,64 @@ function BookingsContent() {
               </select>
             </div>
           )}
+        </div>
+
+        {/* Bookings Coming Soon Strategic Notice */}
+        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-stone-900 via-stone-800 to-orange-950 p-6 sm:p-7 text-white shadow-xl border border-stone-700/60" data-testid="bookings-coming-soon-banner">
+          <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+            <div className="space-y-3 max-w-2xl">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-orange-500/20 text-orange-300 border border-orange-500/30 text-xs font-semibold">
+                <Sparkles className="w-3.5 h-3.5 text-orange-400" />
+                <span>Architecture Ready · Booking Integration In Progress</span>
+              </div>
+              <h2 className="text-xl sm:text-2xl font-serif-editorial font-bold tracking-tight text-white">
+                Bookings are coming soon
+              </h2>
+              <p className="text-stone-300 text-xs sm:text-sm leading-relaxed">
+                We&apos;re building trusted travel booking into DashTiny. For now, you can:
+              </p>
+              <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-stone-300">
+                <li className="flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-orange-400 shrink-0" />
+                  <span>Plan your complete trip</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-orange-400 shrink-0" />
+                  <span>Compare your itinerary</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-orange-400 shrink-0" />
+                  <span>Save travel options</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-orange-400 shrink-0" />
+                  <span>Prepare everything before booking</span>
+                </li>
+              </ul>
+              <p className="text-stone-400 text-xs font-medium pt-0.5">
+                Stay tuned as we integrate trusted provider networks.
+              </p>
+            </div>
+
+            <div className="flex flex-col sm:flex-row md:flex-col gap-2.5 shrink-0">
+              <Button
+                onClick={() => router.push('/planner')}
+                className="bg-orange-600 hover:bg-orange-500 text-white font-semibold text-xs sm:text-sm px-6 py-2.5 rounded-2xl shadow-lg shadow-orange-950/40 cursor-pointer flex items-center justify-center gap-2"
+                data-testid="continue-planning-cta"
+              >
+                <span>Continue planning</span>
+                <ArrowRight className="w-4 h-4" />
+              </Button>
+              <button
+                type="button"
+                onClick={() => setIsNotifiedComingSoon(!isNotifiedComingSoon)}
+                className="px-4 py-2 rounded-2xl border border-stone-600 bg-stone-800/80 hover:bg-stone-700 text-stone-200 text-xs font-medium transition-colors cursor-pointer text-center"
+                data-testid="keep-me-updated-cta"
+              >
+                {isNotifiedComingSoon ? '✓ We will keep you updated' : 'Keep me updated'}
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* Flight Attached to Trip Notification Banner (Zero Fake PNR) */}

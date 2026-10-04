@@ -268,6 +268,43 @@ export const apiService = {
     });
   },
 
+  async parseIntent(prompt: string) {
+    return request<any>('/planner/parse-intent', {
+      method: 'POST',
+      body: JSON.stringify({ prompt }),
+    });
+  },
+
+  async createItineraryProposal(payload: any) {
+    return request<any>('/planner/proposals', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async getItineraryProposal(proposalId: string) {
+    return request<any>(`/planner/proposals/${encodeURIComponent(proposalId)}`);
+  },
+
+  async acceptItineraryProposal(proposalId: string) {
+    return request<any>(`/planner/proposals/${encodeURIComponent(proposalId)}/accept`, {
+      method: 'POST',
+    });
+  },
+
+  async rejectItineraryProposal(proposalId: string) {
+    return request<any>(`/planner/proposals/${encodeURIComponent(proposalId)}/reject`, {
+      method: 'POST',
+    });
+  },
+
+  async editItineraryProposal(proposalId: string, instruction: string, targetDay?: number) {
+    return request<any>(`/planner/proposals/${encodeURIComponent(proposalId)}/edit`, {
+      method: 'POST',
+      body: JSON.stringify({ instruction, target_day: targetDay }),
+    });
+  },
+
   // Trips API
   async getMyTrips() {
     return request<any[]>('/trips/my-trips');
